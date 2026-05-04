@@ -15,9 +15,12 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AppSavesRouteImport } from './routes/_app.saves'
+import { Route as AppProfileRouteImport } from './routes/_app.profile'
 import { Route as AppLibraryRouteImport } from './routes/_app.library'
 import { Route as AppDashboardRouteImport } from './routes/_app.dashboard'
 import { Route as AppPlaySlugRouteImport } from './routes/_app.play.$slug'
+import { Route as AppGamesSlugRouteImport } from './routes/_app.games.$slug'
 
 const SignupRoute = SignupRouteImport.update({
   id: '/signup',
@@ -48,6 +51,16 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AppSavesRoute = AppSavesRouteImport.update({
+  id: '/saves',
+  path: '/saves',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppProfileRoute = AppProfileRouteImport.update({
+  id: '/profile',
+  path: '/profile',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppLibraryRoute = AppLibraryRouteImport.update({
   id: '/library',
   path: '/library',
@@ -63,6 +76,11 @@ const AppPlaySlugRoute = AppPlaySlugRouteImport.update({
   path: '/play/$slug',
   getParentRoute: () => AppRoute,
 } as any)
+const AppGamesSlugRoute = AppGamesSlugRouteImport.update({
+  id: '/games/$slug',
+  path: '/games/$slug',
+  getParentRoute: () => AppRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -72,6 +90,9 @@ export interface FileRoutesByFullPath {
   '/signup': typeof SignupRoute
   '/dashboard': typeof AppDashboardRoute
   '/library': typeof AppLibraryRoute
+  '/profile': typeof AppProfileRoute
+  '/saves': typeof AppSavesRoute
+  '/games/$slug': typeof AppGamesSlugRoute
   '/play/$slug': typeof AppPlaySlugRoute
 }
 export interface FileRoutesByTo {
@@ -82,6 +103,9 @@ export interface FileRoutesByTo {
   '/signup': typeof SignupRoute
   '/dashboard': typeof AppDashboardRoute
   '/library': typeof AppLibraryRoute
+  '/profile': typeof AppProfileRoute
+  '/saves': typeof AppSavesRoute
+  '/games/$slug': typeof AppGamesSlugRoute
   '/play/$slug': typeof AppPlaySlugRoute
 }
 export interface FileRoutesById {
@@ -94,6 +118,9 @@ export interface FileRoutesById {
   '/signup': typeof SignupRoute
   '/_app/dashboard': typeof AppDashboardRoute
   '/_app/library': typeof AppLibraryRoute
+  '/_app/profile': typeof AppProfileRoute
+  '/_app/saves': typeof AppSavesRoute
+  '/_app/games/$slug': typeof AppGamesSlugRoute
   '/_app/play/$slug': typeof AppPlaySlugRoute
 }
 export interface FileRouteTypes {
@@ -106,6 +133,9 @@ export interface FileRouteTypes {
     | '/signup'
     | '/dashboard'
     | '/library'
+    | '/profile'
+    | '/saves'
+    | '/games/$slug'
     | '/play/$slug'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -116,6 +146,9 @@ export interface FileRouteTypes {
     | '/signup'
     | '/dashboard'
     | '/library'
+    | '/profile'
+    | '/saves'
+    | '/games/$slug'
     | '/play/$slug'
   id:
     | '__root__'
@@ -127,6 +160,9 @@ export interface FileRouteTypes {
     | '/signup'
     | '/_app/dashboard'
     | '/_app/library'
+    | '/_app/profile'
+    | '/_app/saves'
+    | '/_app/games/$slug'
     | '/_app/play/$slug'
   fileRoutesById: FileRoutesById
 }
@@ -183,6 +219,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_app/saves': {
+      id: '/_app/saves'
+      path: '/saves'
+      fullPath: '/saves'
+      preLoaderRoute: typeof AppSavesRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/profile': {
+      id: '/_app/profile'
+      path: '/profile'
+      fullPath: '/profile'
+      preLoaderRoute: typeof AppProfileRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/library': {
       id: '/_app/library'
       path: '/library'
@@ -204,18 +254,31 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppPlaySlugRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/games/$slug': {
+      id: '/_app/games/$slug'
+      path: '/games/$slug'
+      fullPath: '/games/$slug'
+      preLoaderRoute: typeof AppGamesSlugRouteImport
+      parentRoute: typeof AppRoute
+    }
   }
 }
 
 interface AppRouteChildren {
   AppDashboardRoute: typeof AppDashboardRoute
   AppLibraryRoute: typeof AppLibraryRoute
+  AppProfileRoute: typeof AppProfileRoute
+  AppSavesRoute: typeof AppSavesRoute
+  AppGamesSlugRoute: typeof AppGamesSlugRoute
   AppPlaySlugRoute: typeof AppPlaySlugRoute
 }
 
 const AppRouteChildren: AppRouteChildren = {
   AppDashboardRoute: AppDashboardRoute,
   AppLibraryRoute: AppLibraryRoute,
+  AppProfileRoute: AppProfileRoute,
+  AppSavesRoute: AppSavesRoute,
+  AppGamesSlugRoute: AppGamesSlugRoute,
   AppPlaySlugRoute: AppPlaySlugRoute,
 }
 

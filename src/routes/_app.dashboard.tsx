@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { Cloud, Gamepad2, Library as LibIcon, PlayCircle, Sprout } from "lucide-react";
+import { motion } from "framer-motion";
 import { useAuth } from "@/lib/auth";
 import { fetchMyGames, fetchPlayStats, fetchAllCloudSaves } from "@/lib/queries";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -27,22 +28,23 @@ function Dashboard() {
   const recent = stats.data?.recent ?? [];
 
   return (
-    <div className="mx-auto max-w-6xl space-y-8 p-6 md:p-10">
-      <header>
+    <div className="mx-auto max-w-6xl space-y-8 p-4 md:p-10">
+      <motion.header initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}>
         <p className="text-sm text-muted-foreground">Welcome back</p>
         <h1 className="text-3xl font-bold tracking-tight">{user?.email}</h1>
-      </header>
+      </motion.header>
 
       <section className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Stat icon={LibIcon} label="Total games" value={totalGames} />
-        <Stat icon={PlayCircle} label="Play sessions" value={totalSessions} />
-        <Stat icon={Cloud} label="Cloud saves" value={totalSaves} />
-        <Stat
-          icon={Gamepad2}
-          label="Last played"
-          value={lastPlayed?.games.title ?? "—"}
-          small
-        />
+        {[
+          { icon: LibIcon, label: "Total games", value: totalGames },
+          { icon: PlayCircle, label: "Play sessions", value: totalSessions },
+          { icon: Cloud, label: "Cloud saves", value: totalSaves },
+          { icon: Gamepad2, label: "Last played", value: lastPlayed?.games.title ?? "—", small: true },
+        ].map((s, i) => (
+          <motion.div key={s.label} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}>
+            <Stat icon={s.icon} label={s.label} value={s.value} small={s.small} />
+          </motion.div>
+        ))}
       </section>
 
       {lastPlayed && (

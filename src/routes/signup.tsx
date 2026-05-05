@@ -1,6 +1,7 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState, type FormEvent } from "react";
 import { toast } from "sonner";
+import { motion } from "framer-motion";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,10 +18,13 @@ function SignupPage() {
   const [displayName, setDisplayName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
   const [busy, setBusy] = useState(false);
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
+    if (password.length < 8) { toast.error("Password must be at least 8 characters"); return; }
+    if (password !== confirm) { toast.error("Passwords do not match"); return; }
     setBusy(true);
     const { error } = await supabase.auth.signUp({
       email,
@@ -41,7 +45,7 @@ function SignupPage() {
 
   return (
     <AuthShell title="Create your account" subtitle="Get the cozy demo Meadow Life on your library instantly.">
-      <form onSubmit={onSubmit} className="space-y-4">
+      <motion.form onSubmit={onSubmit} className="space-y-4" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
         <div className="space-y-2">
           <Label htmlFor="name">Display name</Label>
           <Input id="name" value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder="Farmer Fern" />
@@ -54,6 +58,10 @@ function SignupPage() {
           <Label htmlFor="password">Password</Label>
           <Input id="password" type="password" required minLength={8} value={password} onChange={(e) => setPassword(e.target.value)} />
         </div>
+        <div className="space-y-2">
+          <Label htmlFor="confirm">Confirm password</Label>
+          <Input id="confirm" type="password" required minLength={8} value={confirm} onChange={(e) => setConfirm(e.target.value)} />
+        </div>
         <Button type="submit" className="w-full" disabled={busy}>
           {busy ? "Creating…" : "Create account"}
         </Button>
@@ -63,7 +71,7 @@ function SignupPage() {
             Sign in
           </Link>
         </p>
-      </form>
+      </motion.form>
     </AuthShell>
   );
 }

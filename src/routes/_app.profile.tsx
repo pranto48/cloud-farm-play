@@ -8,6 +8,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
+import { motion } from "framer-motion";
+import { Shield } from "lucide-react";
 
 export const Route = createFileRoute("/_app/profile")({
   head: () => ({ meta: [{ title: "Profile — CloudFarm Arcade" }] }),
@@ -15,7 +18,7 @@ export const Route = createFileRoute("/_app/profile")({
 });
 
 function ProfilePage() {
-  const { user } = useAuth();
+  const { user, isAdmin } = useAuth();
   const userId = user!.id;
   const qc = useQueryClient();
   const profile = useQuery({
@@ -41,9 +44,16 @@ function ProfilePage() {
     qc.invalidateQueries({ queryKey: ["profile", userId] });
   }
   return (
-    <div className="mx-auto max-w-2xl space-y-6 p-6 md:p-10">
-      <header><h1 className="text-3xl font-bold tracking-tight">Profile</h1><p className="text-sm text-muted-foreground">Update how you appear in CloudFarm Arcade.</p></header>
-      <Card className="border-border/60">
+    <div className="mx-auto max-w-2xl space-y-6 p-4 md:p-10">
+      <motion.header initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}>
+        <div className="flex flex-wrap items-center gap-3">
+          <h1 className="text-3xl font-bold tracking-tight">Profile</h1>
+          {isAdmin && <Badge className="gap-1"><Shield className="h-3 w-3" /> Admin</Badge>}
+        </div>
+        <p className="text-sm text-muted-foreground">Update how you appear in CloudFarm Arcade.</p>
+      </motion.header>
+      <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}>
+      <Card className="border-border/60 shadow-[var(--shadow-soft)]">
         <CardHeader><CardTitle>Account</CardTitle></CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2"><Label>Email</Label><Input value={user?.email ?? ""} disabled /></div>
@@ -52,6 +62,7 @@ function ProfilePage() {
           <Button onClick={save} disabled={busy}>{busy ? "Saving…" : "Save changes"}</Button>
         </CardContent>
       </Card>
+      </motion.div>
     </div>
   );
 }

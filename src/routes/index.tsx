@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { motion } from "framer-motion";
 import { Cloud, Library, Gamepad2, Sprout, Moon, Sun } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -64,38 +65,40 @@ function Landing() {
         <div className="absolute inset-0 -z-10 opacity-60 [background:var(--gradient-hero)]" aria-hidden />
         <div className="absolute inset-0 -z-10 bg-background/70 backdrop-blur-3xl" aria-hidden />
         <div className="mx-auto max-w-5xl px-6 py-24 text-center">
-          <span className="inline-flex items-center rounded-full border border-border bg-card/70 px-3 py-1 text-xs text-muted-foreground">
+          <motion.span initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} className="inline-flex items-center rounded-full border border-border bg-card/70 px-3 py-1 text-xs text-muted-foreground">
             ✦ Cozy games, cloud saves, zero setup
-          </span>
-          <h1 className="mt-6 text-balance text-5xl font-bold tracking-tight md:text-6xl">
+          </motion.span>
+          <motion.h1 initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }} className="mt-6 text-balance text-4xl font-bold tracking-tight md:text-6xl">
             Play your web games <span className="bg-[image:var(--gradient-hero)] bg-clip-text text-transparent">anywhere</span>
-          </h1>
-          <p className="mx-auto mt-5 max-w-2xl text-pretty text-lg text-muted-foreground">
+          </motion.h1>
+          <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.15 }} className="mx-auto mt-5 max-w-2xl text-pretty text-base md:text-lg text-muted-foreground">
             CloudFarm Arcade keeps your library and saves in the cloud, so you can pick up your harvest from any browser.
-          </p>
-          <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
+          </motion.p>
+          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }} className="mt-8 flex flex-wrap items-center justify-center gap-3">
             <Button asChild size="lg">
               <Link to={user ? "/dashboard" : "/signup"}>Get Started</Link>
             </Button>
             <Button asChild size="lg" variant="outline">
               <Link to={user ? "/library" : "/login"}>{user ? "My library" : "Login"}</Link>
             </Button>
-          </div>
+          </motion.div>
         </div>
       </section>
 
       <section className="mx-auto max-w-6xl px-6 pb-24">
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          {features.map((f) => (
-            <Card key={f.title} className="border-border/60 shadow-[var(--shadow-soft)]">
-              <CardContent className="p-6">
-                <div className="mb-4 inline-flex h-11 w-11 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                  <f.icon className="h-5 w-5" />
-                </div>
-                <h3 className="text-lg font-semibold">{f.title}</h3>
-                <p className="mt-1 text-sm text-muted-foreground">{f.body}</p>
-              </CardContent>
-            </Card>
+          {features.map((f, i) => (
+            <motion.div key={f.title} initial={{ opacity: 0, y: 14 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: i * 0.06 }}>
+              <Card className="border-border/60 shadow-[var(--shadow-soft)] transition-transform hover:-translate-y-1">
+                <CardContent className="p-6">
+                  <div className="mb-4 inline-flex h-11 w-11 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                    <f.icon className="h-5 w-5" />
+                  </div>
+                  <h3 className="text-lg font-semibold">{f.title}</h3>
+                  <p className="mt-1 text-sm text-muted-foreground">{f.body}</p>
+                </CardContent>
+              </Card>
+            </motion.div>
           ))}
         </div>
       </section>

@@ -19,8 +19,13 @@ import { Route as AppSavesRouteImport } from './routes/_app.saves'
 import { Route as AppProfileRouteImport } from './routes/_app.profile'
 import { Route as AppLibraryRouteImport } from './routes/_app.library'
 import { Route as AppDashboardRouteImport } from './routes/_app.dashboard'
+import { Route as AppAdminRouteImport } from './routes/_app.admin'
+import { Route as AppGamesIndexRouteImport } from './routes/_app.games.index'
+import { Route as AppAdminIndexRouteImport } from './routes/_app.admin.index'
 import { Route as AppPlaySlugRouteImport } from './routes/_app.play.$slug'
 import { Route as AppGamesSlugRouteImport } from './routes/_app.games.$slug'
+import { Route as AppAdminUsersRouteImport } from './routes/_app.admin.users'
+import { Route as AppAdminGamesRouteImport } from './routes/_app.admin.games'
 
 const SignupRoute = SignupRouteImport.update({
   id: '/signup',
@@ -71,6 +76,21 @@ const AppDashboardRoute = AppDashboardRouteImport.update({
   path: '/dashboard',
   getParentRoute: () => AppRoute,
 } as any)
+const AppAdminRoute = AppAdminRouteImport.update({
+  id: '/admin',
+  path: '/admin',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppGamesIndexRoute = AppGamesIndexRouteImport.update({
+  id: '/games/',
+  path: '/games/',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppAdminIndexRoute = AppAdminIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AppAdminRoute,
+} as any)
 const AppPlaySlugRoute = AppPlaySlugRouteImport.update({
   id: '/play/$slug',
   path: '/play/$slug',
@@ -81,6 +101,16 @@ const AppGamesSlugRoute = AppGamesSlugRouteImport.update({
   path: '/games/$slug',
   getParentRoute: () => AppRoute,
 } as any)
+const AppAdminUsersRoute = AppAdminUsersRouteImport.update({
+  id: '/users',
+  path: '/users',
+  getParentRoute: () => AppAdminRoute,
+} as any)
+const AppAdminGamesRoute = AppAdminGamesRouteImport.update({
+  id: '/games',
+  path: '/games',
+  getParentRoute: () => AppAdminRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -88,12 +118,17 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/reset-password': typeof ResetPasswordRoute
   '/signup': typeof SignupRoute
+  '/admin': typeof AppAdminRouteWithChildren
   '/dashboard': typeof AppDashboardRoute
   '/library': typeof AppLibraryRoute
   '/profile': typeof AppProfileRoute
   '/saves': typeof AppSavesRoute
+  '/admin/games': typeof AppAdminGamesRoute
+  '/admin/users': typeof AppAdminUsersRoute
   '/games/$slug': typeof AppGamesSlugRoute
   '/play/$slug': typeof AppPlaySlugRoute
+  '/admin/': typeof AppAdminIndexRoute
+  '/games/': typeof AppGamesIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -105,8 +140,12 @@ export interface FileRoutesByTo {
   '/library': typeof AppLibraryRoute
   '/profile': typeof AppProfileRoute
   '/saves': typeof AppSavesRoute
+  '/admin/games': typeof AppAdminGamesRoute
+  '/admin/users': typeof AppAdminUsersRoute
   '/games/$slug': typeof AppGamesSlugRoute
   '/play/$slug': typeof AppPlaySlugRoute
+  '/admin': typeof AppAdminIndexRoute
+  '/games': typeof AppGamesIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -116,12 +155,17 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/reset-password': typeof ResetPasswordRoute
   '/signup': typeof SignupRoute
+  '/_app/admin': typeof AppAdminRouteWithChildren
   '/_app/dashboard': typeof AppDashboardRoute
   '/_app/library': typeof AppLibraryRoute
   '/_app/profile': typeof AppProfileRoute
   '/_app/saves': typeof AppSavesRoute
+  '/_app/admin/games': typeof AppAdminGamesRoute
+  '/_app/admin/users': typeof AppAdminUsersRoute
   '/_app/games/$slug': typeof AppGamesSlugRoute
   '/_app/play/$slug': typeof AppPlaySlugRoute
+  '/_app/admin/': typeof AppAdminIndexRoute
+  '/_app/games/': typeof AppGamesIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -131,12 +175,17 @@ export interface FileRouteTypes {
     | '/login'
     | '/reset-password'
     | '/signup'
+    | '/admin'
     | '/dashboard'
     | '/library'
     | '/profile'
     | '/saves'
+    | '/admin/games'
+    | '/admin/users'
     | '/games/$slug'
     | '/play/$slug'
+    | '/admin/'
+    | '/games/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -148,8 +197,12 @@ export interface FileRouteTypes {
     | '/library'
     | '/profile'
     | '/saves'
+    | '/admin/games'
+    | '/admin/users'
     | '/games/$slug'
     | '/play/$slug'
+    | '/admin'
+    | '/games'
   id:
     | '__root__'
     | '/'
@@ -158,12 +211,17 @@ export interface FileRouteTypes {
     | '/login'
     | '/reset-password'
     | '/signup'
+    | '/_app/admin'
     | '/_app/dashboard'
     | '/_app/library'
     | '/_app/profile'
     | '/_app/saves'
+    | '/_app/admin/games'
+    | '/_app/admin/users'
     | '/_app/games/$slug'
     | '/_app/play/$slug'
+    | '/_app/admin/'
+    | '/_app/games/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -247,6 +305,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppDashboardRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/admin': {
+      id: '/_app/admin'
+      path: '/admin'
+      fullPath: '/admin'
+      preLoaderRoute: typeof AppAdminRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/games/': {
+      id: '/_app/games/'
+      path: '/games'
+      fullPath: '/games/'
+      preLoaderRoute: typeof AppGamesIndexRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/admin/': {
+      id: '/_app/admin/'
+      path: '/'
+      fullPath: '/admin/'
+      preLoaderRoute: typeof AppAdminIndexRouteImport
+      parentRoute: typeof AppAdminRoute
+    }
     '/_app/play/$slug': {
       id: '/_app/play/$slug'
       path: '/play/$slug'
@@ -261,25 +340,59 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppGamesSlugRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/admin/users': {
+      id: '/_app/admin/users'
+      path: '/users'
+      fullPath: '/admin/users'
+      preLoaderRoute: typeof AppAdminUsersRouteImport
+      parentRoute: typeof AppAdminRoute
+    }
+    '/_app/admin/games': {
+      id: '/_app/admin/games'
+      path: '/games'
+      fullPath: '/admin/games'
+      preLoaderRoute: typeof AppAdminGamesRouteImport
+      parentRoute: typeof AppAdminRoute
+    }
   }
 }
 
+interface AppAdminRouteChildren {
+  AppAdminGamesRoute: typeof AppAdminGamesRoute
+  AppAdminUsersRoute: typeof AppAdminUsersRoute
+  AppAdminIndexRoute: typeof AppAdminIndexRoute
+}
+
+const AppAdminRouteChildren: AppAdminRouteChildren = {
+  AppAdminGamesRoute: AppAdminGamesRoute,
+  AppAdminUsersRoute: AppAdminUsersRoute,
+  AppAdminIndexRoute: AppAdminIndexRoute,
+}
+
+const AppAdminRouteWithChildren = AppAdminRoute._addFileChildren(
+  AppAdminRouteChildren,
+)
+
 interface AppRouteChildren {
+  AppAdminRoute: typeof AppAdminRouteWithChildren
   AppDashboardRoute: typeof AppDashboardRoute
   AppLibraryRoute: typeof AppLibraryRoute
   AppProfileRoute: typeof AppProfileRoute
   AppSavesRoute: typeof AppSavesRoute
   AppGamesSlugRoute: typeof AppGamesSlugRoute
   AppPlaySlugRoute: typeof AppPlaySlugRoute
+  AppGamesIndexRoute: typeof AppGamesIndexRoute
 }
 
 const AppRouteChildren: AppRouteChildren = {
+  AppAdminRoute: AppAdminRouteWithChildren,
   AppDashboardRoute: AppDashboardRoute,
   AppLibraryRoute: AppLibraryRoute,
   AppProfileRoute: AppProfileRoute,
   AppSavesRoute: AppSavesRoute,
   AppGamesSlugRoute: AppGamesSlugRoute,
   AppPlaySlugRoute: AppPlaySlugRoute,
+  AppGamesIndexRoute: AppGamesIndexRoute,
 }
 
 const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)

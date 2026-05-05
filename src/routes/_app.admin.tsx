@@ -22,8 +22,8 @@ export const Route = createFileRoute("/_app/admin")({
 
 const tabs = [
   { to: "/admin", label: "Overview", icon: BarChart3, exact: true },
-  { to: "/admin/users", label: "Users", icon: Users },
-  { to: "/admin/games", label: "Games", icon: Gamepad2 },
+  { to: "/admin/users", label: "Users", icon: Users, exact: false },
+  { to: "/admin/games", label: "Games", icon: Gamepad2, exact: false },
 ] as const;
 
 function AdminLayout() {

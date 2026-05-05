@@ -119,3 +119,83 @@ export async function endPlaySession(id: string, startedAt: string) {
     .update({ ended_at: new Date().toISOString(), duration_seconds: seconds })
     .eq("id", id);
 }
+
+export async function fetchIsAdmin(userId: string): Promise<boolean> {
+  const { data, error } = await supabase
+    .from("user_roles")
+    .select("role")
+    .eq("user_id", userId)
+    .eq("role", "admin")
+    .maybeSingle();
+  if (error) return false;
+  return !!data;
+}
+
+export async function fetchAllGames(): Promise<GameRow[]> {
+  const { data, error } = await supabase.from("games").select("*").order("created_at", { ascending: false });
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function adminFetchAllUsers() {
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("id, display_name, avatar_url, created_at")
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function adminFetchAllSessions() {
+  const { data, error } = await supabase
+    .from("play_sessions")
+    .select("id, user_id, game_id, started_at, ended_at, duration_seconds")
+    .order("started_at", { ascending: false })
+    .limit(50);
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function adminFetchAllUserGames() {
+  const { data, error } = await supabase
+    .from("user_games")
+    .select("id, user_id, game_id, added_at, last_played_at");
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function adminFetchAllSaves() {
+  const { data, error } = await supabase
+    .from("cloud_saves")
+    .select("id, user_id, game_id, slot_name, updated_at");
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function adminFetchUserRoles() {
+  const { data, error } = await supabase
+    .from("user_roles")
+    .select("user_id, role");
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function adminCreateGame(game: { title: string; slug: string; description: string; genre: string; cover_url?: string | null }) {
+  const { error } = await supabase.from("games").insert(game);
+  if (error) throw error;
+}
+
+export async function adminDeleteGame(id: string) {
+  const { error } = await supabase.from("games").delete().eq("id", id);
+  if (error) throw error;
+}
+
+export async function adminToggleAdmin(userId: string, makeAdmin: boolean) {
+  if (makeAdmin) {
+    const { error } = await supabase.from("user_roles").insert({ user_id: userId, role: "admin" });
+    if (error && !error.message.includes("duplicate")) throw error;
+  } else {
+    const { error } = await supabase.from("user_roles").delete().eq("user_id", userId).eq("role", "admin");
+    if (error) throw error;
+  }
+}

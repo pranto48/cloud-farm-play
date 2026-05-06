@@ -4,7 +4,7 @@ import { motion } from "framer-motion";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { adminFetchAllUsers, adminFetchUserRoles, adminToggleAdmin } from "@/lib/queries";
-import { adminCreateUser, adminDeleteUser } from "@/server/admin.functions";
+import { adminCreateUser, adminDeleteUser } from "@/server/admin.functions.server";
 import { useState } from "react";
 import { useAuth } from "@/lib/auth";
 import { Input } from "@/components/ui/input";

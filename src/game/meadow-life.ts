@@ -35,6 +35,8 @@ export type GameState = {
   version: 1;
   player: { x: number; y: number; dir: "up" | "down" | "left" | "right" };
   day: number;
+  /** Minutes since midnight. Day starts at 06:00 and ends at 24:00. */
+  time: number;
   inventory: { seeds: number; crops: number; coins: number };
   tool: Tool;
   tiles: Tile[][];
@@ -43,6 +45,10 @@ export type GameState = {
 export const SEED_PRICE = 8;
 export const CROP_PRICE = 14;
 export const GROW_DAYS = 3;
+export const DAY_START_MINUTES = 6 * 60;
+export const DAY_END_MINUTES = 24 * 60;
+export const TIME_TICK_MINUTES = 10;
+export const TIME_TICK_MS = 5_000;
 
 function makeMap(): Tile[][] {
   const t: Tile[][] = Array.from({ length: ROWS }, () =>
@@ -96,6 +102,7 @@ export function newGame(): GameState {
     version: 1,
     player: { x: 14, y: 25, dir: "down" },
     day: 1,
+    time: DAY_START_MINUTES,
     inventory: { seeds: 5, crops: 0, coins: 30 },
     tool: "hoe",
     tiles: makeMap(),
@@ -177,6 +184,7 @@ export function sellCrop(state: GameState): string {
 /** End the day: advance growth on watered crops, reset watered flags. */
 export function sleep(state: GameState): void {
   state.day += 1;
+  state.time = DAY_START_MINUTES;
   for (let y = 0; y < ROWS; y++) {
     for (let x = 0; x < COLS; x++) {
       const t = state.tiles[y][x];
@@ -190,6 +198,23 @@ export function sleep(state: GameState): void {
       t.watered = false;
     }
   }
+}
+
+export function tickTime(state: GameState): boolean {
+  state.time += TIME_TICK_MINUTES;
+  if (state.time >= DAY_END_MINUTES) {
+    sleep(state);
+    return true;
+  }
+  return false;
+}
+
+export function formatTime(totalMinutes: number): string {
+  const hours24 = Math.floor(totalMinutes / 60) % 24;
+  const mins = totalMinutes % 60;
+  const suffix = hours24 >= 12 ? "PM" : "AM";
+  const hours12 = hours24 % 12 === 0 ? 12 : hours24 % 12;
+  return `${hours12}:${mins.toString().padStart(2, "0")} ${suffix}`;
 }
 
 /* ----------------------------- Rendering ----------------------------- */

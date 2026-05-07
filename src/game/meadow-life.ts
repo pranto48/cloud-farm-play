@@ -4,8 +4,8 @@
  */
 
 export const TILE = 32;
-export const COLS = 64;
-export const ROWS = 64;
+export const COLS = 80;
+export const ROWS = 80;
 
 export type TileKind =
   | "grass"
@@ -29,7 +29,7 @@ export type Tile = {
   watered: boolean;
 };
 
-export type Tool = "hoe" | "seed" | "water" | "scythe";
+export type Tool = "hoe" | "seed" | "water" | "scythe" | "pickaxe";
 
 export type GameState = {
   version: 1;
@@ -37,7 +37,7 @@ export type GameState = {
   day: number;
   /** Minutes since midnight. Day starts at 06:00 and ends at 24:00. */
   time: number;
-  inventory: { seeds: number; crops: number; coins: number };
+  inventory: { seeds: number; crops: number; coins: number; wood: number; planks: number };
   tool: Tool;
   tiles: Tile[][];
 };
@@ -52,15 +52,16 @@ export type StaticPoints = {
 export const SEED_PRICE = 8;
 export const CROP_PRICE = 14;
 export const GROW_DAYS = 3;
+export const PLANK_WOOD_COST = 3;
 export const DAY_START_MINUTES = 6 * 60;
 export const DAY_END_MINUTES = 24 * 60;
 export const TIME_TICK_MINUTES = 10;
 export const TIME_TICK_MS = 5_000;
 export const STATIC_POINTS: StaticPoints = {
-  playerSpawn: { x: 14, y: 25 },
-  shopInteract: { x: 56, y: 32 },
-  bedSleep: { x: 14, y: 24 },
-  shippingBin: { x: 16, y: 24 },
+  playerSpawn: { x: 16, y: 30 },
+  shopInteract: { x: 70, y: 40 },
+  bedSleep: { x: 16, y: 29 },
+  shippingBin: { x: 18, y: 29 },
 };
 
 function makeMap(): Tile[][] {
@@ -69,39 +70,40 @@ function makeMap(): Tile[][] {
   );
 
   // Farm zone: starter plots near the player's home (left side of map).
-  for (let y = 28; y <= 36; y++) {
-    for (let x = 8; x <= 18; x++) t[y][x].kind = "soil";
+  for (let y = 32; y <= 42; y++) {
+    for (let x = 8; x <= 22; x++) t[y][x].kind = "soil";
   }
 
   // Farm house / wake-up area.
-  for (let y = 20; y <= 23; y++) {
-    for (let x = 10; x <= 14; x++) t[y][x].kind = "house";
+  for (let y = 24; y <= 28; y++) {
+    for (let x = 12; x <= 17; x++) t[y][x].kind = "house";
   }
 
   // Shipping bin near the home for easy access.
-  t[24][16].kind = "shop";
+  t[29][18].kind = "shop";
 
   // Tiny town/shop zone (right side of map).
-  for (let y = 24; y <= 31; y++) {
-    for (let x = 50; x <= 58; x++) t[y][x].kind = "house";
+  for (let y = 32; y <= 40; y++) {
+    for (let x = 64; x <= 74; x++) t[y][x].kind = "house";
   }
   // Shop counter tile.
-  t[32][56].kind = "shop";
+  t[40][70].kind = "shop";
 
   // NPC standing/walking area.
-  t[33][54].kind = "npc";
-  t[33][55].kind = "npc";
-  t[33][56].kind = "npc";
+  t[41][68].kind = "npc";
+  t[41][69].kind = "npc";
+  t[41][70].kind = "npc";
 
   // Transition path connecting farm to town (no scene transitions).
-  for (let x = 14; x <= 56; x++) t[34][x].kind = "path";
-  for (let y = 24; y <= 34; y++) t[y][14].kind = "path";
-  for (let y = 32; y <= 34; y++) t[y][56].kind = "path";
+  for (let x = 16; x <= 70; x++) t[44][x].kind = "path";
+  for (let y = 29; y <= 44; y++) t[y][16].kind = "path";
+  for (let y = 40; y <= 44; y++) t[y][70].kind = "path";
 
   // Decorative elements.
-  for (let y = 40; y <= 48; y++) for (let x = 2; x <= 8; x++) t[y][x].kind = "water";
+  for (let y = 54; y <= 66; y++) for (let x = 2; x <= 10; x++) t[y][x].kind = "water";
   const trees: Array<[number, number]> = [
     [6, 12], [8, 10], [20, 18], [24, 22], [28, 40], [36, 38], [46, 18], [60, 44], [58, 12], [40, 52],
+    [62, 24], [66, 26], [72, 50], [50, 64], [26, 58], [14, 48], [74, 16], [78, 30],
   ];
   trees.forEach(([x, y]) => {
     if (x >= 0 && y >= 0 && x < COLS && y < ROWS && t[y][x].kind === "grass") t[y][x].kind = "tree";
@@ -116,7 +118,7 @@ export function newGame(): GameState {
     player: { x: STATIC_POINTS.playerSpawn.x, y: STATIC_POINTS.playerSpawn.y, dir: "down" },
     day: 1,
     time: DAY_START_MINUTES,
-    inventory: { seeds: 5, crops: 0, coins: 30 },
+    inventory: { seeds: 5, crops: 0, coins: 30, wood: 0, planks: 0 },
     tool: "hoe",
     tiles: makeMap(),
   };
@@ -176,8 +178,22 @@ export function interact(state: GameState): string | null {
         return "Harvested! +1 crop";
       }
       return null;
+    case "pickaxe":
+      if (tile.kind === "tree") {
+        tile.kind = "grass";
+        state.inventory.wood += 1;
+        return "Chopped tree! +1 wood";
+      }
+      return null;
   }
   return null;
+}
+
+export function craftPlank(state: GameState): string {
+  if (state.inventory.wood < PLANK_WOOD_COST) return `Need ${PLANK_WOOD_COST} wood`;
+  state.inventory.wood -= PLANK_WOOD_COST;
+  state.inventory.planks += 1;
+  return "Crafted 1 plank";
 }
 
 export function buySeed(state: GameState): string {
@@ -354,8 +370,10 @@ export function draw(ctx: CanvasRenderingContext2D, state: GameState) {
       } else if (t.kind === "path") {
         ctx.fillStyle = "#ceb48a";
         ctx.fillRect(px, py, TILE, TILE);
-        ctx.strokeStyle = "#b99666";
-        ctx.strokeRect(px + 2, py + 2, TILE - 4, TILE - 4);
+        ctx.fillStyle = "rgba(160,120,80,0.2)";
+        ctx.beginPath();
+        ctx.arc(px + 10, py + 16, 4, 0, Math.PI * 2);
+        ctx.fill();
       } else if (t.kind === "shop") {
         ctx.fillStyle = "#c49a6c";
         ctx.fillRect(px + 3, py + 5, TILE - 6, TILE - 10);

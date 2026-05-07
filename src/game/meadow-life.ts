@@ -4,8 +4,8 @@
  */
 
 export const TILE = 32;
-export const COLS = 20;
-export const ROWS = 14;
+export const COLS = 80;
+export const ROWS = 80;
 
 export type TileKind =
   | "grass"
@@ -47,19 +47,68 @@ export type GameState = {
   tiles: Tile[][];
 };
 
+export type StaticPoints = {
+  playerSpawn: { x: number; y: number };
+  shopInteract: { x: number; y: number };
+  bedSleep: { x: number; y: number };
+  shippingBin: { x: number; y: number };
+};
+
 export const SEED_PRICE = 8;
 export const CROP_PRICE = 14;
 export const GROW_DAYS = 3;
+export const PLANK_WOOD_COST = 3;
+export const DAY_START_MINUTES = 6 * 60;
+export const DAY_END_MINUTES = 24 * 60;
+export const TIME_TICK_MINUTES = 10;
+export const TIME_TICK_MS = 5_000;
+export const STATIC_POINTS: StaticPoints = {
+  playerSpawn: { x: 16, y: 30 },
+  shopInteract: { x: 70, y: 40 },
+  bedSleep: { x: 16, y: 29 },
+  shippingBin: { x: 18, y: 29 },
+};
 
 function makeMap(): Tile[][] {
   const t: Tile[][] = Array.from({ length: ROWS }, () =>
     Array.from({ length: COLS }, () => ({ kind: "grass" as TileKind, age: -1, watered: false })),
   );
-  // Pond on the left
-  for (let y = 8; y < 12; y++) for (let x = 1; x < 4; x++) t[y][x].kind = "water";
-  // Trees scattered
+
+  // Farm zone: starter plots near the player's home (left side of map).
+  for (let y = 32; y <= 42; y++) {
+    for (let x = 8; x <= 22; x++) t[y][x].kind = "soil";
+  }
+
+  // Farm house / wake-up area.
+  for (let y = 24; y <= 28; y++) {
+    for (let x = 12; x <= 17; x++) t[y][x].kind = "house";
+  }
+
+  // Shipping bin near the home for easy access.
+  t[29][18].kind = "shop";
+
+  // Tiny town/shop zone (right side of map).
+  for (let y = 32; y <= 40; y++) {
+    for (let x = 64; x <= 74; x++) t[y][x].kind = "house";
+  }
+  // Shop counter tile.
+  t[40][70].kind = "shop";
+
+  // NPC standing/walking area.
+  t[41][68].kind = "npc";
+  t[41][69].kind = "npc";
+  t[41][70].kind = "npc";
+
+  // Transition path connecting farm to town (no scene transitions).
+  for (let x = 16; x <= 70; x++) t[44][x].kind = "path";
+  for (let y = 29; y <= 44; y++) t[y][16].kind = "path";
+  for (let y = 40; y <= 44; y++) t[y][70].kind = "path";
+
+  // Decorative elements.
+  for (let y = 54; y <= 66; y++) for (let x = 2; x <= 10; x++) t[y][x].kind = "water";
   const trees: Array<[number, number]> = [
-    [5, 1], [10, 1], [15, 2], [18, 3], [2, 4], [17, 8], [4, 12], [13, 12],
+    [6, 12], [8, 10], [20, 18], [24, 22], [28, 40], [36, 38], [46, 18], [60, 44], [58, 12], [40, 52],
+    [62, 24], [66, 26], [72, 50], [50, 64], [26, 58], [14, 48], [74, 16], [78, 30],
   ];
   trees.forEach(([x, y]) => (t[y][x].kind = "tree"));
   // House top-right (2x2)
@@ -79,7 +128,7 @@ function makeMap(): Tile[][] {
 export function newGame(): GameState {
   return {
     version: 1,
-    player: { x: 9, y: 7, dir: "down" },
+    player: { x: STATIC_POINTS.playerSpawn.x, y: STATIC_POINTS.playerSpawn.y, dir: "down" },
     day: 1,
     time: 360, // 6:00
     energy: 100,
@@ -169,6 +218,13 @@ export function interact(state: GameState): string | null {
       return null;
   }
   return null;
+}
+
+export function craftPlank(state: GameState): string {
+  if (state.inventory.wood < PLANK_WOOD_COST) return `Need ${PLANK_WOOD_COST} wood`;
+  state.inventory.wood -= PLANK_WOOD_COST;
+  state.inventory.planks += 1;
+  return "Crafted 1 plank";
 }
 
 export function buySeed(state: GameState): string {

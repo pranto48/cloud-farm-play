@@ -1,5 +1,6 @@
 import { execSync } from 'node:child_process';
 import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync, readdirSync } from 'node:fs';
+import { build as esbuild } from 'esbuild';
 
 execSync('npm run build', { stdio: 'inherit' });
 
@@ -17,13 +18,39 @@ if (existsSync('dist/client')) {
   cpSync('dist/client', staticDir, { recursive: true });
 }
 
-// 2. SSR function (Node serverless)
+// 2. SSR function (Node serverless) — bundle dependencies so Vercel doesn't
+// need node_modules at runtime.
 const fnDir = `${outRoot}/functions/ssr.func`;
 mkdirSync(fnDir, { recursive: true });
 if (!existsSync('dist/server/server.js')) {
   throw new Error('dist/server/server.js not found — TanStack Start build did not emit SSR output.');
 }
-cpSync('dist/server', `${fnDir}/server`, { recursive: true });
+// Copy chunked assets (lazy-imported by server.js via relative ./assets/*) as-is.
+if (existsSync('dist/server/assets')) {
+  cpSync('dist/server/assets', `${fnDir}/server/assets`, { recursive: true });
+}
+// Bundle the entry server.js with all bare-specifier deps inlined.
+await esbuild({
+  entryPoints: ['dist/server/server.js'],
+  outfile: `${fnDir}/server/server.js`,
+  bundle: true,
+  platform: 'node',
+  target: 'node20',
+  format: 'esm',
+  allowOverwrite: false,
+  external: [], // bundle everything from node_modules
+  // Mark dynamic-imported chunks as external so they resolve at runtime to the
+  // copied ./assets/* files instead of being bundled (and renamed).
+  plugins: [
+    {
+      name: 'externalize-relative-assets',
+      setup(build) {
+        build.onResolve({ filter: /^\.\/assets\// }, (args) => ({ path: args.path, external: true }));
+      },
+    },
+  ],
+  logLevel: 'info',
+});
 
 writeFileSync(
   `${fnDir}/index.mjs`,
@@ -48,7 +75,10 @@ export default async function (req, res) {
     res.statusCode = response.status;
     response.headers.forEach((v, k) => res.setHeader(k, v));
     if (response.body) {
-      Readable.fromWeb(response.body).pipe(res);
+      const nodeStream = Readable.fromWeb(response.body);
+      nodeStream.on('data', (chunk) => res.write(chunk));
+      nodeStream.on('end', () => res.end());
+      nodeStream.on('error', (err) => { console.error('[ssr] stream error', err); try { res.end(); } catch {} });
     } else {
       res.end();
     }

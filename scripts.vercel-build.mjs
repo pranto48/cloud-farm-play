@@ -1,5 +1,7 @@
 import { execSync } from 'node:child_process';
 import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync, readdirSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { nodeFileTrace } from '@vercel/nft';
 
 execSync('npm run build', { stdio: 'inherit' });
 
@@ -17,18 +19,43 @@ if (existsSync('dist/client')) {
   cpSync('dist/client', staticDir, { recursive: true });
 }
 
-// 2. SSR function (Node serverless)
+// 2. SSR function (Node serverless). Copy the SSR output as-is, then trace
+// every node_modules file the bundle actually imports and copy them next to
+// the function so Vercel's runtime can resolve them. We deliberately avoid
+// esbuild bundling: bundling React causes duplicate React copies (or hook
+// errors with externalized peers) which break SSR.
 const fnDir = `${outRoot}/functions/ssr.func`;
 mkdirSync(fnDir, { recursive: true });
 if (!existsSync('dist/server/server.js')) {
   throw new Error('dist/server/server.js not found — TanStack Start build did not emit SSR output.');
 }
-cpSync('dist/server', `${fnDir}/server`, { recursive: true });
+cpSync('dist/server', `${fnDir}/dist/server`, { recursive: true });
+
+const projectRoot = process.cwd();
+const entry = resolve(projectRoot, 'dist/server/server.js');
+const trace = await nodeFileTrace([entry], { base: projectRoot });
+for (const w of trace.warnings) {
+  // Only log unusual ones; missing optional deps are common and fine.
+  const msg = w.message ?? String(w);
+  if (!/Cannot find module|MODULE_NOT_FOUND/.test(msg)) console.warn('[nft]', msg);
+}
+let copied = 0;
+for (const file of trace.fileList) {
+  // server.js + assets already copied above; skip to avoid double work.
+  if (file.startsWith('dist/server/')) continue;
+  const src = resolve(projectRoot, file);
+  if (!existsSync(src)) continue;
+  const dest = resolve(fnDir, file);
+  mkdirSync(dirname(dest), { recursive: true });
+  cpSync(src, dest);
+  copied++;
+}
+console.log(`[vercel-build] Traced + copied ${copied} dependency files`);
 
 writeFileSync(
   `${fnDir}/index.mjs`,
   `import { Readable } from 'node:stream';
-import handler from './server/server.js';
+import handler from './dist/server/server.js';
 
 export default async function (req, res) {
   try {
@@ -48,7 +75,10 @@ export default async function (req, res) {
     res.statusCode = response.status;
     response.headers.forEach((v, k) => res.setHeader(k, v));
     if (response.body) {
-      Readable.fromWeb(response.body).pipe(res);
+      const nodeStream = Readable.fromWeb(response.body);
+      nodeStream.on('data', (chunk) => res.write(chunk));
+      nodeStream.on('end', () => res.end());
+      nodeStream.on('error', (err) => { console.error('[ssr] stream error', err); try { res.end(); } catch {} });
     } else {
       res.end();
     }

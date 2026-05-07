@@ -9,8 +9,11 @@ import {
   newGame,
   sellCrop,
   buySeed,
+  craftPlank,
   sleep,
+  TIME_TICK_MS,
   formatTime,
+  timeManager,
   talkToShopkeeper,
   upgradeTool,
   type GameState,
@@ -79,7 +82,8 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
       if (["w", "arrowup", "s", "arrowdown", "a", "arrowleft", "d", "arrowright"].includes(k)) {
         e.preventDefault();
         const now = performance.now();
-        if (now - lastMove < 110) return;
+        const cooldown = e.shiftKey ? 60 : 110;
+        if (now - lastMove < cooldown) return;
         lastMove = now;
         setState((prev) => {
           const next = structuredClone(prev);
@@ -112,6 +116,30 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  useEffect(() => {
+    const offTick = timeManager.subscribe("on_time_tick", () => {});
+    const offEnd = timeManager.subscribe("on_day_end", () => {
+      toast.success("It is 12:00 AM. Heading home to sleep.");
+    });
+    const offNewDay = timeManager.subscribe("on_new_day", (s) => {
+      toast.success(`Day ${s.day} begins at ${formatTime(s.time)}.`);
+    });
+
+    const id = window.setInterval(() => {
+      setState((prev) => {
+        const next = structuredClone(prev);
+        timeManager.tick(next);
+        return next;
+      });
+    }, TIME_TICK_MS);
+    return () => {
+      window.clearInterval(id);
+      offTick();
+      offEnd();
+      offNewDay();
+    };
   }, []);
 
   // Move one step in a direction (also turns to face it).
@@ -230,6 +258,8 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
         <Badge variant={state.energy <= 20 ? "destructive" : "secondary"}>⚡ Energy {state.energy}</Badge>
         <Badge variant="secondary" className="gap-1"><Sprout className="h-3 w-3" /> Seeds {state.inventory.seeds}</Badge>
         <Badge variant="secondary" className="gap-1"><Wheat className="h-3 w-3" /> Crops {state.inventory.crops}</Badge>
+        <Badge variant="secondary">🪵 Wood {state.inventory.wood}</Badge>
+        <Badge variant="secondary">🧱 Planks {state.inventory.planks}</Badge>
         <Badge variant="secondary">⛏ Ore {state.ore}</Badge>
         <Badge variant="secondary">🕳 Depth {state.mineDepth}</Badge>
         <Badge variant="secondary" className="gap-1"><Coins className="h-3 w-3" /> {state.inventory.coins}c</Badge>
@@ -279,11 +309,16 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
           );
         })}
         <Button size="sm" variant="outline" onClick={() => setShopOpen(true)}><Coins className="mr-1 h-4 w-4" /> Shop</Button>
+        <Button size="sm" variant="outline" onClick={() => setState((prev) => {
+          const next = structuredClone(prev);
+          toast(craftPlank(next));
+          return next;
+        })}>🛠 Craft Plank</Button>
         <Button size="sm" variant="outline" onClick={onSleep}><Bed className="mr-1 h-4 w-4" /> Sleep</Button>
       </div>
 
       <p className="max-w-md text-center text-xs text-muted-foreground">
-        Move with WASD or arrow keys. Press E/Space to act, 1–5 to switch tools, and F to talk to the shopkeeper. Mine rocks in the lower-right zone for ore.
+        Move with WASD or arrow keys (hold Shift to run 🏃). Press E/Space to act, 1–5 to switch tools, and F to talk to the shopkeeper. Use Pickaxe on trees for wood, then craft planks.
       </p>
 
       <Dialog open={shopOpen} onOpenChange={setShopOpen}>

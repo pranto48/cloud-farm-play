@@ -15,7 +15,20 @@ import {
 } from "./meadow-life";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Coins, Sprout, Wheat, Bed, Hammer, Droplets, Scissors } from "lucide-react";
+import {
+  Coins,
+  Sprout,
+  Wheat,
+  Bed,
+  Hammer,
+  Droplets,
+  Scissors,
+  ArrowUp,
+  ArrowDown,
+  ArrowLeft,
+  ArrowRight,
+  Hand,
+} from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -44,6 +57,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
   stateRef.current = state;
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [shopOpen, setShopOpen] = useState(false);
+  const lastTapRef = useRef<{ x: number; y: number; t: number } | null>(null);
 
   useEffect(() => {
     onStateChange(state);
@@ -105,6 +119,83 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  // Move one step in a direction (also turns to face it).
+  function step(dir: GameState["player"]["dir"]) {
+    setState((prev) => {
+      const next = structuredClone(prev);
+      let { x, y } = next.player;
+      next.player.dir = dir;
+      if (dir === "up") y -= 1;
+      else if (dir === "down") y += 1;
+      else if (dir === "left") x -= 1;
+      else if (dir === "right") x += 1;
+      if (x >= 0 && y >= 0 && x < COLS && y < ROWS && isWalkable(next.tiles[y][x])) {
+        next.player.x = x;
+        next.player.y = y;
+      }
+      return next;
+    });
+  }
+
+  function doInteract() {
+    setState((prev) => {
+      const next = structuredClone(prev);
+      const msg = interact(next);
+      if (msg) toast(msg);
+      return next;
+    });
+  }
+
+  // Tap a tile: face & step toward it. Tap the tile in front of you (or your own
+  // tile) to use the current tool. Double-tap any tile to interact.
+  function handleCanvasPointer(e: React.PointerEvent<HTMLCanvasElement>) {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const cx = (e.clientX - rect.left) * scaleX;
+    const cy = (e.clientY - rect.top) * scaleY;
+    const tx = Math.floor(cx / TILE);
+    const ty = Math.floor(cy / TILE);
+    if (tx < 0 || ty < 0 || tx >= COLS || ty >= ROWS) return;
+
+    const now = performance.now();
+    const last = lastTapRef.current;
+    const isDouble = last && last.x === tx && last.y === ty && now - last.t < 350;
+    lastTapRef.current = { x: tx, y: ty, t: now };
+
+    const cur = stateRef.current;
+    const dx = tx - cur.player.x;
+    const dy = ty - cur.player.y;
+
+    // Tap your own tile = interact with the tile in front
+    if (dx === 0 && dy === 0) {
+      doInteract();
+      return;
+    }
+    // Double-tap = interact (after orienting toward the tile)
+    const dir: GameState["player"]["dir"] =
+      Math.abs(dx) >= Math.abs(dy) ? (dx > 0 ? "right" : "left") : dy > 0 ? "down" : "up";
+
+    // Adjacent tile: face it. If walkable, step onto it. Otherwise just face & interact.
+    if (Math.abs(dx) + Math.abs(dy) === 1) {
+      const target = cur.tiles[ty][tx];
+      if (isWalkable(target)) {
+        step(dir);
+      } else {
+        // turn to face it
+        setState((prev) => ({ ...prev, player: { ...prev.player, dir } }));
+        doInteract();
+        return;
+      }
+    } else {
+      step(dir);
+    }
+
+    if (isDouble) doInteract();
+  }
+
   const W = COLS * TILE;
   const H = ROWS * TILE;
 
@@ -143,8 +234,32 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
           ref={canvasRef}
           width={W}
           height={H}
+          onPointerDown={handleCanvasPointer}
           style={{ width: "min(100%, 720px)", height: "auto", display: "block", imageRendering: "pixelated" }}
         />
+      </div>
+
+      {/* On-screen D-pad + action button for touch devices (also works with mouse) */}
+      <div className="grid grid-cols-3 gap-2 sm:hidden" aria-label="Touch controls">
+        <div />
+        <Button size="icon" variant="outline" aria-label="Move up" onClick={() => step("up")}>
+          <ArrowUp className="h-5 w-5" />
+        </Button>
+        <div />
+        <Button size="icon" variant="outline" aria-label="Move left" onClick={() => step("left")}>
+          <ArrowLeft className="h-5 w-5" />
+        </Button>
+        <Button size="icon" variant="default" aria-label="Use tool" onClick={doInteract}>
+          <Hand className="h-5 w-5" />
+        </Button>
+        <Button size="icon" variant="outline" aria-label="Move right" onClick={() => step("right")}>
+          <ArrowRight className="h-5 w-5" />
+        </Button>
+        <div />
+        <Button size="icon" variant="outline" aria-label="Move down" onClick={() => step("down")}>
+          <ArrowDown className="h-5 w-5" />
+        </Button>
+        <div />
       </div>
 
       <div className="flex flex-wrap items-center justify-center gap-2">
@@ -162,7 +277,8 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
       </div>
 
       <p className="max-w-md text-center text-xs text-muted-foreground">
-        Move with WASD or arrow keys. Press E (or Space) to use the selected tool on the highlighted tile. Press 1–4 to switch tools.
+        Desktop: WASD / arrows to move, E or Space to use the tool, 1–4 to switch tools.
+        Touch: tap a tile to walk toward it, tap an obstacle to face & use the tool, or use the on-screen pad.
       </p>
 
       <Dialog open={shopOpen} onOpenChange={setShopOpen}>

@@ -27,9 +27,36 @@ cpSync('dist/server', `${fnDir}/server`, { recursive: true });
 
 writeFileSync(
   `${fnDir}/index.mjs`,
-  `import handler from './server/server.js';
-export default async function (request) {
-  return handler.fetch(request);
+  `import { Readable } from 'node:stream';
+import handler from './server/server.js';
+
+export default async function (req, res) {
+  try {
+    const protocol = req.headers['x-forwarded-proto'] || 'https';
+    const host = req.headers.host || 'localhost';
+    const url = new URL(req.url, protocol + '://' + host).toString();
+
+    const method = req.method || 'GET';
+    const init = { method, headers: req.headers };
+    if (method !== 'GET' && method !== 'HEAD') {
+      init.body = Readable.toWeb(req);
+      init.duplex = 'half';
+    }
+    const request = new Request(url, init);
+    const response = await handler.fetch(request);
+
+    res.statusCode = response.status;
+    response.headers.forEach((v, k) => res.setHeader(k, v));
+    if (response.body) {
+      Readable.fromWeb(response.body).pipe(res);
+    } else {
+      res.end();
+    }
+  } catch (err) {
+    console.error('[ssr] handler error', err);
+    res.statusCode = 500;
+    res.end('Internal Server Error');
+  }
 }
 `,
 );

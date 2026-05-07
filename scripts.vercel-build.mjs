@@ -1,6 +1,7 @@
 import { execSync } from 'node:child_process';
 import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync, readdirSync } from 'node:fs';
-import { build as esbuild } from 'esbuild';
+import { dirname, resolve } from 'node:path';
+import { nodeFileTrace } from '@vercel/nft';
 
 execSync('npm run build', { stdio: 'inherit' });
 
@@ -18,42 +19,38 @@ if (existsSync('dist/client')) {
   cpSync('dist/client', staticDir, { recursive: true });
 }
 
-// 2. SSR function (Node serverless) — bundle dependencies so Vercel doesn't
-// need node_modules at runtime.
+// 2. SSR function (Node serverless). Copy the SSR output as-is, then trace
+// every node_modules file the bundle actually imports and copy them next to
+// the function so Vercel's runtime can resolve them. We deliberately avoid
+// esbuild bundling: bundling React causes duplicate React copies (or hook
+// errors with externalized peers) which break SSR.
 const fnDir = `${outRoot}/functions/ssr.func`;
 mkdirSync(fnDir, { recursive: true });
 if (!existsSync('dist/server/server.js')) {
   throw new Error('dist/server/server.js not found — TanStack Start build did not emit SSR output.');
 }
-// Copy chunked assets (lazy-imported by server.js via relative ./assets/*) as-is.
-if (existsSync('dist/server/assets')) {
-  cpSync('dist/server/assets', `${fnDir}/server/assets`, { recursive: true });
+cpSync('dist/server', `${fnDir}/dist/server`, { recursive: true });
+
+const projectRoot = process.cwd();
+const entry = resolve(projectRoot, 'dist/server/server.js');
+const trace = await nodeFileTrace([entry], { base: projectRoot });
+for (const w of trace.warnings) {
+  // Only log unusual ones; missing optional deps are common and fine.
+  const msg = w.message ?? String(w);
+  if (!/Cannot find module|MODULE_NOT_FOUND/.test(msg)) console.warn('[nft]', msg);
 }
-// Bundle the entry server.js with all bare-specifier deps inlined.
-await esbuild({
-  entryPoints: ['dist/server/server.js'],
-  outfile: `${fnDir}/server/server.js`,
-  bundle: true,
-  platform: 'node',
-  target: 'node20',
-  format: 'esm',
-  allowOverwrite: false,
-  external: [], // bundle everything from node_modules
-  banner: {
-    js: "import { createRequire as __cjsCreateRequire } from 'node:module';\nimport { fileURLToPath as __cjsFileURLToPath } from 'node:url';\nimport { dirname as __cjsDirname } from 'node:path';\nconst require = __cjsCreateRequire(import.meta.url);\nconst __filename = __cjsFileURLToPath(import.meta.url);\nconst __dirname = __cjsDirname(__filename);",
-  },
-  // Mark dynamic-imported chunks as external so they resolve at runtime to the
-  // copied ./assets/* files instead of being bundled (and renamed).
-  plugins: [
-    {
-      name: 'externalize-relative-assets',
-      setup(build) {
-        build.onResolve({ filter: /^\.\/assets\// }, (args) => ({ path: args.path, external: true }));
-      },
-    },
-  ],
-  logLevel: 'info',
-});
+let copied = 0;
+for (const file of trace.fileList) {
+  // server.js + assets already copied above; skip to avoid double work.
+  if (file.startsWith('dist/server/')) continue;
+  const src = resolve(projectRoot, file);
+  if (!existsSync(src)) continue;
+  const dest = resolve(fnDir, file);
+  mkdirSync(dirname(dest), { recursive: true });
+  cpSync(src, dest);
+  copied++;
+}
+console.log(`[vercel-build] Traced + copied ${copied} dependency files`);
 
 writeFileSync(
   `${fnDir}/index.mjs`,

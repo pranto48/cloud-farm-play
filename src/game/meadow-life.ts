@@ -32,6 +32,8 @@ export type GameState = {
   version: 1;
   player: { x: number; y: number; dir: "up" | "down" | "left" | "right" };
   day: number;
+  time: number;
+  energy: number;
   inventory: { seeds: number; crops: number; coins: number };
   tool: Tool;
   tiles: Tile[][];
@@ -65,6 +67,8 @@ export function newGame(): GameState {
     version: 1,
     player: { x: 9, y: 7, dir: "down" },
     day: 1,
+    time: 360, // 6:00
+    energy: 100,
     inventory: { seeds: 5, crops: 0, coins: 30 },
     tool: "hoe",
     tiles: makeMap(),
@@ -87,6 +91,7 @@ export function frontTile(state: GameState): { x: number; y: number } | null {
 
 /** Apply current tool to the tile in front of the player. Returns a status message or null. */
 export function interact(state: GameState): string | null {
+  if (state.energy <= 0) return "Too tired. Sleep to recover energy.";
   const f = frontTile(state);
   if (!f) return null;
   const tile = state.tiles[f.y][f.x];
@@ -95,6 +100,8 @@ export function interact(state: GameState): string | null {
     case "hoe":
       if (tile.kind === "grass") {
         tile.kind = "soil";
+        state.energy = Math.max(0, state.energy - 3);
+        passTime(state, 7);
         return "Tilled soil";
       }
       return null;
@@ -104,6 +111,8 @@ export function interact(state: GameState): string | null {
         tile.age = 0;
         tile.watered = false;
         state.inventory.seeds -= 1;
+        state.energy = Math.max(0, state.energy - 1);
+        passTime(state, 5);
         return "Planted a seed";
       }
       return null;
@@ -112,6 +121,8 @@ export function interact(state: GameState): string | null {
         if (!tile.watered) {
           tile.watered = true;
           if (tile.kind === "seeded") tile.kind = "watered";
+          state.energy = Math.max(0, state.energy - 2);
+          passTime(state, 6);
           return "Watered crop";
         }
       }
@@ -122,6 +133,8 @@ export function interact(state: GameState): string | null {
         tile.age = -1;
         tile.watered = false;
         state.inventory.crops += 1;
+        state.energy = Math.max(0, state.energy - 2);
+        passTime(state, 6);
         return "Harvested! +1 crop";
       }
       return null;
@@ -146,6 +159,8 @@ export function sellCrop(state: GameState): string {
 /** End the day: advance growth on watered crops, reset watered flags. */
 export function sleep(state: GameState): void {
   state.day += 1;
+  state.time = 360;
+  state.energy = 100;
   for (let y = 0; y < ROWS; y++) {
     for (let x = 0; x < COLS; x++) {
       const t = state.tiles[y][x];
@@ -159,6 +174,18 @@ export function sleep(state: GameState): void {
       t.watered = false;
     }
   }
+}
+
+export function passTime(state: GameState, minutes: number) {
+  state.time = Math.min(1320, state.time + minutes); // 22:00 cap
+}
+
+export function formatTime(minutes: number) {
+  const h24 = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  const suffix = h24 >= 12 ? "PM" : "AM";
+  const h12 = ((h24 + 11) % 12) + 1;
+  return `${h12}:${m.toString().padStart(2, "0")} ${suffix}`;
 }
 
 /* ----------------------------- Rendering ----------------------------- */

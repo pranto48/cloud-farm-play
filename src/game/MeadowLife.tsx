@@ -10,6 +10,7 @@ import {
   sellCrop,
   buySeed,
   sleep,
+  formatTime,
   type GameState,
   type Tool,
 } from "./meadow-life";
@@ -133,6 +134,8 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
     <div className="flex flex-col items-center gap-4">
       <div className="flex flex-wrap items-center justify-center gap-2 text-sm">
         <Badge variant="secondary" className="gap-1"><Bed className="h-3 w-3" /> Day {state.day}</Badge>
+        <Badge variant="secondary">🕒 {formatTime(state.time)}</Badge>
+        <Badge variant={state.energy <= 20 ? "destructive" : "secondary"}>⚡ Energy {state.energy}</Badge>
         <Badge variant="secondary" className="gap-1"><Sprout className="h-3 w-3" /> Seeds {state.inventory.seeds}</Badge>
         <Badge variant="secondary" className="gap-1"><Wheat className="h-3 w-3" /> Crops {state.inventory.crops}</Badge>
         <Badge variant="secondary" className="gap-1"><Coins className="h-3 w-3" /> {state.inventory.coins}c</Badge>
@@ -162,7 +165,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
       </div>
 
       <p className="max-w-md text-center text-xs text-muted-foreground">
-        Move with WASD or arrow keys. Press E (or Space) to use the selected tool on the highlighted tile. Press 1–4 to switch tools.
+        Move with WASD or arrow keys. Press E (or Space) to use the selected tool on the highlighted tile. Press 1–4 to switch tools. Actions consume energy and advance time (Stardew-style day loop).
       </p>
 
       <Dialog open={shopOpen} onOpenChange={setShopOpen}>

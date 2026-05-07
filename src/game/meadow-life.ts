@@ -17,7 +17,9 @@ export type TileKind =
   | "water"
   | "tree"
   | "house"
-  | "rock";
+  | "path"
+  | "shop"
+  | "npc";
 
 export type Tile = {
   kind: TileKind;
@@ -28,21 +30,14 @@ export type Tile = {
 };
 
 export type Tool = "hoe" | "seed" | "water" | "scythe" | "pickaxe";
-export type Season = "spring" | "summer" | "fall" | "winter";
-export type Weather = "sunny" | "rainy";
 
 export type GameState = {
   version: 1;
   player: { x: number; y: number; dir: "up" | "down" | "left" | "right" };
   day: number;
+  /** Minutes since midnight. Day starts at 06:00 and ends at 24:00. */
   time: number;
-  energy: number;
-  season: Season;
-  weather: Weather;
-  inventory: { seeds: number; crops: number; coins: number };
-  upgrades: { hoe: number; watering: number; scythe: number; pickaxe: number };
-  mineDepth: number;
-  ore: number;
+  inventory: { seeds: number; crops: number; coins: number; wood: number; planks: number };
   tool: Tool;
   tiles: Tile[][];
 };
@@ -110,18 +105,10 @@ function makeMap(): Tile[][] {
     [6, 12], [8, 10], [20, 18], [24, 22], [28, 40], [36, 38], [46, 18], [60, 44], [58, 12], [40, 52],
     [62, 24], [66, 26], [72, 50], [50, 64], [26, 58], [14, 48], [74, 16], [78, 30],
   ];
-  trees.forEach(([x, y]) => (t[y][x].kind = "tree"));
-  // House top-right (2x2)
-  t[1][16].kind = "house";
-  t[1][17].kind = "house";
-  t[2][16].kind = "house";
-  t[2][17].kind = "house";
-  // Mining zone rocks on lower-right
-  for (let y = 9; y < 13; y++) {
-    for (let x = 14; x < 19; x++) {
-      if ((x + y) % 2 === 0) t[y][x].kind = "rock";
-    }
-  }
+  trees.forEach(([x, y]) => {
+    if (x >= 0 && y >= 0 && x < COLS && y < ROWS && t[y][x].kind === "grass") t[y][x].kind = "tree";
+  });
+
   return t;
 }
 
@@ -130,21 +117,15 @@ export function newGame(): GameState {
     version: 1,
     player: { x: STATIC_POINTS.playerSpawn.x, y: STATIC_POINTS.playerSpawn.y, dir: "down" },
     day: 1,
-    time: 360, // 6:00
-    energy: 100,
-    season: "spring",
-    weather: "sunny",
-    inventory: { seeds: 5, crops: 0, coins: 30 },
-    upgrades: { hoe: 1, watering: 1, scythe: 1, pickaxe: 1 },
-    mineDepth: 0,
-    ore: 0,
+    time: DAY_START_MINUTES,
+    inventory: { seeds: 5, crops: 0, coins: 30, wood: 0, planks: 0 },
     tool: "hoe",
     tiles: makeMap(),
   };
 }
 
 export function isWalkable(t: Tile): boolean {
-  return t.kind !== "water" && t.kind !== "tree" && t.kind !== "house" && t.kind !== "rock";
+  return t.kind !== "water" && t.kind !== "tree" && t.kind !== "house" && t.kind !== "shop" && t.kind !== "npc";
 }
 
 export function frontTile(state: GameState): { x: number; y: number } | null {
@@ -159,7 +140,6 @@ export function frontTile(state: GameState): { x: number; y: number } | null {
 
 /** Apply current tool to the tile in front of the player. Returns a status message or null. */
 export function interact(state: GameState): string | null {
-  if (state.energy <= 0) return "Too tired. Sleep to recover energy.";
   const f = frontTile(state);
   if (!f) return null;
   const tile = state.tiles[f.y][f.x];
@@ -168,8 +148,6 @@ export function interact(state: GameState): string | null {
     case "hoe":
       if (tile.kind === "grass") {
         tile.kind = "soil";
-        state.energy = Math.max(0, state.energy - Math.max(1, 4 - state.upgrades.hoe));
-        passTime(state, 7);
         return "Tilled soil";
       }
       return null;
@@ -179,8 +157,6 @@ export function interact(state: GameState): string | null {
         tile.age = 0;
         tile.watered = false;
         state.inventory.seeds -= 1;
-        state.energy = Math.max(0, state.energy - 1);
-        passTime(state, 5);
         return "Planted a seed";
       }
       return null;
@@ -189,8 +165,6 @@ export function interact(state: GameState): string | null {
         if (!tile.watered) {
           tile.watered = true;
           if (tile.kind === "seeded") tile.kind = "watered";
-          state.energy = Math.max(0, state.energy - Math.max(1, 3 - state.upgrades.watering));
-          passTime(state, 6);
           return "Watered crop";
         }
       }
@@ -201,19 +175,14 @@ export function interact(state: GameState): string | null {
         tile.age = -1;
         tile.watered = false;
         state.inventory.crops += 1;
-        state.energy = Math.max(0, state.energy - Math.max(1, 3 - state.upgrades.scythe));
-        passTime(state, 6);
         return "Harvested! +1 crop";
       }
       return null;
     case "pickaxe":
-      if (tile.kind === "rock") {
+      if (tile.kind === "tree") {
         tile.kind = "grass";
-        state.energy = Math.max(0, state.energy - Math.max(1, 5 - state.upgrades.pickaxe));
-        passTime(state, 8);
-        state.ore += 1;
-        state.mineDepth += 1;
-        return "Mined ore +1";
+        state.inventory.wood += 1;
+        return "Chopped tree! +1 wood";
       }
       return null;
   }
@@ -244,14 +213,11 @@ export function sellCrop(state: GameState): string {
 /** End the day: advance growth on watered crops, reset watered flags. */
 export function sleep(state: GameState): void {
   state.day += 1;
-  state.time = 360;
-  state.energy = 100;
-  state.weather = Math.random() < 0.3 ? "rainy" : "sunny";
-  state.season = seasonForDay(state.day);
+  state.time = DAY_START_MINUTES;
   for (let y = 0; y < ROWS; y++) {
     for (let x = 0; x < COLS; x++) {
       const t = state.tiles[y][x];
-      if (t.kind === "watered" || (state.weather === "rainy" && (t.kind === "seeded" || t.kind === "growing"))) {
+      if (t.kind === "watered") {
         t.age += 1;
         t.kind = t.age >= GROW_DAYS ? "grown" : "growing";
       } else if (t.kind === "growing" && t.watered) {
@@ -263,42 +229,83 @@ export function sleep(state: GameState): void {
   }
 }
 
-export function seasonForDay(day: number): Season {
-  const idx = Math.floor((day - 1) / 10) % 4;
-  return ["spring", "summer", "fall", "winter"][idx] as Season;
+export function tickTime(state: GameState): boolean {
+  state.time += TIME_TICK_MINUTES;
+  if (state.time >= DAY_END_MINUTES) {
+    sleep(state);
+    return true;
+  }
+  return false;
 }
 
-export function talkToShopkeeper(state: GameState): string {
-  const lines: Record<Season, string> = {
-    spring: "Welcome, farmer! Spring is perfect for planting.",
-    summer: "Hot days! Water crops early and keep stamina up.",
-    fall: "Harvest season. Sell high and save for upgrades.",
-    winter: "Cold winds. Focus on mining and upgrades today.",
+export function formatTime(totalMinutes: number): string {
+  const hours24 = Math.floor(totalMinutes / 60) % 24;
+  const mins = totalMinutes % 60;
+  const suffix = hours24 >= 12 ? "PM" : "AM";
+  const hours12 = hours24 % 12 === 0 ? 12 : hours24 % 12;
+  return `${hours12}:${mins.toString().padStart(2, "0")} ${suffix}`;
+}
+
+export type TimePhase = "morning" | "evening" | "night";
+export function getTimePhase(minutes: number): TimePhase {
+  if (minutes < 12 * 60) return "morning";
+  if (minutes < 20 * 60) return "evening";
+  return "night";
+}
+
+export type TileLayer = "ground" | "collision" | "interactable" | "decoration";
+export function tileLayer(kind: TileKind): TileLayer {
+  if (kind === "tree" || kind === "house" || kind === "water") return "collision";
+  if (kind === "shop" || kind === "npc") return "interactable";
+  if (kind === "path" || kind === "soil" || kind === "seeded" || kind === "watered" || kind === "growing" || kind === "grown") return "ground";
+  return "decoration";
+}
+
+type TimeEvents = {
+  on_time_tick: (state: GameState) => void;
+  on_new_day: (state: GameState) => void;
+  on_day_end: (state: GameState) => void;
+};
+
+export class TimeManager {
+  current_day = 1;
+  current_time_minutes = DAY_START_MINUTES;
+  get is_daytime() {
+    return this.current_time_minutes < 20 * 60;
+  }
+  get is_night() {
+    return !this.is_daytime;
+  }
+
+  private listeners: { [K in keyof TimeEvents]: Set<TimeEvents[K]> } = {
+    on_time_tick: new Set(),
+    on_new_day: new Set(),
+    on_day_end: new Set(),
   };
-  return `${lines[state.season]} (${state.weather === "rainy" ? "Rain helps your fields!" : "Clear skies ahead."})`;
+
+  subscribe<K extends keyof TimeEvents>(event: K, fn: TimeEvents[K]) {
+    this.listeners[event].add(fn);
+    return () => this.listeners[event].delete(fn);
+  }
+
+  syncFrom(state: GameState) {
+    this.current_day = state.day;
+    this.current_time_minutes = state.time;
+  }
+
+  tick(state: GameState) {
+    const ended = tickTime(state);
+    this.syncFrom(state);
+    this.listeners.on_time_tick.forEach((fn) => fn(state));
+    if (ended) {
+      this.listeners.on_day_end.forEach((fn) => fn(state));
+      this.listeners.on_new_day.forEach((fn) => fn(state));
+    }
+    return ended;
+  }
 }
 
-export function upgradeTool(state: GameState, tool: "hoe" | "watering" | "scythe" | "pickaxe"): string {
-  const level = state.upgrades[tool];
-  if (level >= 3) return `${tool} is already max level`;
-  const cost = level === 1 ? 25 : 60;
-  if (state.inventory.coins < cost) return "Not enough coins";
-  state.inventory.coins -= cost;
-  state.upgrades[tool] += 1;
-  return `${tool} upgraded to Lv.${state.upgrades[tool]}`;
-}
-
-export function passTime(state: GameState, minutes: number) {
-  state.time = Math.min(1320, state.time + minutes); // 22:00 cap
-}
-
-export function formatTime(minutes: number) {
-  const h24 = Math.floor(minutes / 60);
-  const m = minutes % 60;
-  const suffix = h24 >= 12 ? "PM" : "AM";
-  const h12 = ((h24 + 11) % 12) + 1;
-  return `${h12}:${m.toString().padStart(2, "0")} ${suffix}`;
-}
+export const timeManager = new TimeManager();
 
 /* ----------------------------- Rendering ----------------------------- */
 
@@ -312,7 +319,9 @@ const COLORS: Record<TileKind, string> = {
   water: "#4aa3df",
   tree: "#3a8b3a",
   house: "#c08157",
-  rock: "#76808a",
+  path: "#ceb48a",
+  shop: "#c49a6c",
+  npc: "#8f4cc9",
 };
 
 export function draw(ctx: CanvasRenderingContext2D, state: GameState) {
@@ -358,11 +367,23 @@ export function draw(ctx: CanvasRenderingContext2D, state: GameState) {
         // roof line
         ctx.fillStyle = "#7a3e23";
         ctx.fillRect(px, py, TILE, 6);
-      } else if (t.kind === "rock") {
-        ctx.fillStyle = "#76808a";
-        ctx.fillRect(px + 4, py + 6, TILE - 8, TILE - 10);
-        ctx.fillStyle = "#a3abb4";
-        ctx.fillRect(px + 9, py + 11, 6, 4);
+      } else if (t.kind === "path") {
+        ctx.fillStyle = "#ceb48a";
+        ctx.fillRect(px, py, TILE, TILE);
+        ctx.fillStyle = "rgba(160,120,80,0.2)";
+        ctx.beginPath();
+        ctx.arc(px + 10, py + 16, 4, 0, Math.PI * 2);
+        ctx.fill();
+      } else if (t.kind === "shop") {
+        ctx.fillStyle = "#c49a6c";
+        ctx.fillRect(px + 3, py + 5, TILE - 6, TILE - 10);
+        ctx.fillStyle = "#7a3e23";
+        ctx.fillRect(px + 3, py + 5, TILE - 6, 5);
+      } else if (t.kind === "npc") {
+        ctx.fillStyle = "#8f4cc9";
+        ctx.fillRect(px + 8, py + 8, 16, 16);
+        ctx.fillStyle = "#f4c79e";
+        ctx.fillRect(px + 11, py + 4, 10, 8);
       } else if (t.kind === "soil") {
         ctx.fillStyle = "#7a4f33";
         ctx.fillRect(px + 4, py + 4, TILE - 8, TILE - 8);
@@ -423,4 +444,10 @@ export function draw(ctx: CanvasRenderingContext2D, state: GameState) {
   }
   ctx.fillStyle = "#3b8f3b";
   ctx.fillRect(px + 11, py + 2, 10, 4);
+
+  const phase = getTimePhase(state.time);
+  if (phase !== "morning") {
+    ctx.fillStyle = phase === "evening" ? "rgba(255, 160, 90, 0.10)" : "rgba(30, 40, 90, 0.30)";
+    ctx.fillRect(0, 0, W, H);
+  }
 }

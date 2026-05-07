@@ -11,7 +11,9 @@ import {
   buySeed,
   craftPlank,
   sleep,
+  TIME_TICK_MS,
   formatTime,
+  timeManager,
   talkToShopkeeper,
   upgradeTool,
   type GameState,
@@ -256,6 +258,8 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
         <Badge variant={state.energy <= 20 ? "destructive" : "secondary"}>⚡ Energy {state.energy}</Badge>
         <Badge variant="secondary" className="gap-1"><Sprout className="h-3 w-3" /> Seeds {state.inventory.seeds}</Badge>
         <Badge variant="secondary" className="gap-1"><Wheat className="h-3 w-3" /> Crops {state.inventory.crops}</Badge>
+        <Badge variant="secondary">🪵 Wood {state.inventory.wood}</Badge>
+        <Badge variant="secondary">🧱 Planks {state.inventory.planks}</Badge>
         <Badge variant="secondary">⛏ Ore {state.ore}</Badge>
         <Badge variant="secondary">🕳 Depth {state.mineDepth}</Badge>
         <Badge variant="secondary" className="gap-1"><Coins className="h-3 w-3" /> {state.inventory.coins}c</Badge>
@@ -314,7 +318,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
       </div>
 
       <p className="max-w-md text-center text-xs text-muted-foreground">
-        Move with WASD or arrow keys. Press E/Space to act, 1–5 to switch tools, and F to talk to the shopkeeper. Mine rocks in the lower-right zone for ore.
+        Move with WASD or arrow keys (hold Shift to run 🏃). Press E/Space to act, 1–5 to switch tools, and F to talk to the shopkeeper. Use Pickaxe on trees for wood, then craft planks.
       </p>
 
       <Dialog open={shopOpen} onOpenChange={setShopOpen}>

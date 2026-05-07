@@ -55,7 +55,7 @@ console.log(`[vercel-build] Traced + copied ${copied} dependency files`);
 writeFileSync(
   `${fnDir}/index.mjs`,
   `import { Readable } from 'node:stream';
-import handler from './server/server.js';
+import handler from './dist/server/server.js';
 
 export default async function (req, res) {
   try {

@@ -10,7 +10,9 @@ import {
   sellCrop,
   buySeed,
   sleep,
+  TIME_TICK_MS,
   formatTime,
+  timeManager,
   talkToShopkeeper,
   upgradeTool,
   type GameState,
@@ -112,6 +114,30 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  useEffect(() => {
+    const offTick = timeManager.subscribe("on_time_tick", () => {});
+    const offEnd = timeManager.subscribe("on_day_end", () => {
+      toast.success("It is 12:00 AM. Heading home to sleep.");
+    });
+    const offNewDay = timeManager.subscribe("on_new_day", (s) => {
+      toast.success(`Day ${s.day} begins at ${formatTime(s.time)}.`);
+    });
+
+    const id = window.setInterval(() => {
+      setState((prev) => {
+        const next = structuredClone(prev);
+        timeManager.tick(next);
+        return next;
+      });
+    }, TIME_TICK_MS);
+    return () => {
+      window.clearInterval(id);
+      offTick();
+      offEnd();
+      offNewDay();
+    };
   }, []);
 
   // Move one step in a direction (also turns to face it).

@@ -39,6 +39,9 @@ await esbuild({
   format: 'esm',
   allowOverwrite: false,
   external: [], // bundle everything from node_modules
+  banner: {
+    js: "import { createRequire as __cjsCreateRequire } from 'node:module';\nimport { fileURLToPath as __cjsFileURLToPath } from 'node:url';\nimport { dirname as __cjsDirname } from 'node:path';\nconst require = __cjsCreateRequire(import.meta.url);\nconst __filename = __cjsFileURLToPath(import.meta.url);\nconst __dirname = __cjsDirname(__filename);",
+  },
   // Mark dynamic-imported chunks as external so they resolve at runtime to the
   // copied ./assets/* files instead of being bundled (and renamed).
   plugins: [

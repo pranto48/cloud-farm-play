@@ -16,7 +16,8 @@ export type TileKind =
   | "grown"
   | "water"
   | "tree"
-  | "house";
+  | "house"
+  | "rock";
 
 export type Tile = {
   kind: TileKind;
@@ -26,7 +27,9 @@ export type Tile = {
   watered: boolean;
 };
 
-export type Tool = "hoe" | "seed" | "water" | "scythe";
+export type Tool = "hoe" | "seed" | "water" | "scythe" | "pickaxe";
+export type Season = "spring" | "summer" | "fall" | "winter";
+export type Weather = "sunny" | "rainy";
 
 export type GameState = {
   version: 1;
@@ -34,7 +37,12 @@ export type GameState = {
   day: number;
   time: number;
   energy: number;
+  season: Season;
+  weather: Weather;
   inventory: { seeds: number; crops: number; coins: number };
+  upgrades: { hoe: number; watering: number; scythe: number; pickaxe: number };
+  mineDepth: number;
+  ore: number;
   tool: Tool;
   tiles: Tile[][];
 };
@@ -59,6 +67,12 @@ function makeMap(): Tile[][] {
   t[1][17].kind = "house";
   t[2][16].kind = "house";
   t[2][17].kind = "house";
+  // Mining zone rocks on lower-right
+  for (let y = 9; y < 13; y++) {
+    for (let x = 14; x < 19; x++) {
+      if ((x + y) % 2 === 0) t[y][x].kind = "rock";
+    }
+  }
   return t;
 }
 
@@ -69,14 +83,19 @@ export function newGame(): GameState {
     day: 1,
     time: 360, // 6:00
     energy: 100,
+    season: "spring",
+    weather: "sunny",
     inventory: { seeds: 5, crops: 0, coins: 30 },
+    upgrades: { hoe: 1, watering: 1, scythe: 1, pickaxe: 1 },
+    mineDepth: 0,
+    ore: 0,
     tool: "hoe",
     tiles: makeMap(),
   };
 }
 
 export function isWalkable(t: Tile): boolean {
-  return t.kind !== "water" && t.kind !== "tree" && t.kind !== "house";
+  return t.kind !== "water" && t.kind !== "tree" && t.kind !== "house" && t.kind !== "rock";
 }
 
 export function frontTile(state: GameState): { x: number; y: number } | null {
@@ -100,7 +119,7 @@ export function interact(state: GameState): string | null {
     case "hoe":
       if (tile.kind === "grass") {
         tile.kind = "soil";
-        state.energy = Math.max(0, state.energy - 3);
+        state.energy = Math.max(0, state.energy - Math.max(1, 4 - state.upgrades.hoe));
         passTime(state, 7);
         return "Tilled soil";
       }
@@ -121,7 +140,7 @@ export function interact(state: GameState): string | null {
         if (!tile.watered) {
           tile.watered = true;
           if (tile.kind === "seeded") tile.kind = "watered";
-          state.energy = Math.max(0, state.energy - 2);
+          state.energy = Math.max(0, state.energy - Math.max(1, 3 - state.upgrades.watering));
           passTime(state, 6);
           return "Watered crop";
         }
@@ -133,9 +152,19 @@ export function interact(state: GameState): string | null {
         tile.age = -1;
         tile.watered = false;
         state.inventory.crops += 1;
-        state.energy = Math.max(0, state.energy - 2);
+        state.energy = Math.max(0, state.energy - Math.max(1, 3 - state.upgrades.scythe));
         passTime(state, 6);
         return "Harvested! +1 crop";
+      }
+      return null;
+    case "pickaxe":
+      if (tile.kind === "rock") {
+        tile.kind = "grass";
+        state.energy = Math.max(0, state.energy - Math.max(1, 5 - state.upgrades.pickaxe));
+        passTime(state, 8);
+        state.ore += 1;
+        state.mineDepth += 1;
+        return "Mined ore +1";
       }
       return null;
   }
@@ -161,10 +190,12 @@ export function sleep(state: GameState): void {
   state.day += 1;
   state.time = 360;
   state.energy = 100;
+  state.weather = Math.random() < 0.3 ? "rainy" : "sunny";
+  state.season = seasonForDay(state.day);
   for (let y = 0; y < ROWS; y++) {
     for (let x = 0; x < COLS; x++) {
       const t = state.tiles[y][x];
-      if (t.kind === "watered") {
+      if (t.kind === "watered" || (state.weather === "rainy" && (t.kind === "seeded" || t.kind === "growing"))) {
         t.age += 1;
         t.kind = t.age >= GROW_DAYS ? "grown" : "growing";
       } else if (t.kind === "growing" && t.watered) {
@@ -174,6 +205,31 @@ export function sleep(state: GameState): void {
       t.watered = false;
     }
   }
+}
+
+export function seasonForDay(day: number): Season {
+  const idx = Math.floor((day - 1) / 10) % 4;
+  return ["spring", "summer", "fall", "winter"][idx] as Season;
+}
+
+export function talkToShopkeeper(state: GameState): string {
+  const lines: Record<Season, string> = {
+    spring: "Welcome, farmer! Spring is perfect for planting.",
+    summer: "Hot days! Water crops early and keep stamina up.",
+    fall: "Harvest season. Sell high and save for upgrades.",
+    winter: "Cold winds. Focus on mining and upgrades today.",
+  };
+  return `${lines[state.season]} (${state.weather === "rainy" ? "Rain helps your fields!" : "Clear skies ahead."})`;
+}
+
+export function upgradeTool(state: GameState, tool: "hoe" | "watering" | "scythe" | "pickaxe"): string {
+  const level = state.upgrades[tool];
+  if (level >= 3) return `${tool} is already max level`;
+  const cost = level === 1 ? 25 : 60;
+  if (state.inventory.coins < cost) return "Not enough coins";
+  state.inventory.coins -= cost;
+  state.upgrades[tool] += 1;
+  return `${tool} upgraded to Lv.${state.upgrades[tool]}`;
 }
 
 export function passTime(state: GameState, minutes: number) {
@@ -200,6 +256,7 @@ const COLORS: Record<TileKind, string> = {
   water: "#4aa3df",
   tree: "#3a8b3a",
   house: "#c08157",
+  rock: "#76808a",
 };
 
 export function draw(ctx: CanvasRenderingContext2D, state: GameState) {
@@ -245,6 +302,11 @@ export function draw(ctx: CanvasRenderingContext2D, state: GameState) {
         // roof line
         ctx.fillStyle = "#7a3e23";
         ctx.fillRect(px, py, TILE, 6);
+      } else if (t.kind === "rock") {
+        ctx.fillStyle = "#76808a";
+        ctx.fillRect(px + 4, py + 6, TILE - 8, TILE - 10);
+        ctx.fillStyle = "#a3abb4";
+        ctx.fillRect(px + 9, py + 11, 6, 4);
       } else if (t.kind === "soil") {
         ctx.fillStyle = "#7a4f33";
         ctx.fillRect(px + 4, py + 4, TILE - 8, TILE - 8);

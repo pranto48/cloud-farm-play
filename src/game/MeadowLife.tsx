@@ -11,12 +11,14 @@ import {
   buySeed,
   sleep,
   formatTime,
+  talkToShopkeeper,
+  upgradeTool,
   type GameState,
   type Tool,
 } from "./meadow-life";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Coins, Sprout, Wheat, Bed, Hammer, Droplets, Scissors } from "lucide-react";
+import { Coins, Sprout, Wheat, Bed, Hammer, Droplets, Scissors, Pickaxe } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -37,6 +39,7 @@ const TOOL_ITEMS: Array<{ id: Tool; label: string; icon: typeof Hammer; key: str
   { id: "seed", label: "Seed", icon: Sprout, key: "2" },
   { id: "water", label: "Water", icon: Droplets, key: "3" },
   { id: "scythe", label: "Scythe", icon: Scissors, key: "4" },
+  { id: "pickaxe", label: "Pickaxe", icon: Pickaxe, key: "5" },
 ];
 
 export function MeadowLife({ initialState, onStateChange }: Props) {
@@ -45,6 +48,8 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
   stateRef.current = state;
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [shopOpen, setShopOpen] = useState(false);
+  const [dialogueOpen, setDialogueOpen] = useState(false);
+  const [dialogue, setDialogue] = useState("");
 
   useEffect(() => {
     onStateChange(state);
@@ -97,9 +102,12 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
           if (msg) toast(msg);
           return next;
         });
-      } else if (["1", "2", "3", "4"].includes(k)) {
+      } else if (["1", "2", "3", "4", "5"].includes(k)) {
         const tool = TOOL_ITEMS.find((t) => t.key === k);
         if (tool) setState((prev) => ({ ...prev, tool: tool.id }));
+      } else if (k === "f") {
+        setDialogue(talkToShopkeeper(stateRef.current));
+        setDialogueOpen(true);
       }
     };
     window.addEventListener("keydown", onKey);
@@ -127,6 +135,11 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
     toast(sellCrop(next));
     return next;
   });
+  const onUpgrade = (tool: "hoe" | "watering" | "scythe" | "pickaxe") => setState((prev) => {
+    const next = structuredClone(prev);
+    toast(upgradeTool(next, tool));
+    return next;
+  });
 
   const tools = useMemo(() => TOOL_ITEMS, []);
 
@@ -134,10 +147,14 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
     <div className="flex flex-col items-center gap-4">
       <div className="flex flex-wrap items-center justify-center gap-2 text-sm">
         <Badge variant="secondary" className="gap-1"><Bed className="h-3 w-3" /> Day {state.day}</Badge>
+        <Badge variant="secondary">🍂 {state.season}</Badge>
+        <Badge variant="secondary">{state.weather === "rainy" ? "🌧 Rainy" : "☀️ Sunny"}</Badge>
         <Badge variant="secondary">🕒 {formatTime(state.time)}</Badge>
         <Badge variant={state.energy <= 20 ? "destructive" : "secondary"}>⚡ Energy {state.energy}</Badge>
         <Badge variant="secondary" className="gap-1"><Sprout className="h-3 w-3" /> Seeds {state.inventory.seeds}</Badge>
         <Badge variant="secondary" className="gap-1"><Wheat className="h-3 w-3" /> Crops {state.inventory.crops}</Badge>
+        <Badge variant="secondary">⛏ Ore {state.ore}</Badge>
+        <Badge variant="secondary">🕳 Depth {state.mineDepth}</Badge>
         <Badge variant="secondary" className="gap-1"><Coins className="h-3 w-3" /> {state.inventory.coins}c</Badge>
       </div>
 
@@ -165,7 +182,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
       </div>
 
       <p className="max-w-md text-center text-xs text-muted-foreground">
-        Move with WASD or arrow keys. Press E (or Space) to use the selected tool on the highlighted tile. Press 1–4 to switch tools. Actions consume energy and advance time (Stardew-style day loop).
+        Move with WASD or arrow keys. Press E/Space to act, 1–5 to switch tools, and F to talk to the shopkeeper. Mine rocks in the lower-right zone for ore.
       </p>
 
       <Dialog open={shopOpen} onOpenChange={setShopOpen}>
@@ -183,9 +200,30 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
               <span>Sell 1 crop</span>
               <Button size="sm" variant="outline" onClick={onSell}>+14c</Button>
             </div>
+            <div className="rounded-md bg-muted/40 px-3 py-2">
+              <p className="mb-2 font-medium">Tool Upgrades</p>
+              <div className="grid grid-cols-2 gap-2">
+                <Button size="sm" variant="outline" onClick={() => onUpgrade("hoe")}>Hoe Lv.{state.upgrades.hoe}</Button>
+                <Button size="sm" variant="outline" onClick={() => onUpgrade("watering")}>Water Lv.{state.upgrades.watering}</Button>
+                <Button size="sm" variant="outline" onClick={() => onUpgrade("scythe")}>Scythe Lv.{state.upgrades.scythe}</Button>
+                <Button size="sm" variant="outline" onClick={() => onUpgrade("pickaxe")}>Pickaxe Lv.{state.upgrades.pickaxe}</Button>
+              </div>
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShopOpen(false)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={dialogueOpen} onOpenChange={setDialogueOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Shopkeeper</DialogTitle>
+            <DialogDescription>{dialogue}</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button onClick={() => setDialogueOpen(false)}>Got it</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

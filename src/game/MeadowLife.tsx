@@ -10,6 +10,8 @@ import {
   sellCrop,
   buySeed,
   sleep,
+  tickTime,
+  TIME_TICK_MS,
   formatTime,
   talkToShopkeeper,
   upgradeTool,
@@ -112,6 +114,18 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      setState((prev) => {
+        const next = structuredClone(prev);
+        const ended = tickTime(next);
+        if (ended) toast.success(`It is 12:00 AM. Day ${next.day} begins.`);
+        return next;
+      });
+    }, TIME_TICK_MS);
+    return () => window.clearInterval(id);
   }, []);
 
   // Move one step in a direction (also turns to face it).

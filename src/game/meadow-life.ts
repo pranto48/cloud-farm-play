@@ -4,8 +4,8 @@
  */
 
 export const TILE = 32;
-export const COLS = 20;
-export const ROWS = 14;
+export const COLS = 64;
+export const ROWS = 64;
 
 export type TileKind =
   | "grass"
@@ -49,41 +49,40 @@ function makeMap(): Tile[][] {
     Array.from({ length: COLS }, () => ({ kind: "grass" as TileKind, age: -1, watered: false })),
   );
 
-  // Farm zone: starter plots near the player's home.
-  for (let y = 5; y <= 9; y++) {
-    for (let x = 2; x <= 8; x++) t[y][x].kind = "soil";
+  // Farm zone: starter plots near the player's home (left side of map).
+  for (let y = 28; y <= 36; y++) {
+    for (let x = 8; x <= 18; x++) t[y][x].kind = "soil";
   }
 
   // Farm house / wake-up area.
-  t[1][2].kind = "house";
-  t[1][3].kind = "house";
-  t[2][2].kind = "house";
-  t[2][3].kind = "house";
+  for (let y = 20; y <= 23; y++) {
+    for (let x = 10; x <= 14; x++) t[y][x].kind = "house";
+  }
 
   // Shipping bin near the home for easy access.
-  t[3][4].kind = "shop";
+  t[24][16].kind = "shop";
 
-  // Tiny town/shop zone.
-  for (let y = 2; y <= 5; y++) {
-    for (let x = 14; x <= 18; x++) t[y][x].kind = "house";
+  // Tiny town/shop zone (right side of map).
+  for (let y = 24; y <= 31; y++) {
+    for (let x = 50; x <= 58; x++) t[y][x].kind = "house";
   }
   // Shop counter tile.
-  t[6][16].kind = "shop";
+  t[32][56].kind = "shop";
 
   // NPC standing/walking area.
-  t[7][15].kind = "npc";
-  t[7][16].kind = "npc";
-  t[7][17].kind = "npc";
+  t[33][54].kind = "npc";
+  t[33][55].kind = "npc";
+  t[33][56].kind = "npc";
 
   // Transition path connecting farm to town (no scene transitions).
-  for (let x = 4; x <= 16; x++) t[10][x].kind = "path";
-  for (let y = 6; y <= 10; y++) t[y][4].kind = "path";
-  for (let y = 6; y <= 10; y++) t[y][16].kind = "path";
+  for (let x = 14; x <= 56; x++) t[34][x].kind = "path";
+  for (let y = 24; y <= 34; y++) t[y][14].kind = "path";
+  for (let y = 32; y <= 34; y++) t[y][56].kind = "path";
 
   // Decorative elements.
-  for (let y = 11; y < 14; y++) for (let x = 0; x < 3; x++) t[y][x].kind = "water";
+  for (let y = 40; y <= 48; y++) for (let x = 2; x <= 8; x++) t[y][x].kind = "water";
   const trees: Array<[number, number]> = [
-    [10, 2], [11, 3], [12, 2], [13, 3], [1, 11], [3, 12], [18, 9], [19, 8],
+    [6, 12], [8, 10], [20, 18], [24, 22], [28, 40], [36, 38], [46, 18], [60, 44], [58, 12], [40, 52],
   ];
   trees.forEach(([x, y]) => {
     if (x >= 0 && y >= 0 && x < COLS && y < ROWS && t[y][x].kind === "grass") t[y][x].kind = "tree";
@@ -95,7 +94,7 @@ function makeMap(): Tile[][] {
 export function newGame(): GameState {
   return {
     version: 1,
-    player: { x: 4, y: 3, dir: "down" },
+    player: { x: 14, y: 25, dir: "down" },
     day: 1,
     inventory: { seeds: 5, crops: 0, coins: 30 },
     tool: "hoe",

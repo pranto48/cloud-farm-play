@@ -78,4 +78,4 @@ npm run build
 ## Notes
 
 - `vite.config.ts` automatically disables the Cloudflare plugin on Vercel (`VERCEL` env present).
-- `vercel.json` serves TanStack Start output from `.output/public`.
+- `vercel.json` deploys the Vite client build from `dist/client` and rewrites routes to `index.html` for SPA navigation.

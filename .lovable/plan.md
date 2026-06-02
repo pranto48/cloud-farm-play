@@ -1,104 +1,69 @@
-# CloudFarm Arcade — Build Plan
+# Meadow Life — Build Plan & Recommendation Note
 
-A full-stack web game platform with auth, a personal game library, cloud saves, and an original cozy farming demo called **Meadow Life**.
+## Current state (what's already shipped)
 
-## Tech & foundation
-- React + TypeScript on TanStack Start (existing template), Tailwind v4, shadcn/ui.
-- Lovable Cloud (Supabase) for auth, database, and cloud save storage.
-- Dark mode via `next-themes`-style toggle using existing CSS variables.
-- Protected routes via a `_authenticated` layout route + Supabase session gate.
+The game lives in the web app at `/play/meadow-life`, built in React + Canvas (not Godot). The codebase already covers most of Milestones 0–3 from your roadmap:
 
-## Pages & routes
-```text
-/                      Landing (hero, features, CTAs)
-/login                 Login + link to forgot password
-/signup                Sign up (email + password)
-/forgot-password       Request reset email
-/reset-password        Set new password (recovery flow)
-/_authenticated/
-  dashboard            Stats cards + Continue Playing + Recent activity
-  library              Grid of user's games, search + genre filter
-  games/$slug          Game details, screenshots, cloud save info
-  play/$slug           Full game canvas with save/load/fullscreen header
-  saves                All cloud saves across games, delete
-  profile              Edit display name, avatar URL
-```
-Sidebar (after login): Dashboard, My Games, Cloud Saves, Profile, Logout.
+| System | Status | Location |
+|---|---|---|
+| Player movement + collisions | Done (WASD + arrows + Shift-run) | `MeadowLife.tsx` keyboard handler |
+| Tilemap + camera | Done (fixed-screen canvas grid) | `meadow-life.ts` `draw()` |
+| Time/day cycle + lighting phases | Done (morning / evening / night overlay) | `timeManager` in `meadow-life.ts` |
+| Farming loop (hoe → seed → water → grow → harvest) | Done | `interact()` in `meadow-life.ts` |
+| Inventory (seeds, crops, wood, planks, ore, coins) | Done | `GameState.inventory` |
+| Shop (buy seeds, sell crops, tool upgrades) | Done | Dialog in `MeadowLife.tsx` |
+| Tools (hoe, seed, water, scythe, pickaxe + upgrades) | Done | `TOOL_ITEMS`, `upgradeTool()` |
+| NPC dialogue (shopkeeper) | Basic (press F) | `talkToShopkeeper()` |
+| Weather (sunny/rainy) | Done | `GameState.weather` |
+| Sleep + day rollover | Done | `sleep()` |
+| Save/load (cloud saves) | Done via app's save system | `_app.saves.tsx`, `_app.play.$slug.tsx` |
+| Touch controls (on-screen D-pad + action) | Done last turn | `MeadowLife.tsx` |
 
-## Database (Lovable Cloud)
-Tables exactly as specified:
-- `profiles` (id → auth.users, display_name, avatar_url, created_at)
-- `games` (id, title, slug unique, description, genre, cover_url, created_at)
-- `user_games` (id, user_id, game_id, added_at, last_played_at)
-- `cloud_saves` (id, user_id, game_id, slot_name, save_data jsonb, updated_at)
-- `play_sessions` (id, user_id, game_id, started_at, ended_at, duration_seconds)
+**Decision:** keep React + Canvas, not Godot. The vertical slice is already playable in-browser and shares the app's auth, cloud saves, and library — switching engines would throw all of that away.
 
-RLS: every user-owned table restricts SELECT/INSERT/UPDATE/DELETE to `auth.uid() = user_id`. `games` is readable by all authenticated users. `profiles` readable/updatable only by the owner.
+## Gaps vs your roadmap
 
-Triggers:
-- On `auth.users` insert → create row in `profiles` and insert a `user_games` row linking the new user to the seeded **Meadow Life** game.
-- `updated_at` auto-update trigger on `cloud_saves`.
+These are the meaningful pieces from your plan that are NOT yet in the code:
 
-Seed: one row in `games` for "Meadow Life", genre "Cozy Farming RPG", description as specified, placeholder cover.
+1. **Crop variety** — currently one generic crop. Need 5–8 crops with different prices, grow times, seasons.
+2. **Second NPC + schedules** — only the shopkeeper exists, and they don't move. No villager, no time-based schedules.
+3. **Friendship + gifting** — not implemented.
+4. **Mini-quests** — none.
+5. **Festival/event** — none.
+6. **Audio** — no SFX or music.
+7. **Particles / juice** — no feedback effects on harvest, level-up, etc.
+8. **Tooltips + inventory sorting** — minimal UI polish.
+9. **Save versioning** — saves work but have no schema version field, so future changes will break old saves.
+10. **Data-driven crop/item definitions** — currently hardcoded; should move to a `crops.ts` data table for easy balancing.
 
-## Auth
-- Email + password signup/login with `emailRedirectTo: window.location.origin`.
-- Forgot password sends reset email with `redirectTo: /reset-password`.
-- `/reset-password` detects recovery token and calls `updateUser({ password })`.
-- `onAuthStateChange` listener set up before `getSession()` in an `AuthProvider`.
+## Recommended task list (priority order)
 
-## Sample game: Meadow Life
-Original cozy farming demo, no Stardew assets/names/mechanics copied.
+### Phase A — Content depth (the highest-leverage work)
+1. Refactor crops into a data table (`src/game/data/crops.ts`) with `{id, seedPrice, sellPrice, growDays, season, sprite}`.
+2. Add 6 crops total across 2 profitability tiers (parsnip, potato, cauliflower, strawberry, blueberry, starfruit-style rare).
+3. Add a second NPC (villager) with a simple 3-stop daily schedule (home → meadow → tavern) driven by `timeManager`.
+4. Friendship points per NPC + a one-item-per-day gift action.
+5. Two scripted mini-quests (e.g. "bring 5 parsnips", "harvest in the rain") with completion rewards.
 
-Implementation:
-- HTML5 Canvas, 20×14 tile grid, 32px tiles, top-down view.
-- Tile types: grass, soil (tilled), seeded, watered, grown, water, house, tree.
-- Simple shape/color pixel art drawn in canvas (no external assets).
-- Controls: WASD/arrows to move; `E` interact with facing tile; number keys to switch tools (hoe, seed, watering can, scythe).
-- Actions: till grass→soil, plant seed on soil→seeded, water seeded→watered, harvest grown→+1 crop, sell crops for coins, buy seeds.
-- HUD overlay (React above canvas): inventory (seeds, crops, coins), day counter, "Sleep" button to end day, shop modal.
-- Day system: sleeping advances day; watered crops progress one growth stage per day; unwatered crops stall.
-- Game state shape (single object) used for save/load:
-  ```text
-  { player: {x,y,dir}, day, inventory: {seeds, crops, coins}, tiles: TileState[][], version: 1 }
-  ```
+### Phase B — Save integrity
+6. Add `saveVersion: 1` to `GameState` + a migration function that upgrades old saves on load.
 
-## Cloud save behavior
-- On entering `/play/$slug`: query `cloud_saves` for that user+game.
-  - If exists → modal with "Continue from Cloud Save" / "Start New Game".
-  - Else → start new.
-- Manual **Save Game** button → upsert into `cloud_saves` (one default slot "Auto Save", JSONB).
-- Auto-save every 60s using `setInterval`, only when tab visible and state changed.
-- Save status indicator in header: idle / Saving… / Saved ✓ / Error (with retry). Toasts via `sonner`.
-- On save: also update `user_games.last_played_at`.
-- Play sessions: insert row on game open, update `ended_at` + `duration_seconds` on unmount/tab close.
+### Phase C — Polish & juice
+7. Audio: footstep, till, water, harvest, coin SFX + ambient day/night loop. (Lazy-load on first user gesture.)
+8. Particle bursts on harvest, planting, coin pickup.
+9. Inventory sorting + hover tooltips on tool buttons.
+10. Mobile UX pass: bigger tap targets, persistent HUD, swipe-to-move alternative.
 
-## UI details
-- Landing: hero "Play your web games anywhere", Get Started + Login buttons, 4 feature cards (Cloud save, Personal library, Browser-based play, Cozy demo included).
-- Dashboard stats cards: Total games, Last played game, Total play sessions, Cloud saves count. Continue Playing CTA links to most recent game.
-- Library: responsive grid, search input, genre dropdown filter, cover placeholder gradient + title overlay, last-played badge, cloud-save badge.
-- Game details: hero with cover, description, screenshot placeholders, Play Now, cloud save panel (slot, last saved, delete), play history list.
-- Play page: full-bleed canvas, sticky header with Back / Save / Load / Fullscreen + status pill.
-- Loading screen on game launch (animated logo + tip text) before canvas mounts.
-- Empty states for library, saves, history; skeleton loaders for queries.
-- Dark mode toggle in sidebar footer; persists to `localStorage`.
+### Phase D — Release prep
+11. One festival event (e.g. Spring Fair on day 13) — a temporary map decoration + bonus sell prices.
+12. 3 internal playtests, log time-to-first-harvest and loops-per-session, tune `seedPrice`/`sellPrice`/`growDays`.
+13. Lock content (no new features), fix top 20 bugs, ship as the demo game in the library.
 
-## Security
-- All user-scoped tables behind RLS using `auth.uid()`.
-- `_authenticated` layout route gates all post-login pages; redirects to `/login` if no session.
-- Reset password page is public.
-- No service-role usage in client code.
+## Risk controls (carry over from your plan)
+- **Scope freeze** after Phase A. Resist adding combat/romance/multiplayer.
+- **Balancing spreadsheet** — keep crop economics in `crops.ts` so tuning is a one-file change.
+- **Daily playable build** — the dev preview already gives this for free.
+- **Save versioning early** — Phase B before Phase C so polish changes don't break testers' saves.
 
-## Out of scope (for this MVP)
-- Admin panel (structure left clean for later — single `games` table is the catalog).
-- Multiple cloud save slots per game (one slot for now; schema already supports more).
-- Real avatar upload (URL input only).
-- More than one game (architecture supports adding more by inserting `games` rows + a play component).
-
-## Deliverables checklist
-1. DB migration: tables, RLS, triggers, seed game.
-2. Auth provider + login/signup/forgot/reset pages.
-3. Protected layout with sidebar + dark mode.
-4. Landing, Dashboard, Library, Game Details, Cloud Saves, Profile pages.
-5. Meadow Life canvas game + HUD + save/load integration.
-6. Auto-save loop, play session tracking, toasts, loading/empty/error states.
+## Suggested next concrete step
+Start with Phase A task #1 (extract crops to a data table) — it unblocks tasks 2, 5, and 12 and is a ~1-hour refactor. Want me to do that now?

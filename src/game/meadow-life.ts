@@ -40,6 +40,12 @@ export type GameState = {
   inventory: { seeds: number; crops: number; coins: number; wood: number; planks: number };
   tool: Tool;
   tiles: Tile[][];
+  season: "spring" | "summer" | "fall" | "winter";
+  weather: "sunny" | "rainy";
+  energy: number;
+  ore: number;
+  mineDepth: number;
+  upgrades: { hoe: number; watering: number; scythe: number; pickaxe: number };
 };
 
 export type StaticPoints = {
@@ -121,6 +127,12 @@ export function newGame(): GameState {
     inventory: { seeds: 5, crops: 0, coins: 30, wood: 0, planks: 0 },
     tool: "hoe",
     tiles: makeMap(),
+    season: "spring",
+    weather: "sunny",
+    energy: 100,
+    ore: 0,
+    mineDepth: 0,
+    upgrades: { hoe: 1, watering: 1, scythe: 1, pickaxe: 1 },
   };
 }
 
@@ -208,6 +220,27 @@ export function sellCrop(state: GameState): string {
   state.inventory.crops -= 1;
   state.inventory.coins += CROP_PRICE;
   return `Sold 1 crop (+${CROP_PRICE}c)`;
+}
+
+const UPGRADE_COST = 80;
+export function upgradeTool(
+  state: GameState,
+  tool: "hoe" | "watering" | "scythe" | "pickaxe",
+): string {
+  if (state.upgrades[tool] >= 3) return `${tool} already maxed`;
+  if (state.inventory.coins < UPGRADE_COST) return `Need ${UPGRADE_COST}c to upgrade`;
+  state.inventory.coins -= UPGRADE_COST;
+  state.upgrades[tool] += 1;
+  return `${tool} upgraded to Lv.${state.upgrades[tool]}`;
+}
+
+export function talkToShopkeeper(state: GameState): string {
+  const lines = [
+    `Welcome! It is day ${state.day} of ${state.season}.`,
+    state.weather === "rainy" ? "Crops water themselves today — lucky you." : "Fine weather for tilling.",
+    state.inventory.coins < 20 ? "Bring me crops and I'll fill your purse." : "Plenty of stock today.",
+  ];
+  return lines.join(" ");
 }
 
 /** End the day: advance growth on watered crops, reset watered flags. */

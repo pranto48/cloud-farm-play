@@ -21,7 +21,10 @@ import {
 } from "./meadow-life";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Coins, Sprout, Wheat, Bed, Hammer, Droplets, Scissors, Pickaxe } from "lucide-react";
+import {
+  Coins, Sprout, Wheat, Bed, Hammer, Droplets, Scissors, Pickaxe,
+  ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Hand,
+} from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -50,6 +53,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
   const stateRef = useRef(state);
   stateRef.current = state;
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const lastTapRef = useRef<{ x: number; y: number; t: number } | null>(null);
   const [shopOpen, setShopOpen] = useState(false);
   const [dialogueOpen, setDialogueOpen] = useState(false);
   const [dialogue, setDialogue] = useState("");

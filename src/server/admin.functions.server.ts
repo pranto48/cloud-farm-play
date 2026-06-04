@@ -1,43 +1,59 @@
 import { createServerFn } from "@tanstack/react-start";
-import { createClient } from "@supabase/supabase-js";
-import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import type { Database } from "@/integrations/supabase/types";
+import { requireFirebaseAuth } from "@/integrations/firebase/auth-middleware";
+import { adminAuth, adminDb, isMockAdmin } from "@/integrations/firebase/client.server";
 
-function adminClient() {
-  return createClient<Database>(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
-}
-
-async function assertAdmin(supabase: ReturnType<typeof adminClient>, userId: string) {
-  const { data } = await supabase.from("user_roles").select("role").eq("user_id", userId).eq("role", "admin").maybeSingle();
-  if (!data) throw new Error("Forbidden: admin only");
+async function assertAdmin(userId: string) {
+  if (isMockAdmin) {
+    // In mock mode, we bypass check for local testing
+    return;
+  }
+  const roleRef = adminDb!.collection("user_roles").doc(userId);
+  const snap = await roleRef.get();
+  if (!snap.exists || snap.data()?.role !== "admin") {
+    throw new Error("Forbidden: admin only");
+  }
 }
 
 export const adminCreateUser = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireFirebaseAuth])
   .inputValidator((d: { email: string; password: string; displayName?: string }) => d)
   .handler(async ({ data, context }) => {
-    const admin = adminClient();
-    await assertAdmin(admin, context.userId);
-    const { data: created, error } = await admin.auth.admin.createUser({
-      email: data.email,
-      password: data.password,
-      email_confirm: true,
-      user_metadata: { display_name: data.displayName ?? data.email.split("@")[0] },
-    });
-    if (error) throw new Error(error.message);
-    return { id: created.user?.id };
+    await assertAdmin(context.userId);
+    
+    if (isMockAdmin) {
+      console.warn("[Admin Server Function] Mock createUser called:", data.email);
+      return { id: `mock-user-${Date.now()}` };
+    }
+    
+    try {
+      const created = await adminAuth!.createUser({
+        email: data.email,
+        password: data.password,
+        displayName: data.displayName ?? data.email.split("@")[0],
+        emailVerified: true,
+      });
+      return { id: created.uid };
+    } catch (err: any) {
+      throw new Error(err.message);
+    }
   });
 
 export const adminDeleteUser = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireFirebaseAuth])
   .inputValidator((d: { userId: string }) => d)
   .handler(async ({ data, context }) => {
     if (data.userId === context.userId) throw new Error("Cannot delete yourself");
-    const admin = adminClient();
-    await assertAdmin(admin, context.userId);
-    const { error } = await admin.auth.admin.deleteUser(data.userId);
-    if (error) throw new Error(error.message);
-    return { ok: true };
+    await assertAdmin(context.userId);
+    
+    if (isMockAdmin) {
+      console.warn("[Admin Server Function] Mock deleteUser called:", data.userId);
+      return { ok: true };
+    }
+    
+    try {
+      await adminAuth!.deleteUser(data.userId);
+      return { ok: true };
+    } catch (err: any) {
+      throw new Error(err.message);
+    }
   });

@@ -1,7 +1,8 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState, type FormEvent } from "react";
 import { toast } from "sonner";
-import { supabase } from "@/integrations/supabase/client";
+import { signInWithEmailAndPassword } from "firebase/auth";
+import { auth } from "@/integrations/firebase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -22,14 +23,15 @@ function LoginPage() {
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     setBusy(true);
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    setBusy(false);
-    if (error) {
-      toast.error(error.message);
-      return;
+    try {
+      await signInWithEmailAndPassword(auth, email, password);
+      toast.success("Welcome back!");
+      navigate({ to: "/dashboard" });
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setBusy(false);
     }
-    toast.success("Welcome back!");
-    navigate({ to: "/dashboard" });
   }
 
   return (

@@ -1,20 +1,24 @@
 import { createFileRoute, Link, Outlet, redirect, useRouterState } from "@tanstack/react-router";
 import { motion } from "framer-motion";
 import { Shield, Users, Gamepad2, BarChart3 } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
+import { auth, db } from "@/integrations/firebase/client";
+import { doc, getDoc } from "firebase/firestore";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_app/admin")({
   beforeLoad: async () => {
-    const { data: s } = await supabase.auth.getSession();
-    if (!s.session) throw redirect({ to: "/login" });
-    const { data } = await supabase
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", s.session.user.id)
-      .eq("role", "admin")
-      .maybeSingle();
-    if (!data) throw redirect({ to: "/dashboard" });
+    const user = await new Promise<any>((resolve) => {
+      const unsubscribe = auth.onAuthStateChanged((u) => {
+        unsubscribe();
+        resolve(u);
+      });
+    });
+    if (!user) throw redirect({ to: "/login" });
+
+    const roleSnap = await getDoc(doc(db, "user_roles", user.uid));
+    if (!roleSnap.exists() || roleSnap.data().role !== "admin") {
+      throw redirect({ to: "/dashboard" });
+    }
   },
   head: () => ({ meta: [{ title: "Admin — CloudFarm Arcade" }] }),
   component: AdminLayout,

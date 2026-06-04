@@ -2,7 +2,8 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
-import { supabase } from "@/integrations/supabase/client";
+import { createUserWithEmailAndPassword, updateProfile } from "firebase/auth";
+import { auth } from "@/integrations/firebase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -26,21 +27,20 @@ function SignupPage() {
     if (password.length < 8) { toast.error("Password must be at least 8 characters"); return; }
     if (password !== confirm) { toast.error("Passwords do not match"); return; }
     setBusy(true);
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        emailRedirectTo: typeof window !== "undefined" ? window.location.origin : undefined,
-        data: { display_name: displayName || email.split("@")[0] },
-      },
-    });
-    setBusy(false);
-    if (error) {
-      toast.error(error.message);
-      return;
+    try {
+      const cred = await createUserWithEmailAndPassword(auth, email, password);
+      if (cred.user) {
+        await updateProfile(cred.user, {
+          displayName: displayName || email.split("@")[0]
+        });
+      }
+      toast.success("Account created! Welcome to CloudFarm Arcade.");
+      navigate({ to: "/dashboard" });
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setBusy(false);
     }
-    toast.success("Account created! Welcome to CloudFarm Arcade.");
-    navigate({ to: "/dashboard" });
   }
 
   return (

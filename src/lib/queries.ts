@@ -1,4 +1,16 @@
-import { supabase } from "@/integrations/supabase/client";
+import { 
+  collection, 
+  doc, 
+  getDoc, 
+  getDocs, 
+  setDoc, 
+  updateDoc, 
+  deleteDoc, 
+  query, 
+  where,
+  addDoc
+} from "firebase/firestore";
+import { db } from "@/integrations/firebase/client";
 
 export type GameRow = {
   id: string;
@@ -7,6 +19,7 @@ export type GameRow = {
   description: string | null;
   genre: string | null;
   cover_url: string | null;
+  created_at?: string;
 };
 
 export type UserGameRow = {
@@ -18,55 +31,104 @@ export type UserGameRow = {
 };
 
 export async function fetchMyGames(userId: string): Promise<UserGameRow[]> {
-  const { data, error } = await supabase
-    .from("user_games")
-    .select("id, game_id, added_at, last_played_at, games(id, title, slug, description, genre, cover_url)")
-    .eq("user_id", userId)
-    .order("last_played_at", { ascending: false, nullsFirst: false });
-  if (error) throw error;
-  return (data ?? []) as unknown as UserGameRow[];
+  const q = query(collection(db, "user_games"), where("user_id", "==", userId));
+  const snap = await getDocs(q);
+  const userGames = snap.docs.map(d => d.data());
+
+  const results = await Promise.all(userGames.map(async (ug: any) => {
+    const gameSnap = await getDoc(doc(db, "games", ug.game_id));
+    const gameData = gameSnap.exists() 
+      ? (gameSnap.data() as GameRow)
+      : { id: ug.game_id, title: ug.game_id, slug: ug.game_id, description: "", genre: "", cover_url: null };
+
+    return {
+      id: ug.id,
+      game_id: ug.game_id,
+      added_at: ug.added_at,
+      last_played_at: ug.last_played_at || null,
+      games: gameData
+    };
+  }));
+
+  return results.sort((a: any, b: any) => {
+    if (!a.last_played_at) return 1;
+    if (!b.last_played_at) return -1;
+    return new Date(b.last_played_at).getTime() - new Date(a.last_played_at).getTime();
+  }) as UserGameRow[];
 }
 
 export async function fetchGameBySlug(slug: string): Promise<GameRow | null> {
-  const { data, error } = await supabase.from("games").select("*").eq("slug", slug).maybeSingle();
-  if (error) throw error;
-  return data;
+  const docSnap = await getDoc(doc(db, "games", slug));
+  if (docSnap.exists()) return docSnap.data() as GameRow;
+
+  const q = query(collection(db, "games"), where("slug", "==", slug));
+  const qSnap = await getDocs(q);
+  if (!qSnap.empty) return qSnap.docs[0].data() as GameRow;
+
+  return null;
 }
 
 export async function fetchCloudSave(userId: string, gameId: string) {
-  const { data, error } = await supabase
-    .from("cloud_saves")
-    .select("*")
-    .eq("user_id", userId)
-    .eq("game_id", gameId)
-    .order("updated_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (error) throw error;
-  return data;
+  const q = query(
+    collection(db, "cloud_saves"), 
+    where("user_id", "==", userId), 
+    where("game_id", "==", gameId)
+  );
+  const snap = await getDocs(q);
+  const docs = snap.docs.map(d => d.data());
+  if (docs.length === 0) return null;
+
+  docs.sort((a: any, b: any) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
+  return docs[0];
 }
 
 export async function fetchAllCloudSaves(userId: string) {
-  const { data, error } = await supabase
-    .from("cloud_saves")
-    .select("id, slot_name, updated_at, game_id, games(title, slug, cover_url, genre)")
-    .eq("user_id", userId)
-    .order("updated_at", { ascending: false });
-  if (error) throw error;
-  return data ?? [];
+  const q = query(collection(db, "cloud_saves"), where("user_id", "==", userId));
+  const snap = await getDocs(q);
+  const saves = snap.docs.map(d => d.data());
+
+  const results = await Promise.all(saves.map(async (s: any) => {
+    const gameSnap = await getDoc(doc(db, "games", s.game_id));
+    const gameData = gameSnap.exists()
+      ? gameSnap.data()
+      : { title: s.game_id, slug: s.game_id, cover_url: null, genre: "" };
+    
+    return {
+      id: s.id,
+      slot_name: s.slot_name,
+      updated_at: s.updated_at,
+      game_id: s.game_id,
+      games: gameData
+    };
+  }));
+
+  return results.sort((a: any, b: any) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
 }
 
 export async function fetchPlayStats(userId: string) {
-  const [{ count: sessions }, { data: lastSession }] = await Promise.all([
-    supabase.from("play_sessions").select("id", { count: "exact", head: true }).eq("user_id", userId),
-    supabase
-      .from("play_sessions")
-      .select("id, started_at, game_id, games(title, slug)")
-      .eq("user_id", userId)
-      .order("started_at", { ascending: false })
-      .limit(5),
-  ]);
-  return { sessions: sessions ?? 0, recent: lastSession ?? [] };
+  const q = query(collection(db, "play_sessions"), where("user_id", "==", userId));
+  const snap = await getDocs(q);
+  const sessions = snap.docs.map(d => d.data());
+  const sorted = [...sessions].sort((a: any, b: any) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime());
+
+  const recentWithGames = await Promise.all(sorted.slice(0, 5).map(async (s: any) => {
+    const gameSnap = await getDoc(doc(db, "games", s.game_id));
+    const gameData = gameSnap.exists() 
+      ? gameSnap.data() 
+      : { title: s.game_id, slug: s.game_id };
+
+    return {
+      id: s.id,
+      started_at: s.started_at,
+      game_id: s.game_id,
+      games: gameData
+    };
+  }));
+
+  return {
+    sessions: sessions.length,
+    recent: recentWithGames
+  };
 }
 
 export async function upsertCloudSave(params: {
@@ -75,127 +137,114 @@ export async function upsertCloudSave(params: {
   saveData: unknown;
   slotName?: string;
 }) {
-  const { error } = await supabase
-    .from("cloud_saves")
-    .upsert(
-      {
-        user_id: params.userId,
-        game_id: params.gameId,
-        slot_name: params.slotName ?? "Auto Save",
-        save_data: params.saveData as never,
-      },
-      { onConflict: "user_id,game_id,slot_name" },
-    );
-  if (error) throw error;
+  const slot = params.slotName ?? "Auto Save";
+  const docId = `${params.userId}_${params.gameId}_${slot.replace(/\s+/g, "_")}`;
+  const saveRef = doc(db, "cloud_saves", docId);
+  
+  await setDoc(saveRef, {
+    id: docId,
+    user_id: params.userId,
+    game_id: params.gameId,
+    slot_name: slot,
+    save_data: params.saveData,
+    updated_at: new Date().toISOString()
+  }, { merge: true });
 }
 
 export async function deleteCloudSave(id: string) {
-  const { error } = await supabase.from("cloud_saves").delete().eq("id", id);
-  if (error) throw error;
+  await deleteDoc(doc(db, "cloud_saves", id));
 }
 
 export async function touchLastPlayed(userId: string, gameId: string) {
-  await supabase
-    .from("user_games")
-    .update({ last_played_at: new Date().toISOString() })
-    .eq("user_id", userId)
-    .eq("game_id", gameId);
+  const docId = `${userId}_${gameId}`;
+  await setDoc(doc(db, "user_games", docId), {
+    last_played_at: new Date().toISOString()
+  }, { merge: true });
 }
 
 export async function startPlaySession(userId: string, gameId: string) {
-  const { data, error } = await supabase
-    .from("play_sessions")
-    .insert({ user_id: userId, game_id: gameId })
-    .select("id, started_at")
-    .single();
-  if (error) throw error;
-  return data;
+  const docRef = doc(collection(db, "play_sessions"));
+  const startedAt = new Date().toISOString();
+  await setDoc(docRef, {
+    id: docRef.id,
+    user_id: userId,
+    game_id: gameId,
+    started_at: startedAt,
+    ended_at: null,
+    duration_seconds: null
+  });
+  return { id: docRef.id, started_at: startedAt };
 }
 
 export async function endPlaySession(id: string, startedAt: string) {
   const seconds = Math.max(0, Math.floor((Date.now() - new Date(startedAt).getTime()) / 1000));
-  await supabase
-    .from("play_sessions")
-    .update({ ended_at: new Date().toISOString(), duration_seconds: seconds })
-    .eq("id", id);
+  await updateDoc(doc(db, "play_sessions", id), {
+    ended_at: new Date().toISOString(),
+    duration_seconds: seconds
+  });
 }
 
 export async function fetchIsAdmin(userId: string): Promise<boolean> {
-  const { data, error } = await supabase
-    .from("user_roles")
-    .select("role")
-    .eq("user_id", userId)
-    .eq("role", "admin")
-    .maybeSingle();
-  if (error) return false;
-  return !!data;
+  const docSnap = await getDoc(doc(db, "user_roles", userId));
+  if (!docSnap.exists()) return false;
+  return docSnap.data().role === "admin";
 }
 
 export async function fetchAllGames(): Promise<GameRow[]> {
-  const { data, error } = await supabase.from("games").select("*").order("created_at", { ascending: false });
-  if (error) throw error;
-  return data ?? [];
+  const snap = await getDocs(collection(db, "games"));
+  const games = snap.docs.map(d => d.data() as GameRow);
+  return games.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
 }
 
 export async function adminFetchAllUsers() {
-  const { data, error } = await supabase
-    .from("profiles")
-    .select("id, display_name, avatar_url, created_at")
-    .order("created_at", { ascending: false });
-  if (error) throw error;
-  return data ?? [];
+  const snap = await getDocs(collection(db, "profiles"));
+  const users = snap.docs.map(d => d.data());
+  return users.sort((a: any, b: any) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
 }
 
 export async function adminFetchAllSessions() {
-  const { data, error } = await supabase
-    .from("play_sessions")
-    .select("id, user_id, game_id, started_at, ended_at, duration_seconds")
-    .order("started_at", { ascending: false })
-    .limit(50);
-  if (error) throw error;
-  return data ?? [];
+  const snap = await getDocs(collection(db, "play_sessions"));
+  const sessions = snap.docs.map(d => d.data());
+  return sessions
+    .sort((a: any, b: any) => new Date(b.started_at || 0).getTime() - new Date(a.started_at || 0).getTime())
+    .slice(0, 50);
 }
 
 export async function adminFetchAllUserGames() {
-  const { data, error } = await supabase
-    .from("user_games")
-    .select("id, user_id, game_id, added_at, last_played_at");
-  if (error) throw error;
-  return data ?? [];
+  const snap = await getDocs(collection(db, "user_games"));
+  return snap.docs.map(d => d.data());
 }
 
 export async function adminFetchAllSaves() {
-  const { data, error } = await supabase
-    .from("cloud_saves")
-    .select("id, user_id, game_id, slot_name, updated_at");
-  if (error) throw error;
-  return data ?? [];
+  const snap = await getDocs(collection(db, "cloud_saves"));
+  return snap.docs.map(d => d.data());
 }
 
 export async function adminFetchUserRoles() {
-  const { data, error } = await supabase
-    .from("user_roles")
-    .select("user_id, role");
-  if (error) throw error;
-  return data ?? [];
+  const snap = await getDocs(collection(db, "user_roles"));
+  return snap.docs.map(d => d.data());
 }
 
 export async function adminCreateGame(game: { title: string; slug: string; description: string; genre: string; cover_url?: string | null }) {
-  const { error } = await supabase.from("games").insert(game);
-  if (error) throw error;
+  await setDoc(doc(db, "games", game.slug), {
+    id: game.slug,
+    title: game.title,
+    slug: game.slug,
+    description: game.description,
+    genre: game.genre,
+    cover_url: game.cover_url || null,
+    created_at: new Date().toISOString()
+  });
 }
 
 export async function adminDeleteGame(id: string) {
-  const { error } = await supabase.from("games").delete().eq("id", id);
-  if (error) throw error;
+  await deleteDoc(doc(db, "games", id));
 }
 
 export async function adminToggleAdmin(userId: string, makeAdmin: boolean) {
-  if (makeAdmin) {
-    const { error } = await supabase.from("user_roles").insert({ user_id: userId, role: "admin" });
-    if (error && !error.message.includes("duplicate")) throw error;
-  } else {
-    const { error } = await supabase.from("user_roles").delete().eq("user_id", userId).eq("role", "admin");
-    if (error) throw error;
-  }
+  await setDoc(doc(db, "user_roles", userId), {
+    user_id: userId,
+    role: makeAdmin ? "admin" : "user",
+    created_at: new Date().toISOString()
+  }, { merge: true });
 }

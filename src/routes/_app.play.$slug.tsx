@@ -23,7 +23,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { MeadowLife } from "@/game/MeadowLife";
-import { newGame, type GameState } from "@/game/meadow-life";
+import { newGame, migrateState, type GameState } from "@/game/meadow-life";
 
 export const Route = createFileRoute("/_app/play/$slug")({
   head: () => ({ meta: [{ title: "Play — CloudFarm Arcade" }] }),
@@ -36,7 +36,13 @@ function PlayPage() {
   const { slug } = Route.useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const userId = user!.id;
+
+  // Guard: user must be authenticated — the _app layout should ensure this,
+  // but add a safety net to prevent a runtime crash on production.
+  if (!user) {
+    return <LaunchScreen title="Authenticating…" />;
+  }
+  const userId = user.id;
 
   const game = useQuery({ queryKey: ["game", slug], queryFn: () => fetchGameBySlug(slug) });
   const save = useQuery({
@@ -44,6 +50,7 @@ function PlayPage() {
     queryFn: () => fetchCloudSave(userId, game.data!.id),
     enabled: !!game.data?.id,
   });
+
 
   const [chosen, setChosen] = useState<GameState | null>(null);
   const [askResume, setAskResume] = useState(false);
@@ -130,7 +137,7 @@ function PlayPage() {
     if (!game.data) return;
     const fresh = await fetchCloudSave(userId, game.data.id);
     if (fresh?.save_data) {
-      setChosen(fresh.save_data as unknown as GameState);
+      setChosen(migrateState(fresh.save_data));
       toast.success("Loaded cloud save");
     } else {
       toast.error("No cloud save found");
@@ -220,7 +227,7 @@ function PlayPage() {
             </Button>
             <Button
               onClick={() => {
-                setChosen((save.data?.save_data as unknown as GameState) ?? newGame());
+                setChosen(migrateState(save.data?.save_data ?? newGame()));
                 setAskResume(false);
               }}
             >

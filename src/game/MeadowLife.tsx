@@ -21,6 +21,7 @@ import {
   quickStackToChest,
   hasItems,
   updateEntities,
+  migrateState,
   type GameState,
   type Tile,
   type Enemy,
@@ -59,7 +60,7 @@ type Props = {
 };
 
 export function MeadowLife({ initialState, onStateChange }: Props) {
-  const [state, setState] = useState<GameState>(() => initialState ?? newGame());
+  const [state, setState] = useState<GameState>(() => migrateState(initialState ?? newGame()));
   const stateRef = useRef(state);
   stateRef.current = state;
 

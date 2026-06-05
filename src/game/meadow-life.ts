@@ -644,6 +644,85 @@ export function newGame(): GameState {
   };
 }
 
+/**
+ * Migrate / patch a raw cloud-save object (potentially from an older game
+ * version) so that every field the current code expects is present.
+ * Call this whenever you load a state from cloud storage.
+ */
+export function migrateState(raw: unknown): GameState {
+  // Start from a fresh baseline so every field is guaranteed to exist
+  const base = newGame();
+  if (!raw || typeof raw !== "object") return base;
+
+  const s = raw as Record<string, unknown>;
+
+  // Shallow-merge top-level scalar fields from the saved state
+  const merged: GameState = {
+    ...base,
+    // Scalars / simple overrides
+    version: 1,
+    day:          typeof s.day === "number"          ? s.day          : base.day,
+    time:         typeof s.time === "number"         ? s.time         : base.time,
+    coins:        typeof s.coins === "number"        ? s.coins        : base.coins,
+    season:       (s.season as GameState["season"])  ?? base.season,
+    weather:      (s.weather as GameState["weather"]) ?? base.weather,
+    energy:       typeof s.energy === "number"       ? s.energy       : base.energy,
+    maxEnergy:    typeof s.maxEnergy === "number"    ? s.maxEnergy    : base.maxEnergy,
+    mineDepth:    typeof s.mineDepth === "number"    ? s.mineDepth    : base.mineDepth,
+    inMine:       typeof s.inMine === "boolean"      ? s.inMine       : base.inMine,
+    hotbarIndex:  typeof s.hotbarIndex === "number"  ? s.hotbarIndex  : base.hotbarIndex,
+    hasUnreadMail: typeof s.hasUnreadMail === "boolean" ? s.hasUnreadMail : base.hasUnreadMail,
+    harvestLiftingTimer: 0,
+    carryItem: null,
+
+    // Arrays — use saved data or fall back to baseline
+    inventory:    Array.isArray(s.inventory)     ? (s.inventory as (Item | null)[])     : base.inventory,
+    tiles:        Array.isArray(s.tiles)         ? (s.tiles as Tile[][])                : base.tiles,
+    shippingBin:  Array.isArray(s.shippingBin)   ? (s.shippingBin as (Item | null)[])   : base.shippingBin,
+    mineGrid:     Array.isArray(s.mineGrid)      ? (s.mineGrid as Tile[][])             : base.mineGrid,
+    mineEnemies:  Array.isArray(s.mineEnemies)   ? (s.mineEnemies as Enemy[])           : base.mineEnemies,
+    mailboxLetters: Array.isArray(s.mailboxLetters) ? (s.mailboxLetters as MailLetter[]) : base.mailboxLetters,
+    animals:      Array.isArray(s.animals)       ? (s.animals as Animal[])              : base.animals,
+    // New fields added in recent versions — default to empty arrays if absent
+    pets:         Array.isArray(s.pets)          ? (s.pets as Pet[])                    : [],
+    workers:      Array.isArray(s.workers)       ? (s.workers as FarmWorker[])          : [],
+
+    // Nested objects
+    player: s.player && typeof s.player === "object"
+      ? { ...base.player, ...(s.player as Partial<GameState["player"]>) }
+      : base.player,
+
+    skills: s.skills && typeof s.skills === "object"
+      ? { ...base.skills, ...(s.skills as Partial<GameState["skills"]>) }
+      : base.skills,
+
+    experience: s.experience && typeof s.experience === "object"
+      ? { ...base.experience, ...(s.experience as Partial<GameState["experience"]>) }
+      : base.experience,
+
+    npcFriendships: s.npcFriendships && typeof s.npcFriendships === "object"
+      ? (s.npcFriendships as Record<string, number>)
+      : base.npcFriendships,
+
+    // Upgrades — make sure every tool key exists (axe was added later)
+    upgrades: {
+      hoe:      1,
+      watering: 1,
+      scythe:   1,
+      pickaxe:  1,
+      axe:      1,
+      ...(s.upgrades && typeof s.upgrades === "object" ? (s.upgrades as Partial<GameState["upgrades"]>) : {}),
+    },
+
+    quest: s.quest !== undefined ? (s.quest as GameState["quest"]) : base.quest,
+    dailyEarnings: s.dailyEarnings as GameState["dailyEarnings"] ?? undefined,
+    fishing: s.fishing as GameState["fishing"] ?? undefined,
+  };
+
+  return merged;
+}
+
+
 export function isWalkable(t: Tile): boolean {
   if (!t) return false;
   return (

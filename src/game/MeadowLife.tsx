@@ -1145,7 +1145,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
     });
   };
 
-  const getUpgradeCost = (toolId: "hoe" | "watering" | "scythe" | "pickaxe", currentLvl: number) => {
+  const getUpgradeCost = (toolId: "hoe" | "watering" | "scythe" | "pickaxe" | "axe", currentLvl: number) => {
     if (currentLvl === 1) {
       return { coins: 2000, resourceId: "copper_bar", resourceCount: 5, label: "5x Copper Bar + 2,000g" };
     } else if (currentLvl === 2) {
@@ -1156,7 +1156,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
     return null;
   };
 
-  const handleUpgrade = (toolId: "hoe" | "watering" | "scythe" | "pickaxe") => {
+  const handleUpgrade = (toolId: "hoe" | "watering" | "scythe" | "pickaxe" | "axe") => {
     const lvl = state.upgrades[toolId];
     if (lvl >= 4) {
       toast.error("Tool is already at maximum level.");
@@ -1192,7 +1192,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
         }
       }
 
-      next.upgrades[toolId] += 1;
+      next.upgrades[toolId] = (next.upgrades[toolId] || 1) + 1;
       toast.success(`${toolId.toUpperCase()} upgraded to Level ${next.upgrades[toolId]}!`);
       return next;
     });
@@ -1544,8 +1544,8 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
             {/* Tool upgrades */}
             {shopTab === "upgrades" && (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                {(["hoe", "watering", "scythe", "pickaxe"] as const).map((tId) => {
-                  const lvl = state.upgrades[tId];
+                {(["hoe", "watering", "scythe", "pickaxe", "axe"] as const).map((tId) => {
+                  const lvl = state.upgrades[tId] || 1;
                   const cost = getUpgradeCost(tId, lvl);
                   return (
                     <div
@@ -2164,6 +2164,91 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
             </DialogFooter>
           </DialogContent>
         )}
+      </Dialog>
+
+      {/* F. WORKER GUIDELINES DIALOG OVERLAY */}
+      <Dialog open={selectedWorkerId !== null} onOpenChange={() => setSelectedWorkerId(null)}>
+        <DialogContent className="max-w-md bg-[#2d1e18] border-[#5d4037] text-stone-100 font-mono">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-bold flex items-center gap-2 text-amber-400 border-b border-[#5d4037] pb-2">
+              <span>📋 Worker Guideline & Assignment</span>
+            </DialogTitle>
+          </DialogHeader>
+
+          {(() => {
+            const activeWorker = state.workers?.find((w) => w.id === selectedWorkerId);
+            if (!activeWorker) return null;
+            return (
+              <div className="space-y-4 py-3 text-xs">
+                <div className="bg-[#3e2723] p-3 rounded-lg border border-[#5d4037] space-y-1">
+                  <div><span className="text-amber-400">Name:</span> {activeWorker.name}</div>
+                  <div><span className="text-amber-400">Shift Schedule:</span> 8:00 AM - 5:00 PM</div>
+                  <div>
+                    <span className="text-amber-400">Energy Level:</span> {Math.floor(activeWorker.energy)} / 100
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-amber-400">Daily Food Eaten:</span>{" "}
+                    {activeWorker.hasEatenToday ? (
+                      <span className="text-emerald-400 font-bold">Yes ✓</span>
+                    ) : (
+                      <span className="text-red-400 font-bold">No ✗</span>
+                    )}
+                  </div>
+                  <div><span className="text-amber-400">Status:</span> {activeWorker.statusText}</div>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="block text-amber-500 font-bold">Assign Work Guideline:</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {(["idle", "water", "harvest", "clear"] as const).map((task) => (
+                      <button
+                        key={task}
+                        className={`p-2.5 rounded border capitalize font-bold transition-all text-center ${
+                          activeWorker.task === task
+                            ? "bg-amber-600 border-amber-400 text-stone-100"
+                            : "bg-[#3e2723] border-[#5d4037] text-stone-300 hover:bg-[#5d4037]"
+                        }`}
+                        onClick={() => {
+                          setState((prev) => {
+                            const next = structuredClone(prev);
+                            const worker = next.workers?.find((w) => w.id === selectedWorkerId);
+                            if (worker) {
+                              worker.task = task;
+                              toast.success(`Assigned ${worker.name} to ${task.toUpperCase()}`);
+                            }
+                            return next;
+                          });
+                        }}
+                      >
+                        {task === "idle" ? "Idle / Rest" : task === "water" ? "Water Soil" : task === "harvest" ? "Harvest Crops" : "Clear Debris"}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="text-[10px] text-stone-400 border-t border-[#5d4037] pt-2 leading-relaxed">
+                  <span className="text-amber-300 font-extrabold">Guidelines Note:</span> Hired workers need 1 crop or meal in their Cabin Feed Box daily. If energy drops to 0, they will strike. They work in a 9x9 zone centered on their cabin.
+                </div>
+
+                <div className="flex justify-end gap-2 pt-2">
+                  <Button
+                    variant="outline"
+                    className="text-xs bg-[#5d4037]/20 border-[#5d4037] hover:bg-[#5d4037]/40 text-stone-100"
+                    onClick={() => {
+                      setSelectedWorkerId(null);
+                      setChestOpenTile({ x: activeWorker.cabinX, y: activeWorker.cabinY });
+                    }}
+                  >
+                    Open Cabin Chest
+                  </Button>
+                  <Button className="text-xs" onClick={() => setSelectedWorkerId(null)}>
+                    Close
+                  </Button>
+                </div>
+              </div>
+            );
+          })()}
+        </DialogContent>
       </Dialog>
 
       {/* 6. TUTORIAL CARD */}

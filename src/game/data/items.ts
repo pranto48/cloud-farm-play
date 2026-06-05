@@ -355,6 +355,77 @@ export const ITEM_DEFS: Record<string, Omit<Item, "count">> = {
     iconColor: "#7f8c8d",
     iconSymbol: "⚙",
   },
+  sprinkler_basic: {
+    id: "sprinkler_basic",
+    name: "Basic Sprinkler",
+    type: "furniture",
+    description: "Waters the 4 adjacent tiles every morning.",
+    price: 80,
+    iconColor: "#3498db",
+    iconSymbol: "⛲",
+  },
+  sprinkler_quality: {
+    id: "sprinkler_quality",
+    name: "Quality Sprinkler",
+    type: "furniture",
+    description: "Waters the 8 surrounding tiles every morning.",
+    price: 200,
+    iconColor: "#f1c40f",
+    iconSymbol: "🌟",
+  },
+  chick: {
+    id: "chick",
+    name: "Baby Chick",
+    type: "furniture",
+    description: "Place on farm to release a chick. Lays eggs.",
+    price: 150,
+    iconColor: "#f4d03f",
+    iconSymbol: "🐤",
+  },
+  calf: {
+    id: "calf",
+    name: "Baby Calf",
+    type: "furniture",
+    description: "Place on farm to release a calf. Produces milk.",
+    price: 400,
+    iconColor: "#ba4a00",
+    iconSymbol: "🐮",
+  },
+
+  // Tools additions
+  milk_pail: {
+    id: "milk_pail",
+    name: "Milk Pail",
+    type: "tool",
+    description: "Used to collect milk from cows.",
+    price: 30,
+    iconColor: "#bdc3c7",
+    iconSymbol: "🪣",
+  },
+
+  // Animal Produce
+  chicken_egg: {
+    id: "chicken_egg",
+    name: "Chicken Egg",
+    type: "resource",
+    description: "Fresh egg laid by a chicken.",
+    price: 15,
+    energyRestore: 10,
+    healthRestore: 4,
+    iconColor: "#f9e79f",
+    iconSymbol: "🥚",
+  },
+  milk: {
+    id: "milk",
+    name: "Fresh Milk",
+    type: "resource",
+    description: "Creamy milk collected from cows.",
+    price: 40,
+    energyRestore: 30,
+    healthRestore: 12,
+    iconColor: "#fbfcfc",
+    iconSymbol: "🥛",
+  },
 
   // Fish
   sardine: {

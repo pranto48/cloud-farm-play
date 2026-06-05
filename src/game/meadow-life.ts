@@ -43,7 +43,7 @@ export interface Tile {
   chestInventory?: (Item | null)[];
 }
 
-export type Tool = "hoe" | "watering_can" | "scythe" | "pickaxe" | "axe" | "sword" | "fishing_rod";
+export type Tool = "hoe" | "watering_can" | "scythe" | "pickaxe" | "axe" | "sword" | "fishing_rod" | "milk_pail";
 
 export interface Enemy {
   id: string;
@@ -66,6 +66,7 @@ export interface Particle {
   color: string;
   age: number;
   maxAge: number;
+  type?: "leaf" | "stone" | "water" | "smoke" | "heart" | "dust";
 }
 
 export interface FloatingText {
@@ -75,6 +76,29 @@ export interface FloatingText {
   color: string;
   age: number;
   maxAge: number;
+}
+
+export interface Animal {
+  id: string;
+  type: "chick" | "calf";
+  name: string;
+  x: number;
+  y: number;
+  subX: number; // smooth interpolation coords
+  subY: number;
+  age: number; // in days
+  petCount: number;
+  hasProduce: boolean;
+  walkTimer: number; // seconds until next move
+}
+
+export interface MailLetter {
+  id: string;
+  sender: string;
+  content: string;
+  giftItemId?: string;
+  giftCount?: number;
+  claimed: boolean;
 }
 
 export interface GameState {
@@ -133,6 +157,12 @@ export interface GameState {
     scythe: number;
     pickaxe: number;
   };
+  // Overhaul states
+  animals: Animal[];
+  mailboxLetters: MailLetter[];
+  hasUnreadMail: boolean;
+  harvestLiftingTimer: number; // freeze remaining duration
+  carryItem: Item | null; // visually drawn above head
 }
 
 export const DAY_START_MINUTES = 6 * 60;
@@ -146,6 +176,7 @@ export const STATIC_POINTS = {
   shopInteract: { x: 70, y: 40 },
   bedSleep: { x: 16, y: 29 },
   shippingBin: { x: 18, y: 29 },
+  mailbox: { x: 19, y: 29 },
 };
 
 // Item utility functions
@@ -262,6 +293,30 @@ export const CRAFTING_RECIPES: Recipe[] = [
     outputId: "seed_maker",
     outputCount: 1,
   },
+  {
+    id: "sprinkler_basic",
+    name: "Basic Sprinkler",
+    description: "Water 4 adjacent tiles each morning.",
+    inputs: [
+      { itemId: "copper_bar", count: 1 },
+      { itemId: "iron_bar", count: 1 },
+      { itemId: "coal", count: 2 },
+    ],
+    outputId: "sprinkler_basic",
+    outputCount: 1,
+  },
+  {
+    id: "sprinkler_quality",
+    name: "Quality Sprinkler",
+    description: "Water all 8 surrounding tiles each morning.",
+    inputs: [
+      { itemId: "gold_bar", count: 1 },
+      { itemId: "iron_bar", count: 1 },
+      { itemId: "coal", count: 1 },
+    ],
+    outputId: "sprinkler_quality",
+    outputCount: 1,
+  },
 ];
 
 export function craftItem(recipe: Recipe, state: GameState): string {
@@ -282,7 +337,7 @@ export function craftItem(recipe: Recipe, state: GameState): string {
   const success = addItem(state.inventory, output);
 
   if (!success) {
-    // Inventory full, refund inputs
+    // Refund inputs
     for (const input of recipe.inputs) {
       addItem(state.inventory, createItem(input.itemId, input.count));
     }
@@ -293,13 +348,13 @@ export function craftItem(recipe: Recipe, state: GameState): string {
   return `Crafted ${recipe.name}!`;
 }
 
-// Procedural Farm generator (seeding weeds, stones, branches, farmhouses, caves)
+// Procedural Farm generator
 function makeMap(): Tile[][] {
   const t: Tile[][] = Array.from({ length: ROWS }, () =>
     Array.from({ length: COLS }, () => ({ kind: "grass" as TileKind, age: -1, watered: false }))
   );
 
-  // Farm zone starter plot (cleared grass, ready for tilling)
+  // Farm zone starter plot
   for (let y = 32; y <= 42; y++) {
     for (let x = 8; x <= 22; x++) t[y][x].kind = "soil";
   }
@@ -308,6 +363,10 @@ function makeMap(): Tile[][] {
   for (let y = 24; y <= 28; y++) {
     for (let x = 12; x <= 17; x++) t[y][x].kind = "house";
   }
+
+  // Mailbox setup next to house
+  t[STATIC_POINTS.mailbox.y][STATIC_POINTS.mailbox.x].kind = "placed_item";
+  t[STATIC_POINTS.mailbox.y][STATIC_POINTS.mailbox.x].placedItemId = "mailbox";
 
   // Mine Cave entrance in the top right
   t[6][72].kind = "mine_cave";
@@ -323,23 +382,22 @@ function makeMap(): Tile[][] {
     t[41][x].kind = "path";
   }
 
-  // Paths connecting locations
+  // Paths
   for (let x = 16; x <= 70; x++) t[44][x].kind = "path";
   for (let y = 29; y <= 44; y++) t[y][16].kind = "path";
   for (let y = 40; y <= 44; y++) t[y][70].kind = "path";
-  for (let y = 7; y <= 44; y++) t[y][72].kind = "path"; // Path to mine cave
+  for (let y = 7; y <= 44; y++) t[y][72].kind = "path";
 
   // South river / pond
   for (let y = 54; y <= 66; y++) {
     for (let x = 2; x <= 14; x++) {
-      // make it rounded
       if (Math.abs(y - 60) + Math.abs(x - 8) < 10) {
         t[y][x].kind = "water";
       }
     }
   }
 
-  // Seed scattered trees
+  // Seed trees
   const trees: Array<[number, number]> = [
     [6, 12], [8, 10], [20, 18], [24, 22], [28, 40], [36, 38], [46, 18], [60, 44], [58, 12], [40, 52],
     [62, 24], [66, 26], [72, 50], [50, 64], [26, 58], [14, 48], [74, 16], [78, 30],
@@ -350,7 +408,7 @@ function makeMap(): Tile[][] {
     }
   });
 
-  // Seed overgrown debris (weeds, stones, branches) on the farm area
+  // Overgrown debris
   for (let y = 25; y < 65; y++) {
     for (let x = 3; x < 35; x++) {
       if (t[y][x].kind === "grass" && Math.random() < 0.22) {
@@ -381,20 +439,19 @@ export function generateMineFloor(depth: number): { grid: Tile[][]; enemies: Ene
     }
   }
 
-  // Exit ladder (back to farm)
+  // Exit ladder
   grid[3][3].kind = "mine_ladder";
 
-  // Distribute obstacles
+  // Distribute obstacles & ore deposits
   const rocksToHideLadder: { x: number; y: number }[] = [];
   for (let y = 2; y < size - 2; y++) {
     for (let x = 2; x < size - 2; x++) {
       if (y === 3 && x === 3) continue; // spawn protection
       const rand = Math.random();
       if (rand < 0.25) {
-        grid[y][x].kind = "debris_stone"; // normal breakable rock
+        grid[y][x].kind = "debris_stone";
         rocksToHideLadder.push({ x, y });
       } else if (rand < 0.28) {
-        // Ore nodes based on depth
         if (depth >= 9 && Math.random() < 0.4) {
           grid[y][x].kind = "ore_gold";
         } else if (depth >= 4 && Math.random() < 0.5) {
@@ -403,7 +460,7 @@ export function generateMineFloor(depth: number): { grid: Tile[][]; enemies: Ene
           grid[y][x].kind = "ore_copper";
         }
       } else if (rand < 0.32) {
-        grid[y][x].kind = "mine_wall"; // solid walls
+        grid[y][x].kind = "mine_wall";
       }
     }
   }
@@ -411,17 +468,15 @@ export function generateMineFloor(depth: number): { grid: Tile[][]; enemies: Ene
   // Hide the progression ladder under one random rock
   if (rocksToHideLadder.length > 0) {
     const choice = rocksToHideLadder[Math.floor(Math.random() * rocksToHideLadder.length)];
-    // Store in metadata that this rock conceals a ladder!
-    grid[choice.y][choice.x].age = 999; // sentinel value: breaking this spawns ladder
+    grid[choice.y][choice.x].age = 999;
   }
 
   // Spawn Slimes
   const enemies: Enemy[] = [];
-  const numEnemies = Math.floor(Math.random() * 3) + 2; // 2 to 4 enemies
+  const numEnemies = Math.floor(Math.random() * 3) + 2;
   for (let i = 0; i < numEnemies; i++) {
     let ex = 0;
     let ey = 0;
-    // Find walkable spot away from player spawn
     for (let attempt = 0; attempt < 50; attempt++) {
       ex = Math.floor(Math.random() * (size - 6)) + 5;
       ey = Math.floor(Math.random() * (size - 6)) + 5;
@@ -464,7 +519,19 @@ export function newGame(): GameState {
   inv[3] = createItem("pickaxe");
   inv[4] = createItem("axe");
   inv[5] = createItem("sword");
-  inv[6] = createItem("parsnip_seed", 15); // Starter seeds
+  inv[6] = createItem("milk_pail"); // Milking pail
+  inv[7] = createItem("parsnip_seed", 15);
+
+  const initialLetters: MailLetter[] = [
+    {
+      id: "lewis_welcome",
+      sender: "Mayor Lewis",
+      content: "Welcome to your new farm in Meadow Valley! To help you get started on your crops, I left some free parsnip seeds in this letter. Best of luck!",
+      giftItemId: "parsnip_seed",
+      giftCount: 5,
+      claimed: false,
+    },
+  ];
 
   return {
     version: 1,
@@ -479,7 +546,7 @@ export function newGame(): GameState {
     time: DAY_START_MINUTES,
     inventory: inv,
     hotbarIndex: 0,
-    coins: 100, // Starter cash
+    coins: 200, // starting funds
     tiles: makeMap(),
     season: "spring",
     weather: "sunny",
@@ -502,6 +569,12 @@ export function newGame(): GameState {
       rewardCoins: 50,
     },
     upgrades: { hoe: 1, watering: 1, scythe: 1, pickaxe: 1 },
+    // Overhaul elements
+    animals: [],
+    mailboxLetters: initialLetters,
+    hasUnreadMail: true,
+    harvestLiftingTimer: 0,
+    carryItem: null,
   };
 }
 
@@ -519,7 +592,7 @@ export function isWalkable(t: Tile): boolean {
     t.kind !== "ore_copper" &&
     t.kind !== "ore_iron" &&
     t.kind !== "ore_gold" &&
-    t.kind !== "placed_item" // chest/furniture blocks movement
+    t.kind !== "placed_item" // chests & sprinklers block movement
   );
 }
 
@@ -537,16 +610,13 @@ export function frontTile(state: GameState): { x: number; y: number } | null {
   return { x, y };
 }
 
-// Add experience points and handle level ups
 export function addExperience(state: GameState, skill: keyof GameState["skills"], amount: number): string | null {
   state.experience[skill] += amount;
   const curLevel = state.skills[skill];
-  // Basic level bracket formula: 100 * Level
   const targetXp = (curLevel + 1) * 100;
 
   if (state.experience[skill] >= targetXp) {
     state.skills[skill] += 1;
-    // Level up effects
     if (skill === "farming") state.maxEnergy += 10;
     if (skill === "combat") state.player.maxHealth += 10;
     state.energy = state.maxEnergy;
@@ -558,13 +628,14 @@ export function addExperience(state: GameState, skill: keyof GameState["skills"]
   return null;
 }
 
-// Apply tool action to the front tile
+// Interact tool calculations
 export function interact(state: GameState): { message: string | null; particles: Particle[] } {
   const result: { message: string | null; particles: Particle[] } = { message: null, particles: [] };
 
-  // Check exhausted speed penalty
-  const isExhausted = state.energy <= 0;
+  // Harvest freeze check
+  if (state.harvestLiftingTimer > 0) return result;
 
+  const isExhausted = state.energy <= 0;
   const f = frontTile(state);
   if (!f) return result;
 
@@ -574,11 +645,62 @@ export function interact(state: GameState): { message: string | null; particles:
   const py = f.y * TILE + TILE / 2;
 
   const heldItem = state.inventory[state.hotbarIndex];
-
-  // Tool energy costs
   const toolEnergyCost = 2;
 
-  // 1. Sword Combat swing
+  // 1. Milking Cows logic with milk_pail
+  if (heldItem && heldItem.id === "milk_pail") {
+    // Check if facing a Calf/Cow animal
+    const adjacentAnimal = state.animals.find((a) => {
+      const dx = Math.abs(a.x - f.x);
+      const dy = Math.abs(a.y - f.y);
+      return dx + dy === 0; // standing on the front tile
+    });
+
+    if (adjacentAnimal && adjacentAnimal.type === "calf") {
+      if (adjacentAnimal.age < 3) {
+        result.message = `${adjacentAnimal.name} is too young to produce milk!`;
+        return result;
+      }
+
+      if (adjacentAnimal.hasProduce) {
+        if (state.energy < toolEnergyCost) {
+          result.message = "No energy!";
+          return result;
+        }
+        state.energy -= toolEnergyCost;
+        adjacentAnimal.hasProduce = false;
+
+        const milk = createItem("milk", 1);
+        const added = addItem(state.inventory, milk);
+
+        if (added) {
+          gameAudio.playWater();
+          const lvl = addExperience(state, "farming", 15);
+          result.message = `Collected Fresh Milk!` + (lvl ? ` ${lvl}` : "");
+
+          // Squirt milk particles
+          for (let i = 0; i < 6; i++) {
+            result.particles.push({
+              x: px,
+              y: py,
+              vx: (Math.random() * 2 - 1) * 20,
+              vy: -Math.random() * 40 - 10,
+              color: "#ffffff",
+              age: 0,
+              maxAge: 0.25,
+            });
+          }
+        } else {
+          result.message = "Inventory full!";
+        }
+      } else {
+        result.message = `${adjacentAnimal.name} has no milk today.`;
+      }
+      return result;
+    }
+  }
+
+  // 2. Sword Combat swing
   if (heldItem && heldItem.id === "sword") {
     gameAudio.playSwing();
     if (isExhausted) {
@@ -586,9 +708,7 @@ export function interact(state: GameState): { message: string | null; particles:
       return result;
     }
 
-    // Check hit against slimes
     if (state.inMine && state.mineEnemies.length > 0) {
-      // Find enemies adjacent or facing
       const hitRadius = 1.6;
       for (const enemy of state.mineEnemies) {
         const dx = enemy.x - state.player.x;
@@ -597,10 +717,14 @@ export function interact(state: GameState): { message: string | null; particles:
 
         if (dist <= hitRadius) {
           gameAudio.playHit();
-          const damage = heldItem.damage || 10;
+          // Random Critical Hit rolls (15% chance, 2x damage)
+          const isCrit = Math.random() < 0.15;
+          const damage = (heldItem.damage || 10) * (isCrit ? 2 : 1);
           enemy.hp -= damage;
 
-          // Hit particles
+          // Hit damage floating text
+          result.message = isCrit ? `CRITICAL HIT! ${damage} dmg` : `Hit ${enemy.name} for ${damage} dmg`;
+
           for (let i = 0; i < 8; i++) {
             result.particles.push({
               x: enemy.x * TILE + 16,
@@ -614,20 +738,16 @@ export function interact(state: GameState): { message: string | null; particles:
           }
 
           if (enemy.hp <= 0) {
-            // Defeated!
             state.mineEnemies = state.mineEnemies.filter((e) => e.id !== enemy.id);
-            // Drop coal or ores
             const lootRoll = Math.random();
-            if (lootRoll < 0.25) {
+            if (lootRoll < 0.3) {
               addItem(state.inventory, createItem("coal", 1));
-            } else if (lootRoll < 0.45) {
+            } else if (lootRoll < 0.5) {
               addItem(state.inventory, createItem("copper_ore", 1));
             }
             state.coins += 5;
             const lvlMsg = addExperience(state, "combat", enemy.exp);
             result.message = `Defeated ${enemy.name}! +5g` + (lvlMsg ? `. ${lvlMsg}` : "");
-          } else {
-            result.message = `Hit ${enemy.name} for ${damage} dmg!`;
           }
           return result;
         }
@@ -636,7 +756,7 @@ export function interact(state: GameState): { message: string | null; particles:
     return result;
   }
 
-  // 2. Clear Debris / Farming Tools
+  // 3. Clear Debris / Farming Tools
   if (!heldItem) return result;
 
   switch (heldItem.id) {
@@ -650,7 +770,6 @@ export function interact(state: GameState): { message: string | null; particles:
         tile.kind = "soil";
         gameAudio.playTill();
 
-        // Tilling particles
         for (let i = 0; i < 5; i++) {
           result.particles.push({
             x: px,
@@ -677,7 +796,6 @@ export function interact(state: GameState): { message: string | null; particles:
         if (tile.kind === "soil") tile.kind = "watered";
         gameAudio.playWater();
 
-        // Water particles
         for (let i = 0; i < 8; i++) {
           result.particles.push({
             x: px + (Math.random() * 16 - 8),
@@ -694,7 +812,7 @@ export function interact(state: GameState): { message: string | null; particles:
       break;
 
     case "scythe":
-      // Harvest mature crop
+      // Harvest mature crop -> Trigger carrying animation
       if (tile.cropId && tile.age >= (CROPS[tile.cropId]?.growDays || 3)) {
         const cropId = tile.cropId;
         const cropDef = CROPS[cropId];
@@ -709,12 +827,16 @@ export function interact(state: GameState): { message: string | null; particles:
           tile.age = -1;
           tile.watered = false;
 
-          // Check Quest progress
+          // Set harvest holding freeze state
+          state.harvestLiftingTimer = 0.8;
+          state.carryItem = gathered;
+
+          // Quest update
           if (state.quest && state.quest.targetType === "harvest" && state.quest.targetId === cropId) {
             state.quest.currentCount += 1;
             if (state.quest.currentCount >= state.quest.targetCount) {
               state.coins += state.quest.rewardCoins;
-              result.message = `Quest Complete! Harvested Parsnip. +${state.quest.rewardCoins}g`;
+              result.message = `Quest Complete! Shipped Parsnip. +${state.quest.rewardCoins}g`;
               state.quest = null;
             }
           }
@@ -723,11 +845,10 @@ export function interact(state: GameState): { message: string | null; particles:
             result.message = `Harvested ${cropDef.name}!`;
           }
 
-          // Farming exp
           const lvlMsg = addExperience(state, "farming", 12);
           if (lvlMsg) result.message += ` ${lvlMsg}`;
 
-          for (let i = 0; i < 6; i++) {
+          for (let i = 0; i < 8; i++) {
             result.particles.push({
               x: px,
               y: py,
@@ -768,14 +889,12 @@ export function interact(state: GameState): { message: string | null; particles:
         result.message = "No energy!";
         return result;
       }
-      // Break rocks
       if (tile.kind === "debris_stone") {
         state.energy -= toolEnergyCost;
         tile.kind = state.inMine ? "mine_dirt" : "grass";
         gameAudio.playMine();
 
         addItem(state.inventory, createItem("stone", 1));
-        // Small chance for coal
         if (Math.random() < 0.15) {
           addItem(state.inventory, createItem("coal", 1));
         }
@@ -784,13 +903,11 @@ export function interact(state: GameState): { message: string | null; particles:
         const lvlMsg = addExperience(state, "mining", expGained);
         result.message = "Broke stone" + (lvlMsg ? `. ${lvlMsg}` : "");
 
-        // Hidden progression ladder roll in mine
         if (state.inMine && tile.age === 999) {
           tile.kind = "mine_ladder";
           result.message = "Discovered a ladder leading down!";
         }
 
-        // Stone particles
         for (let i = 0; i < 6; i++) {
           result.particles.push({
             x: px,
@@ -802,9 +919,7 @@ export function interact(state: GameState): { message: string | null; particles:
             maxAge: 0.3,
           });
         }
-      }
-      // Mine ores
-      else if (tile.kind === "ore_copper" || tile.kind === "ore_iron" || tile.kind === "ore_gold") {
+      } else if (tile.kind === "ore_copper" || tile.kind === "ore_iron" || tile.kind === "ore_gold") {
         state.energy -= toolEnergyCost;
         const oreMap = {
           ore_copper: { item: "copper_ore", xp: 8, color: "#d35400" },
@@ -830,25 +945,24 @@ export function interact(state: GameState): { message: string | null; particles:
             maxAge: 0.3,
           });
         }
-      }
-      // Remove placed item (chest, torch, scarecrow)
-      else if (tile.kind === "placed_item" && tile.placedItemId) {
+      } else if (tile.kind === "placed_item" && tile.placedItemId) {
+        // Break sprinklers/fences/chests
         state.energy -= toolEnergyCost;
-        const itemObj = createItem(tile.placedItemId, 1);
+        const id = tile.placedItemId;
+        const itemObj = createItem(id, 1);
 
-        // If chest, return items to inventory or drop them on floor
-        if (tile.placedItemId === "chest" && tile.chestInventory) {
-          // Put all items in chest back to player inventory
+        if (id === "chest" && tile.chestInventory) {
           for (const item of tile.chestInventory) {
             if (item) addItem(state.inventory, item);
           }
         }
 
+        // Fences return grass backdrop
         tile.kind = "grass";
         tile.placedItemId = undefined;
         tile.chestInventory = undefined;
         addItem(state.inventory, itemObj);
-        result.message = `Picked up placed item`;
+        result.message = `Picked up ${itemObj.name}`;
       }
       break;
 
@@ -857,14 +971,17 @@ export function interact(state: GameState): { message: string | null; particles:
         result.message = "No energy!";
         return result;
       }
-      // Chop trees
       if (tile.kind === "tree") {
         state.energy -= toolEnergyCost;
         tile.kind = "grass";
         gameAudio.playChop();
 
         addItem(state.inventory, createItem("wood", Math.floor(Math.random() * 4) + 3));
-        const lvlMsg = addExperience(state, "farming", 8); // farming/foraging
+        // Chance of dropping saplings/apples
+        if (Math.random() < 0.2) {
+          addItem(state.inventory, createItem("parsnip_seed", 1)); // stand in for tree seed
+        }
+        const lvlMsg = addExperience(state, "farming", 8);
         result.message = "Chopped down tree" + (lvlMsg ? `. ${lvlMsg}` : "");
 
         for (let i = 0; i < 10; i++) {
@@ -878,9 +995,7 @@ export function interact(state: GameState): { message: string | null; particles:
             maxAge: 0.35,
           });
         }
-      }
-      // Clear logs
-      else if (tile.kind === "debris_branch") {
+      } else if (tile.kind === "debris_branch") {
         state.energy -= toolEnergyCost;
         tile.kind = "grass";
         gameAudio.playChop();
@@ -902,12 +1017,11 @@ export function interact(state: GameState): { message: string | null; particles:
       break;
   }
 
-  // 3. Plant Seeds / Place Furniture
+  // 4. Plant Seeds
   if (heldItem && heldItem.type === "seed" && tile.kind === "soil") {
-    // Determine crop type from seed ID
     const cropId = heldItem.id.replace("_seed", "");
     if (CROPS[cropId]) {
-      tile.kind = "placed_item"; // or keeps soil background visually
+      tile.kind = "placed_item";
       tile.cropId = cropId;
       tile.age = 0;
       tile.watered = false;
@@ -916,8 +1030,51 @@ export function interact(state: GameState): { message: string | null; particles:
       gameAudio.playWater();
       result.message = `Planted ${CROPS[cropId].name}`;
     }
-  } else if (heldItem && heldItem.type === "furniture") {
-    // Place item (Chests, Torches, Scarecrows)
+  }
+  // 5. Place Placeable Objects (Sprinklers, Fences, Animals)
+  else if (heldItem && heldItem.type === "furniture") {
+    // Check if placing a Chick or Calf onto the farm!
+    if (heldItem.id === "chick" || heldItem.id === "calf") {
+      if (tile.kind === "grass" || tile.kind === "soil" || tile.kind === "path") {
+        const type = heldItem.id as "chick" | "calf";
+        const name = type === "chick" ? "Little Chick" : "Sweet Calf";
+
+        // Spawn new animal
+        state.animals.push({
+          id: `${type}_${Date.now()}`,
+          type,
+          name,
+          x: f.x,
+          y: f.y,
+          subX: f.x,
+          subY: f.y,
+          age: 0,
+          petCount: 0,
+          hasProduce: false,
+          walkTimer: Math.random() * 3 + 2,
+        });
+
+        removeItem(state.inventory, state.hotbarIndex, 1);
+        gameAudio.playCoin();
+        result.message = `Placed ${name} on the farm!`;
+
+        // Pet heart particles
+        for (let i = 0; i < 8; i++) {
+          result.particles.push({
+            x: px,
+            y: py,
+            vx: (Math.random() * 2 - 1) * 20,
+            vy: -Math.random() * 30 - 10,
+            color: "#ff3366",
+            age: 0,
+            maxAge: 0.4,
+          });
+        }
+      }
+      return result;
+    }
+
+    // Regular Placeables
     if (tile.kind === "grass" || tile.kind === "mine_dirt" || tile.kind === "soil") {
       tile.kind = "placed_item";
       tile.placedItemId = heldItem.id;
@@ -936,34 +1093,16 @@ export function interact(state: GameState): { message: string | null; particles:
 // Talk to shopkeeper
 export function talkToShopkeeper(state: GameState): string {
   const lines = [
-    `Welcome! It is day ${state.day} of ${state.season}.`,
-    state.weather === "rainy" ? "Nice rain today, saves me watering my own flower patch." : "Great day for some local farming.",
-    state.coins < 20 ? "Sell me your crops in town and you'll make a tidy sum." : "Let me know what seeds you need.",
+    `Welcome to Pierre's! It is day ${state.day} of ${state.season}.`,
+    state.weather === "rainy" ? "Nice rainy weather outside. The crops will drink well!" : "Beautiful day to work in the tilled soil.",
+    state.coins < 20 ? "Sell me your harvested crops and fish here for gold." : "We have plenty of fresh seeds today.",
   ];
   return lines.join(" ");
 }
 
-// Sell items overnight at shipping bin
-export function shipItem(state: GameState, slotIndex: number): string | null {
-  const item = state.inventory[slotIndex];
-  if (!item) return null;
-
-  if (item.price <= 0) {
-    return "Cannot sell this item!";
-  }
-
-  // Add to shipping bin
-  const success = addItem(state.shippingBin, item);
-  if (success) {
-    state.inventory[slotIndex] = null;
-    return `Shipped ${item.name} (${item.price * item.count}g)`;
-  }
-  return "Shipping bin full!";
-}
-
-// End of Day (Sleep & Shipping Summary calc)
+// Sleep summary calculations
 export function sleep(state: GameState): void {
-  // 1. Calculate shipping bin profits
+  // 1. Calculate shipping bin earnings
   const earningsList: { name: string; count: number; earnings: number; iconColor: string }[] = [];
   let totalEarnings = 0;
 
@@ -971,7 +1110,6 @@ export function sleep(state: GameState): void {
     if (item) {
       const value = item.price * item.count;
       totalEarnings += value;
-      // Aggregate by item name
       const existing = earningsList.find((e) => e.name === item.name);
       if (existing) {
         existing.count += item.count;
@@ -988,10 +1126,7 @@ export function sleep(state: GameState): void {
   }
 
   state.coins += totalEarnings;
-  // Clear shipping bin
   state.shippingBin = Array.from({ length: 12 }, () => null);
-
-  // Set earnings for visual summary overlay
   state.dailyEarnings = {
     items: earningsList,
     total: totalEarnings,
@@ -1001,28 +1136,79 @@ export function sleep(state: GameState): void {
   state.day += 1;
   state.time = DAY_START_MINUTES;
 
-  // Refill Energy and Health
   state.energy = state.maxEnergy;
   state.player.health = state.player.maxHealth;
 
-  // Loop through all tiles to grow watered crops, clear water states
+  // 3. Animal growth, pet count resets, egg/milk produce ticks
+  state.animals.forEach((animal) => {
+    animal.age += 1;
+    animal.petCount = 0; // reset petting
+
+    // Chick laying egg
+    if (animal.type === "chick") {
+      // 50% chance chick lays an egg on its tile if grass/soil
+      if (Math.random() < 0.6) {
+        const farmTile = state.tiles[animal.y][animal.x];
+        if (farmTile.kind === "grass" || farmTile.kind === "soil") {
+          farmTile.kind = "placed_item";
+          farmTile.placedItemId = "chicken_egg"; // can be picked up
+        }
+      }
+    }
+    // Calf produce milk
+    else if (animal.type === "calf") {
+      if (animal.age >= 3) {
+        animal.hasProduce = true; // can be milked with milk_pail
+      }
+    }
+  });
+
+  // 4. Sprinklers automation (Waters surrounding soil BEFORE drying them out)
+  for (let y = 0; y < ROWS; y++) {
+    for (let x = 0; x < COLS; x++) {
+      const tile = state.tiles[y][x];
+      if (tile.kind === "placed_item" && tile.placedItemId) {
+        if (tile.placedItemId === "sprinkler_basic") {
+          const adj = [[0, 1], [0, -1], [1, 0], [-1, 0]];
+          adj.forEach(([dy, dx]) => {
+            const ny = y + dy, nx = x + dx;
+            if (ny >= 0 && ny < ROWS && nx >= 0 && nx < COLS) {
+              const target = state.tiles[ny][nx];
+              target.watered = true;
+              if (target.kind === "soil") target.kind = "watered";
+            }
+          });
+        } else if (tile.placedItemId === "sprinkler_quality") {
+          for (let dy = -1; dy <= 1; dy++) {
+            for (let dx = -1; dx <= 1; dx++) {
+              if (dx === 0 && dy === 0) continue;
+              const ny = y + dy, nx = x + dx;
+              if (ny >= 0 && ny < ROWS && nx >= 0 && nx < COLS) {
+                const target = state.tiles[ny][nx];
+                target.watered = true;
+                if (target.kind === "soil") target.kind = "watered";
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // 5. Tilled Soil update (Dries watered soil, advances crop growth)
   for (let y = 0; y < ROWS; y++) {
     for (let x = 0; x < COLS; x++) {
       const t = state.tiles[y][x];
 
-      // Clean overnight weeds spreading occasionally
       if (t.kind === "grass" && Math.random() < 0.005) {
         t.kind = "debris_weed";
       }
 
-      // Dry out soil if unwatered
       if (t.kind === "watered") {
         t.kind = "soil";
       }
 
       if (t.cropId) {
-        const cropDef = CROPS[t.cropId];
-        // If watered, it grows
         if (t.watered || state.weather === "rainy") {
           t.age += 1;
         }
@@ -1031,20 +1217,44 @@ export function sleep(state: GameState): void {
     }
   }
 
-  // 3. Roll weather for tomorrow (20% rainy, 80% sunny)
+  // 6. Roll weather
   state.weather = Math.random() < 0.2 ? "rainy" : "sunny";
 
-  gameAudio.playSleep();
-}
+  // 7. Mail Letter Generation
+  if (Math.random() < 0.4) {
+    const letters = [
+      {
+        id: `lewis_grant_${state.day}`,
+        sender: "Mayor Lewis",
+        content: "Hi! The town treasury has a surplus today. I am distributing a small local grant to our valley farmers to help them clear their crop lands. Enjoy!",
+        giftItemId: "gold_ore",
+        giftCount: 2,
+        claimed: false,
+      },
+      {
+        id: `robin_wood_${state.day}`,
+        sender: "Robin",
+        content: "Hey farmer! I had some leftover wood planks from a barn construction yesterday. I thought you might use it to build a scarecrow or chest. Talk later!",
+        giftItemId: "wood",
+        giftCount: 15,
+        claimed: false,
+      },
+      {
+        id: `haley_bloom_${state.day}`,
+        sender: "Haley",
+        content: "My sister said I should be more friendly, so here. I found this flower bulb, I think it looks nice. Don't get dirty planting it!",
+        giftItemId: "starflower_seed",
+        giftCount: 1,
+        claimed: false,
+      },
+    ];
 
-// Tick time forward
-export function tickTime(state: GameState): boolean {
-  state.time += TIME_TICK_MINUTES;
-  if (state.time >= DAY_END_MINUTES) {
-    sleep(state);
-    return true; // Day ended
+    const choice = letters[Math.floor(Math.random() * letters.length)];
+    state.mailboxLetters.push(choice);
+    state.hasUnreadMail = true;
   }
-  return false;
+
+  gameAudio.playSleep();
 }
 
 export function formatTime(totalMinutes: number): string {
@@ -1061,7 +1271,7 @@ export function getTimePhase(minutes: number): "morning" | "evening" | "night" {
   return "night";
 }
 
-// ----------------------------- RENDER ENGINE -----------------------------
+// ----------------------------- OVERHAUL GRAPHICS RENDERER -----------------------------
 export function draw(
   ctx: CanvasRenderingContext2D,
   state: GameState,
@@ -1074,12 +1284,10 @@ export function draw(
   const gridRows = currentGrid.length;
   const gridCols = currentGrid[0]?.length || 0;
 
-  // Viewport camera calculation (center on player)
   const p = state.player;
   const playerPx = p.x * TILE + TILE / 2;
   const playerPy = p.y * TILE + TILE / 2;
 
-  // Camera limits to keep inside borders
   const cameraX = Math.max(
     0,
     Math.min(gridCols * TILE - viewWidth, playerPx - viewWidth / 2)
@@ -1089,176 +1297,199 @@ export function draw(
     Math.min(gridRows * TILE - viewHeight, playerPy - viewHeight / 2)
   );
 
-  ctx.fillStyle = state.inMine ? "#2c3e50" : "#7ec77a"; // Dirt vs Grass base
+  ctx.fillStyle = state.inMine ? "#231f20" : "#7ec77a";
   ctx.fillRect(0, 0, viewWidth, viewHeight);
 
-  // Translate by camera offset
   ctx.save();
   ctx.translate(-cameraX, -cameraY);
 
-  // Visible column & row indices to draw only what is seen (Performance optimization)
   const startCol = Math.max(0, Math.floor(cameraX / TILE));
   const endCol = Math.min(gridCols, Math.ceil((cameraX + viewWidth) / TILE));
   const startRow = Math.max(0, Math.floor(cameraY / TILE));
   const endRow = Math.min(gridRows, Math.ceil((cameraY + viewHeight) / TILE));
 
-  // 1. Draw Ground / Obstacle Layers
+  // 1. Terrain Tiles Layer
   for (let y = startRow; y < endRow; y++) {
     for (let x = startCol; x < endCol; x++) {
       const t = currentGrid[y][x];
       const px = x * TILE;
       const py = y * TILE;
 
-      // Base textures
       if (t.kind === "grass") {
-        ctx.fillStyle = (x + y) % 2 === 0 ? "#7ec77a" : "#75be71";
+        // Detailed seamless grass drawing
+        ctx.fillStyle = (x + y) % 2 === 0 ? "#7ec77a" : "#74bf72";
         ctx.fillRect(px, py, TILE, TILE);
 
-        // draw cute weeds blades
-        ctx.fillStyle = "#8ed48a";
-        if ((x * 7 + y * 13) % 5 === 0) {
+        // draw cute floral accents
+        if ((x * 17 + y * 23) % 9 === 0) {
+          ctx.fillStyle = "#8ad186";
           ctx.fillRect(px + 4, py + 8, 2, 4);
-          ctx.fillRect(px + 12, py + 16, 2, 3);
+          ctx.fillRect(px + 20, py + 18, 2, 3);
+        }
+        if ((x * 11 + y * 7) % 20 === 0) {
+          ctx.fillStyle = "#f39c12"; // orange bloom
+          ctx.fillRect(px + 14, py + 12, 3, 3);
         }
       } else if (t.kind === "mine_dirt") {
-        ctx.fillStyle = (x + y) % 2 === 0 ? "#4a3c31" : "#43362c";
+        // stone paving texture
+        ctx.fillStyle = (x + y) % 2 === 0 ? "#3d312a" : "#352b25";
         ctx.fillRect(px, py, TILE, TILE);
+        ctx.fillStyle = "#2c231e";
+        if ((x * 3 + y) % 5 === 0) ctx.fillRect(px + 6, py + 14, 8, 2);
       } else if (t.kind === "mine_wall") {
-        ctx.fillStyle = "#2c231a";
+        ctx.fillStyle = "#201814";
         ctx.fillRect(px, py, TILE, TILE);
-        ctx.fillStyle = "#1e1812";
+        ctx.fillStyle = "#15100d";
         ctx.fillRect(px + 2, py + 2, TILE - 4, TILE - 4);
       } else if (t.kind === "mine_ladder") {
-        ctx.fillStyle = "#43362c";
+        ctx.fillStyle = "#352b25";
         ctx.fillRect(px, py, TILE, TILE);
-        // Draw ladder rungs
-        ctx.fillStyle = "#b58452";
-        ctx.fillRect(px + 6, py + 2, 4, TILE - 4);
-        ctx.fillRect(px + 22, py + 2, 4, TILE - 4);
-        for (let i = 4; i < TILE - 4; i += 6) {
-          ctx.fillRect(px + 6, py + i, 20, 2);
+        ctx.fillStyle = "#a87b51";
+        ctx.fillRect(px + 8, py + 2, 3, TILE - 4);
+        ctx.fillRect(px + 20, py + 2, 3, TILE - 4);
+        for (let i = 4; i < TILE - 2; i += 6) {
+          ctx.fillRect(px + 8, py + i, 12, 2);
         }
       } else if (t.kind === "path") {
-        ctx.fillStyle = "#ceb48a";
+        ctx.fillStyle = "#ceb48a"; // sandy path
         ctx.fillRect(px, py, TILE, TILE);
+        ctx.fillStyle = "#bd9e72";
+        if ((x + y) % 4 === 0) {
+          ctx.fillRect(px, py, 4, 4);
+          ctx.fillRect(px + 16, py + 16, 4, 4);
+        }
       } else if (t.kind === "water") {
-        const bounce = Math.sin(Date.now() / 320 + x * 0.5) * 2;
-        ctx.fillStyle = "#4aa3df";
+        // Wave Crest Ripple calculations
+        const wave = Math.sin(Date.now() / 250 + x * 0.4) * 2;
+        ctx.fillStyle = "#3498db";
         ctx.fillRect(px, py, TILE, TILE);
-        // Wave details
-        ctx.fillStyle = "#7bc0eb";
-        ctx.fillRect(px + 4, py + 8 + bounce, 8, 2);
-        ctx.fillRect(px + 18, py + 20 - bounce, 8, 2);
-      } else if (t.kind === "soil") {
-        ctx.fillStyle = "#8a5a3b";
-        ctx.fillRect(px + 2, py + 2, TILE - 4, TILE - 4);
-      } else if (t.kind === "watered") {
-        ctx.fillStyle = "#4a3120"; // Dark wet soil
-        ctx.fillRect(px + 2, py + 2, TILE - 4, TILE - 4);
-        // sheen shine
-        ctx.fillStyle = "#634734";
-        ctx.fillRect(px + 4, py + 4, 3, 2);
+        ctx.fillStyle = "#5dade2";
+        ctx.fillRect(px + 4, py + 8 + wave, 6, 2);
+        ctx.fillRect(px + 18, py + 20 - wave, 8, 2);
+
+        // Stepping water lily pads
+        if ((x * 13 + y * 9) % 23 === 0) {
+          ctx.fillStyle = "#27ae60";
+          ctx.beginPath();
+          ctx.arc(px + 16, py + 16, 5, 0, Math.PI * 1.75);
+          ctx.fill();
+        }
+      } else if (t.kind === "soil" || t.kind === "watered") {
+        ctx.fillStyle = t.kind === "watered" ? "#4a3120" : "#8a5a3b";
+        ctx.fillRect(px + 1, py + 1, TILE - 2, TILE - 2);
       } else if (t.kind === "house") {
-        ctx.fillStyle = "#c08157";
+        // Detailed Stardew wood cabin drawing
+        ctx.fillStyle = "#935116"; // rustic siding
         ctx.fillRect(px, py, TILE, TILE);
-        // Roof
-        ctx.fillStyle = "#7a3e23";
-        ctx.fillRect(px, py, TILE, 8);
+        ctx.fillStyle = "#5c330e";
+        // horizontal boards
+        for (let i = 6; i < TILE; i += 8) {
+          ctx.fillRect(px, py + i, TILE, 2);
+        }
       } else if (t.kind === "shop") {
         ctx.fillStyle = "#965d34";
         ctx.fillRect(px, py, TILE, TILE);
-        ctx.fillStyle = "#f5d0a9";
-        ctx.fillRect(px + 6, py + 12, TILE - 12, 12); // counter
+        ctx.fillStyle = "#e59866";
+        ctx.fillRect(px + 4, py + 14, TILE - 8, 10); // display counter
       } else if (t.kind === "mine_cave") {
         ctx.fillStyle = "#7ec77a";
         ctx.fillRect(px, py, TILE, TILE);
-        // Cave archway
+        // cave arch
         ctx.fillStyle = "#2c3e50";
-        ctx.fillRect(px + 4, py + 8, TILE - 8, TILE - 8);
-        ctx.fillStyle = "#111";
-        ctx.fillRect(px + 8, py + 14, TILE - 16, TILE - 14);
+        ctx.fillRect(px + 4, py + 6, TILE - 8, TILE - 6);
+        ctx.fillStyle = "#17202a";
+        ctx.fillRect(px + 8, py + 12, TILE - 16, TILE - 12);
       }
 
-      // Draw debris details (weed sprigs, branches, grey stones)
+      // Draw weeds/branches/stones debris
       if (t.kind === "debris_weed") {
-        // weed blades
         ctx.fillStyle = "#27ae60";
-        ctx.beginPath();
-        ctx.arc(px + 10, py + 22, 6, 0, Math.PI, true);
-        ctx.arc(px + 22, py + 25, 7, 0, Math.PI, true);
-        ctx.fill();
+        ctx.fillRect(px + 8, py + 16, 16, 12);
         ctx.fillStyle = "#2ecc71";
-        ctx.fillRect(px + 14, py + 10, 4, 8);
+        ctx.fillRect(px + 12, py + 8, 8, 10);
       } else if (t.kind === "debris_branch") {
-        // wood branch
-        ctx.fillStyle = "#8e6345";
-        ctx.fillRect(px + 8, py + 18, 16, 4);
-        ctx.fillRect(px + 18, py + 12, 4, 8);
-        // bud
-        ctx.fillStyle = "#27ae60";
-        ctx.fillRect(px + 22, py + 10, 3, 3);
+        ctx.fillStyle = "#8a5a3b";
+        ctx.fillRect(px + 6, py + 18, 20, 5);
+        ctx.fillRect(px + 18, py + 12, 5, 8);
       } else if (t.kind === "debris_stone" || t.kind === "ore_copper" || t.kind === "ore_iron" || t.kind === "ore_gold") {
-        // rock shapes
-        ctx.fillStyle = t.kind === "debris_stone" ? "#7f8c8d" : "#5d6d7e";
+        ctx.fillStyle = t.kind === "debris_stone" ? "#839192" : "#566573";
         ctx.beginPath();
-        ctx.moveTo(px + 8, py + 26);
-        ctx.lineTo(px + 16, py + 8);
-        ctx.lineTo(px + 24, py + 26);
+        ctx.moveTo(px + 6, py + 26);
+        ctx.lineTo(px + 16, py + 6);
+        ctx.lineTo(px + 26, py + 26);
         ctx.fill();
 
-        // Ores draw bright embedded gems
         if (t.kind === "ore_copper") {
-          ctx.fillStyle = "#d35400";
+          ctx.fillStyle = "#e67e22";
           ctx.fillRect(px + 14, py + 14, 4, 4);
         } else if (t.kind === "ore_iron") {
           ctx.fillStyle = "#bdc3c7";
           ctx.fillRect(px + 14, py + 14, 4, 4);
         } else if (t.kind === "ore_gold") {
           ctx.fillStyle = "#f1c40f";
-          ctx.fillRect(px + 14, py + 12, 4, 5);
+          ctx.fillRect(px + 13, py + 12, 5, 5);
         }
       }
 
-      // Draw placed items (chests, torches, scarecrows)
+      // Draw placed objects (Basic/Quality Sprinklers, Fences, Torches)
       if (t.kind === "placed_item" && t.placedItemId) {
         const id = t.placedItemId;
         if (id === "chest") {
-          ctx.fillStyle = "#7c5a3c";
+          ctx.fillStyle = "#873600";
           ctx.fillRect(px + 6, py + 10, TILE - 12, TILE - 14);
-          ctx.fillStyle = "#d4ac0d"; // gold lock
+          ctx.fillStyle = "#f4d03f";
           ctx.fillRect(px + 14, py + 18, 4, 3);
         } else if (id === "torch") {
-          ctx.fillStyle = "#8e6345"; // wooden post
+          ctx.fillStyle = "#5c3a21";
           ctx.fillRect(px + 15, py + 14, 2, 14);
-          // fire flicker
-          const size = 5 + Math.sin(Date.now() / 80) * 2.5;
+          const f = 5 + Math.sin(Date.now() / 90) * 2;
           ctx.fillStyle = "#e67e22";
           ctx.beginPath();
-          ctx.arc(px + 16, py + 10, size, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.fillStyle = "#f1c40f";
-          ctx.beginPath();
-          ctx.arc(px + 16, py + 10, size * 0.6, 0, Math.PI * 2);
+          ctx.arc(px + 16, py + 10, f, 0, Math.PI * 2);
           ctx.fill();
         } else if (id === "scarecrow") {
-          // straw shirt
-          ctx.fillStyle = "#f39c12";
+          ctx.fillStyle = "#eb984e";
           ctx.fillRect(px + 8, py + 12, 16, 12);
-          // hat
-          ctx.fillStyle = "#d35400";
-          ctx.fillRect(px + 4, py + 8, 24, 4);
+          ctx.fillStyle = "#873600";
+          ctx.fillRect(px + 4, py + 8, 24, 4); // hat rim
           ctx.fillRect(px + 10, py + 2, 12, 6);
-          // post
-          ctx.fillStyle = "#7c5a3c";
+          ctx.fillStyle = "#5c3a21";
           ctx.fillRect(px + 15, py + 24, 2, 8);
-        } else if (id === "seed_maker") {
+        } else if (id === "sprinkler_basic" || id === "sprinkler_quality") {
+          // Sprinkler render
+          ctx.fillStyle = id === "sprinkler_basic" ? "#2980b9" : "#f1c40f";
+          ctx.fillRect(px + 10, py + 18, 12, 8); // base
           ctx.fillStyle = "#7f8c8d";
-          ctx.fillRect(px + 6, py + 8, TILE - 12, TILE - 12);
-          // gear logo
+          ctx.fillRect(px + 15, py + 8, 2, 10); // rod
+
+          // Draw spinning sprinkler arms based on time rotation
+          ctx.save();
+          ctx.translate(px + 16, py + 8);
+          ctx.rotate(Date.now() / 150);
           ctx.fillStyle = "#95a5a6";
+          ctx.fillRect(-6, -1, 12, 2);
+          ctx.restore();
+        } else if (id === "chicken_egg") {
+          // Egg dropped on ground
+          ctx.fillStyle = "#f9e79f";
           ctx.beginPath();
-          ctx.arc(px + 16, py + 18, 5, 0, Math.PI * 2);
+          ctx.arc(px + 16, py + 20, 5, 0, Math.PI * 2);
           ctx.fill();
+        } else if (id === "mailbox") {
+          // Mailbox next to player house
+          ctx.fillStyle = "#7f8c8d";
+          ctx.fillRect(px + 10, py + 16, 12, 12);
+          ctx.fillStyle = "#2c3e50";
+          ctx.fillRect(px + 14, py + 28, 4, 4); // stand
+
+          // Unread mail flag indicator
+          if (state.hasUnreadMail) {
+            ctx.fillStyle = "#e74c3c";
+            ctx.fillRect(px + 20, py + 10, 4, 6); // red flag up
+          } else {
+            ctx.fillStyle = "#7f8c8d";
+            ctx.fillRect(px + 20, py + 22, 6, 2); // flag down
+          }
         }
       }
 
@@ -1272,60 +1503,92 @@ export function draw(
         const cropPx = px + TILE / 2;
         const cropPy = py + TILE - 6;
 
-        ctx.fillStyle = t.watered || state.weather === "rainy" ? "#4a3120" : "#8a5a3b";
-        ctx.fillRect(px + 4, py + TILE - 8, TILE - 8, 6); // ground pot
-
         if (currentAge === 0) {
-          // Seed dot
           ctx.fillStyle = "#d2b48c";
           ctx.fillRect(cropPx - 2, cropPy - 2, 4, 3);
         } else if (!isMature) {
-          // Sprouting / growing leaves
           const progress = currentAge / days;
           const size = Math.floor(progress * 12) + 4;
           ctx.fillStyle = def.stem;
-          // draw leaves
           ctx.fillRect(cropPx - 3, cropPy - size, 6, size);
           ctx.fillRect(cropPx - 6, cropPy - size + 2, 3, 3);
           ctx.fillRect(cropPx + 3, cropPy - size + 2, 3, 3);
         } else {
-          // Mature Ripe crop
           ctx.fillStyle = def.stem;
-          ctx.fillRect(cropPx - 4, cropPy - 14, 8, 14); // stem
-          // Fruit accent color
+          ctx.fillRect(cropPx - 4, cropPy - 14, 8, 14);
           ctx.fillStyle = def.accent;
           ctx.beginPath();
           ctx.arc(cropPx, cropPy - 14, 6, 0, Math.PI * 2);
           ctx.fill();
-          // Glow or details on fruit
-          ctx.fillStyle = "#fff";
-          ctx.fillRect(cropPx - 2, cropPy - 16, 2, 2);
         }
       }
     }
   }
 
-  // 3. Draw NPCs
+  // 3. Draw Farm Animals
+  if (!state.inMine) {
+    state.animals.forEach((animal) => {
+      const ax = animal.x * TILE;
+      const ay = animal.y * TILE;
+
+      // Squish animation on hop
+      const squish = 1 + Math.sin(Date.now() / 120) * 0.08;
+
+      ctx.save();
+      ctx.translate(ax + 16, ay + 24);
+      ctx.scale(squish, 2 - squish);
+
+      if (animal.type === "chick") {
+        // Chick render
+        ctx.fillStyle = "#f1c40f"; // yellow
+        ctx.beginPath();
+        ctx.arc(0, -6, 6, 0, Math.PI * 2);
+        ctx.fill();
+        // Beak
+        ctx.fillStyle = "#e67e22";
+        ctx.fillRect(3, -8, 3, 2);
+        // Feet
+        ctx.fillRect(-4, 0, 2, 2);
+        ctx.fillRect(2, 0, 2, 2);
+      } else {
+        // Calf / Cow render
+        ctx.fillStyle = "#ba4a00"; // brown calf
+        ctx.fillRect(-8, -12, 16, 12);
+        // Spots
+        ctx.fillStyle = "#fff";
+        ctx.fillRect(-4, -9, 4, 4);
+        ctx.fillRect(2, -5, 3, 3);
+        // Head bobbing
+        ctx.fillStyle = "#ba4a00";
+        ctx.fillRect(4, -15, 6, 6);
+      }
+
+      ctx.restore();
+
+      // Show milk drops if ready to milk
+      if (animal.hasProduce && animal.type === "calf") {
+        ctx.fillStyle = "#fff";
+        ctx.font = "bold 9px monospace";
+        ctx.fillText("🥛", ax + 12, ay - 4);
+      }
+    });
+  }
+
+  // 4. Draw NPCs
   if (!state.inMine) {
     Object.keys(NPCS).forEach((id) => {
       const npc = NPCS[id];
-      // Fetch scheduled target for current time
       const target = getNPCDestination(id, state.time);
-      // For this cozy implementation, NPCs teleport or stand directly at schedules
       const nx = target.x * TILE;
       const ny = target.y * TILE;
 
-      // Draw NPC body
       ctx.fillStyle = npc.color;
-      ctx.fillRect(nx + 8, ny + 8, 16, 16); // body
-      // Head
+      ctx.fillRect(nx + 8, ny + 8, 16, 16);
       ctx.fillStyle = "#f5d0a9";
       ctx.fillRect(nx + 10, ny + 2, 12, 8);
-      // Hair/Hat
       ctx.fillStyle = npc.portraitColor;
       ctx.fillRect(nx + 9, ny, 14, 4);
 
-      // Name indicator
       ctx.fillStyle = "rgba(0,0,0,0.5)";
       ctx.fillRect(nx - 6, ny - 14, TILE + 12, 12);
       ctx.fillStyle = "#fff";
@@ -1335,13 +1598,11 @@ export function draw(
     });
   }
 
-  // 4. Draw Mine Enemies (Slimes)
+  // 5. Draw Mine Enemies
   if (state.inMine) {
     state.mineEnemies.forEach((slime) => {
       const sx = slime.x * TILE;
       const sy = slime.y * TILE;
-
-      // Hops/Squish effect
       const squishX = 1 + Math.sin(Date.now() / 150) * 0.15;
       const squishY = 1 - Math.sin(Date.now() / 150) * 0.15;
 
@@ -1349,20 +1610,17 @@ export function draw(
       ctx.translate(sx + 16, sy + 24);
       ctx.scale(squishX, squishY);
 
-      // Slime body
       ctx.fillStyle = slime.color;
       ctx.beginPath();
       ctx.arc(0, -6, 10, 0, Math.PI * 2);
       ctx.fill();
 
-      // Slime face eyes
       ctx.fillStyle = "#000";
       ctx.fillRect(-5, -9, 2, 2);
       ctx.fillRect(3, -9, 2, 2);
 
       ctx.restore();
 
-      // Slime health bar (if damaged)
       if (slime.hp < slime.maxHp) {
         ctx.fillStyle = "rgba(0,0,0,0.5)";
         ctx.fillRect(sx + 4, sy - 8, 24, 4);
@@ -1373,54 +1631,57 @@ export function draw(
     });
   }
 
-  // 5. Draw Player
-  const px = p.x * TILE;
-  const py = p.y * TILE;
-  // Bobbing walk height
+  // 6. Draw Player
   const walkBob = Math.sin(Date.now() / 100) * 1.5;
+  ctx.fillStyle = "#2c3e50";
+  ctx.fillRect(px + 9 - cameraX, py + 18 - cameraY, 14, 8);
+  ctx.fillStyle = "#e74c3c";
+  ctx.fillRect(px + 8 - cameraX, py + 8 + walkBob - cameraY, 16, 11);
+  ctx.fillStyle = "#f5d0a9";
+  ctx.fillRect(px + 10 - cameraX, py + 2 + walkBob - cameraY, 12, 8);
+  ctx.fillStyle = "#8a5a3b";
+  ctx.fillRect(px + 9 - cameraX, py + walkBob - cameraY, 14, 3);
 
-  ctx.fillStyle = "#2c3e50"; // Pants
-  ctx.fillRect(px + 9, py + 18, 14, 8);
-  ctx.fillStyle = "#e74c3c"; // Shirt
-  ctx.fillRect(px + 8, py + 8 + walkBob, 16, 11);
-  ctx.fillStyle = "#f5d0a9"; // Face
-  ctx.fillRect(px + 10, py + 2 + walkBob, 12, 8);
-  ctx.fillStyle = "#8a5a3b"; // Hair
-  ctx.fillRect(px + 9, py + walkBob, 14, 3);
-
-  // Direction face (eyes)
   ctx.fillStyle = "#000";
   if (p.dir === "down") {
-    ctx.fillRect(px + 12, py + 6 + walkBob, 2, 2);
-    ctx.fillRect(px + 18, py + 6 + walkBob, 2, 2);
+    ctx.fillRect(px + 12 - cameraX, py + 6 + walkBob - cameraY, 2, 2);
+    ctx.fillRect(px + 18 - cameraX, py + 6 + walkBob - cameraY, 2, 2);
   } else if (p.dir === "up") {
-    // draw back of head hair
     ctx.fillStyle = "#8a5a3b";
-    ctx.fillRect(px + 10, py + 2 + walkBob, 12, 6);
+    ctx.fillRect(px + 10 - cameraX, py + 2 + walkBob - cameraY, 12, 6);
   } else if (p.dir === "left") {
-    ctx.fillRect(px + 11, py + 6 + walkBob, 2, 2);
+    ctx.fillRect(px + 11 - cameraX, py + 6 + walkBob - cameraY, 2, 2);
   } else if (p.dir === "right") {
-    ctx.fillRect(px + 19, py + 6 + walkBob, 2, 2);
+    ctx.fillRect(px + 19 - cameraX, py + 6 + walkBob - cameraY, 2, 2);
   }
 
-  // Draw active tool/weapon swipe animation if user was acting
-  // Rendered as brief overlays in front of player
+  // 7. Draw carry item above head (Lifting animation)
+  if (state.harvestLiftingTimer > 0 && state.carryItem) {
+    ctx.fillStyle = state.carryItem.iconColor;
+    ctx.font = "20px monospace";
+    ctx.textAlign = "center";
+    ctx.fillText(
+      state.carryItem.iconSymbol || "🥬",
+      playerPx - cameraX,
+      playerPy - 24 - cameraY
+    );
+  }
+
+  // Active Tool Swipe arc
   const f = frontTile(state);
-  if (f) {
-    // Draw target tile outline highlighter
+  if (f && state.harvestLiftingTimer <= 0) {
     ctx.strokeStyle = "rgba(255, 255, 255, 0.4)";
     ctx.lineWidth = 1.5;
-    ctx.strokeRect(f.x * TILE + 2, f.y * TILE + 2, TILE - 4, TILE - 4);
+    ctx.strokeRect(f.x * TILE + 2 - cameraX, f.y * TILE + 2 - cameraY, TILE - 4, TILE - 4);
 
-    // If using sword, draw swipe arc
     const held = state.inventory[state.hotbarIndex];
     if (held && held.id === "sword" && Math.sin(Date.now() / 60) > 0.6) {
       ctx.strokeStyle = "rgba(236, 240, 241, 0.75)";
       ctx.lineWidth = 4;
       ctx.beginPath();
       ctx.arc(
-        px + TILE / 2 + (f.x - p.x) * 18,
-        py + TILE / 2 + (f.y - p.y) * 18,
+        playerPx + (f.x - p.x) * 18 - cameraX,
+        playerPy + (f.y - p.y) * 18 - cameraY,
         14,
         0,
         Math.PI * 2
@@ -1429,61 +1690,51 @@ export function draw(
     }
   }
 
-  // 6. Draw Fishing Bobber & Line
+  // 8. Draw Fishing bobber lines
   if (state.fishing && !state.inMine) {
     const fState = state.fishing;
     if (fState.status === "waiting" || fState.status === "nibble" || fState.status === "reeling") {
-      // Draw bobber
       const bx = fState.bobberX * TILE + 16;
       const by = fState.bobberY * TILE + 16;
       ctx.strokeStyle = "rgba(255, 255, 255, 0.6)";
       ctx.lineWidth = 1;
       ctx.beginPath();
-      ctx.moveTo(px + 16, py + 12);
-      ctx.lineTo(bx, by);
+      ctx.moveTo(playerPx - cameraX, playerPy - 4 - cameraY);
+      ctx.lineTo(bx - cameraX, by - cameraY);
       ctx.stroke();
 
-      // Bobber floats
       const bBob = Math.sin(Date.now() / 200) * 2;
       ctx.fillStyle = "#e74c3c";
-      ctx.fillRect(bx - 3, by - 3 + bBob, 6, 6);
+      ctx.fillRect(bx - 3 - cameraX, by - 3 + bBob - cameraY, 6, 6);
       ctx.fillStyle = "#fff";
-      ctx.fillRect(bx - 3, by - 3 + bBob, 6, 2);
+      ctx.fillRect(bx - 3 - cameraX, by - 3 + bBob - cameraY, 6, 2);
 
-      // Nibble indicator bubble
       if (fState.status === "nibble") {
         ctx.fillStyle = "#e74c3c";
         ctx.font = "bold 14px monospace";
         ctx.textAlign = "center";
-        ctx.fillText("!", bx, by - 12 + bBob);
+        ctx.fillText("!", bx - cameraX, by - 12 + bBob - cameraY);
       }
     }
   }
 
-  ctx.restore(); // Exit camera translate
+  ctx.restore(); // restore viewport transform
 
-  // 7. Night Overlay Lighting Engine
+  // 9. Ambient Lighting filter
   const phase = getTimePhase(state.time);
   if (phase !== "morning") {
-    // Night color overlay (70% opacity at night, 30% evening)
-    const darkness = phase === "night" ? 0.7 : 0.25;
-
-    // Create night lighting overlay using offscreen rendering logic or destination-out masking
-    // To make it run natively on canvas without lag:
     const tempCanvas = document.createElement("canvas");
     tempCanvas.width = viewWidth;
     tempCanvas.height = viewHeight;
     const tCtx = tempCanvas.getContext("2d");
 
     if (tCtx) {
-      // Fill with dark blue night color
       tCtx.fillStyle = phase === "night" ? "rgba(10, 15, 40, 0.72)" : "rgba(230, 126, 34, 0.28)";
       tCtx.fillRect(0, 0, viewWidth, viewHeight);
 
-      // Draw light cones (destination-out blend to create clear masks)
       tCtx.globalCompositeOperation = "destination-out";
 
-      // A: Player glow
+      // player lighting radius
       const plViewX = playerPx - cameraX;
       const plViewY = playerPy - cameraY;
       const rad = phase === "night" ? 75 : 120;
@@ -1495,14 +1746,14 @@ export function draw(
       tCtx.arc(plViewX, plViewY, rad, 0, Math.PI * 2);
       tCtx.fill();
 
-      // B: Placed Torches glow
+      // Placed torches radius
       for (let y = startRow; y < endRow; y++) {
         for (let x = startCol; x < endCol; x++) {
           const t = currentGrid[y][x];
           if (t.kind === "placed_item" && t.placedItemId === "torch") {
             const torchViewX = x * TILE + 16 - cameraX;
             const torchViewY = y * TILE + 10 - cameraY;
-            const torchRad = 90 + Math.sin(Date.now() / 60) * 4; // flickering light!
+            const torchRad = 90 + Math.sin(Date.now() / 60) * 4;
             const gradT = tCtx.createRadialGradient(
               torchViewX,
               torchViewY,
@@ -1521,7 +1772,6 @@ export function draw(
         }
       }
 
-      // Draw the final lit screen overlay onto main canvas
       ctx.drawImage(tempCanvas, 0, 0);
     }
   }

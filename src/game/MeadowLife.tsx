@@ -188,12 +188,14 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
 
         if (!next.animals) next.animals = [];
         next.animals.forEach((animal) => {
+          if (!animal) return;
           animal.subX += (animal.x - animal.subX) * 0.08;
           animal.subY += (animal.y - animal.subY) * 0.08;
         });
 
         if (next.pets) {
           next.pets.forEach((pet) => {
+            if (!pet) return;
             pet.subX += (pet.x - pet.subX) * 0.08;
             pet.subY += (pet.y - pet.subY) * 0.08;
           });
@@ -201,6 +203,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
 
         if (next.workers) {
           next.workers.forEach((worker) => {
+            if (!worker) return;
             worker.subX += (worker.x - worker.subX) * 0.08;
             worker.subY += (worker.y - worker.subY) * 0.08;
           });
@@ -470,7 +473,9 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
         const next = structuredClone(prev);
         const grid = next.inMine ? next.mineGrid : next.tiles;
 
+        if (!next.animals) next.animals = [];
         next.animals.forEach((animal) => {
+          if (!animal) return;
           // Wander randomly
           const dirs = [[0, 1], [0, -1], [1, 0], [-1, 0]];
           const choice = dirs[Math.floor(Math.random() * dirs.length)];

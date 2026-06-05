@@ -675,17 +675,33 @@ export function migrateState(raw: unknown): GameState {
     harvestLiftingTimer: 0,
     carryItem: null,
 
-    // Arrays — use saved data or fall back to baseline
-    inventory:    Array.isArray(s.inventory)     ? (s.inventory as (Item | null)[])     : base.inventory,
-    tiles:        Array.isArray(s.tiles)         ? (s.tiles as Tile[][])                : base.tiles,
-    shippingBin:  Array.isArray(s.shippingBin)   ? (s.shippingBin as (Item | null)[])   : base.shippingBin,
-    mineGrid:     Array.isArray(s.mineGrid)      ? (s.mineGrid as Tile[][])             : base.mineGrid,
-    mineEnemies:  Array.isArray(s.mineEnemies)   ? (s.mineEnemies as Enemy[])           : base.mineEnemies,
-    mailboxLetters: Array.isArray(s.mailboxLetters) ? (s.mailboxLetters as MailLetter[]) : base.mailboxLetters,
-    animals:      Array.isArray(s.animals)       ? (s.animals as Animal[])              : base.animals,
-    // New fields added in recent versions — default to empty arrays if absent
-    pets:         Array.isArray(s.pets)          ? (s.pets as Pet[])                    : [],
-    workers:      Array.isArray(s.workers)       ? (s.workers as FarmWorker[])          : [],
+    // Arrays — use saved data or fall back to baseline.
+    // Use .filter(Boolean) on entity arrays to strip any null/undefined
+    // entries that Firestore may have stored (e.g. from serialization bugs).
+    inventory:    Array.isArray(s.inventory)     ? (s.inventory as (Item | null)[])                     : base.inventory,
+    shippingBin:  Array.isArray(s.shippingBin)   ? (s.shippingBin as (Item | null)[])                   : base.shippingBin,
+    mineEnemies:  Array.isArray(s.mineEnemies)   ? (s.mineEnemies as Enemy[]).filter(Boolean)           : base.mineEnemies,
+    mailboxLetters: Array.isArray(s.mailboxLetters) ? (s.mailboxLetters as MailLetter[]).filter(Boolean) : base.mailboxLetters,
+    animals:      Array.isArray(s.animals)       ? (s.animals as Animal[]).filter(Boolean)              : base.animals,
+    // New fields added in recent versions — filter nulls, default to [] if absent
+    pets:         Array.isArray(s.pets)          ? (s.pets as Pet[]).filter(Boolean)                    : [],
+    workers:      Array.isArray(s.workers)       ? (s.workers as FarmWorker[]).filter(Boolean)          : [],
+    // Tiles: filter null rows, and within each row, replace null tiles with a safe default
+    tiles: (() => {
+      if (!Array.isArray(s.tiles)) return base.tiles;
+      return (s.tiles as Tile[][]).map((row) => {
+        if (!Array.isArray(row)) return Array.from({ length: COLS }, () => ({ kind: "grass" as TileKind, age: 0, watered: false }));
+        return row.map((tile) => tile ?? { kind: "grass" as TileKind, age: 0, watered: false });
+      });
+    })(),
+    mineGrid: (() => {
+      if (!Array.isArray(s.mineGrid)) return base.mineGrid;
+      return (s.mineGrid as Tile[][]).map((row) => {
+        if (!Array.isArray(row)) return [];
+        return row.map((tile) => tile ?? { kind: "mine_dirt" as TileKind, age: -1, watered: false });
+      });
+    })(),
+
 
     // Nested objects
     player: s.player && typeof s.player === "object"
@@ -767,6 +783,7 @@ export function updateEntities(state: GameState, dt: number): void {
   // 1. Pets Wander AI
   if (!state.pets) state.pets = [];
   state.pets.forEach((pet) => {
+    if (!pet) return;
     pet.subX += (pet.x - pet.subX) * 0.08;
     pet.subY += (pet.y - pet.subY) * 0.08;
 
@@ -793,6 +810,7 @@ export function updateEntities(state: GameState, dt: number): void {
   // 2. Hired Workers AI
   if (!state.workers) state.workers = [];
   state.workers.forEach((worker) => {
+    if (!worker) return;
     worker.subX += (worker.x - worker.subX) * 0.08;
     worker.subY += (worker.y - worker.subY) * 0.08;
 
@@ -1756,6 +1774,7 @@ export function sleep(state: GameState): void {
   // 3. Animal growth, pet count resets, egg/milk produce ticks
   if (!state.animals) state.animals = [];
   state.animals.forEach((animal) => {
+    if (!animal) return;
     animal.age += 1;
     animal.petCount = 0; // reset petting
 
@@ -1873,6 +1892,7 @@ export function sleep(state: GameState): void {
   // 8. Overnight Pet Updates
   if (!state.pets) state.pets = [];
   state.pets.forEach((pet) => {
+    if (!pet) return;
     const bowlTile = state.tiles[pet.bowlY]?.[pet.bowlX];
     if (bowlTile && bowlTile.kind === "placed_item" && (bowlTile.placedItemId === "pet_bowl_dog" || bowlTile.placedItemId === "pet_bowl_cat")) {
       if (bowlTile.watered) {
@@ -1907,6 +1927,7 @@ export function sleep(state: GameState): void {
   // 9. Overnight Worker Updates (Feed checking)
   if (!state.workers) state.workers = [];
   state.workers.forEach((worker) => {
+    if (!worker) return;
     worker.hasEatenToday = false;
     const cabinTile = state.tiles[worker.cabinY]?.[worker.cabinX];
     if (cabinTile && cabinTile.kind === "placed_item" && cabinTile.placedItemId === "worker_cabin" && cabinTile.chestInventory) {
@@ -2243,6 +2264,7 @@ export function draw(
   if (!state.inMine) {
     if (!state.animals) state.animals = [];
     state.animals.forEach((animal) => {
+      if (!animal) return;
       const ax = animal.x * TILE;
       const ay = animal.y * TILE;
 
@@ -2292,6 +2314,7 @@ export function draw(
   // 3b. Draw Farm Pets
   if (!state.inMine && state.pets) {
     state.pets.forEach((pet) => {
+      if (!pet) return;
       const px = pet.subX * TILE;
       const py = pet.subY * TILE;
 
@@ -2345,6 +2368,7 @@ export function draw(
   // 3c. Draw Hired Workers
   if (!state.inMine && state.workers) {
     state.workers.forEach((worker) => {
+      if (!worker) return;
       const wx = worker.subX * TILE;
       const wy = worker.subY * TILE;
 

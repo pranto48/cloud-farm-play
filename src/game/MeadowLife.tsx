@@ -17,6 +17,7 @@ import {
   shipItem,
   generateMineFloor,
   STATIC_POINTS,
+  hasItems,
   type GameState,
   type Tile,
   type Enemy,

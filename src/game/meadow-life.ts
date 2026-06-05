@@ -423,6 +423,34 @@ function makeMap(): Tile[][] {
   return t;
 }
 
+function rollMineGem(depth: number): string | null {
+  const rand = Math.random();
+  // 1. Check for Prismatic Shard (very rare, depth >= 10, 0.4% chance)
+  if (depth >= 10 && rand < 0.004) {
+    return "prismatic_shard";
+  }
+  // 2. Check for Diamond (depth >= 9, 1.5% chance)
+  if (depth >= 9 && rand < 0.015) {
+    return "diamond";
+  }
+  // 3. Check for deep gems (depth >= 8, 4% chance total)
+  if (depth >= 8 && rand < 0.04) {
+    const choices = ["ruby", "emerald", "fire_quartz"];
+    return choices[Math.floor(Math.random() * choices.length)];
+  }
+  // 4. Check for frozen gems (depth >= 5, 6% chance total)
+  if (depth >= 5 && rand < 0.06) {
+    const choices = ["frozen_tear", "aquamarine"];
+    return choices[Math.floor(Math.random() * choices.length)];
+  }
+  // 5. Common minerals/gems (depth >= 1, 8% chance total)
+  if (rand < 0.08) {
+    const choices = ["quartz", "earth_crystal", "amethyst", "topaz"];
+    return choices[Math.floor(Math.random() * choices.length)];
+  }
+  return null;
+}
+
 // Procedural Mine Generator
 export function generateMineFloor(depth: number): { grid: Tile[][]; enemies: Enemy[] } {
   const size = 24;
@@ -899,9 +927,20 @@ export function interact(state: GameState): { message: string | null; particles:
           addItem(state.inventory, createItem("coal", 1));
         }
 
+        let gemMsg = "";
+        if (state.inMine && Math.random() < 0.05) {
+          const gemId = rollMineGem(state.mineDepth);
+          if (gemId) {
+            const gemItem = createItem(gemId, 1);
+            if (addItem(state.inventory, gemItem)) {
+              gemMsg = `. Found ${gemItem.name}!`;
+            }
+          }
+        }
+
         const expGained = 4;
         const lvlMsg = addExperience(state, "mining", expGained);
-        result.message = "Broke stone" + (lvlMsg ? `. ${lvlMsg}` : "");
+        result.message = `Broke stone${gemMsg}` + (lvlMsg ? `. ${lvlMsg}` : "");
 
         if (state.inMine && tile.age === 999) {
           tile.kind = "mine_ladder";
@@ -931,8 +970,20 @@ export function interact(state: GameState): { message: string | null; particles:
         gameAudio.playMine();
 
         addItem(state.inventory, createItem(config.item, Math.floor(Math.random() * 2) + 1));
+
+        let gemMsg = "";
+        if (state.inMine && Math.random() < 0.15) {
+          const gemId = rollMineGem(state.mineDepth);
+          if (gemId) {
+            const gemItem = createItem(gemId, 1);
+            if (addItem(state.inventory, gemItem)) {
+              gemMsg = `. Found ${gemItem.name}!`;
+            }
+          }
+        }
+
         const lvlMsg = addExperience(state, "mining", config.xp);
-        result.message = `Mined ${config.item.replace("_", " ")}` + (lvlMsg ? `. ${lvlMsg}` : "");
+        result.message = `Mined ${config.item.replace("_", " ")}${gemMsg}` + (lvlMsg ? `. ${lvlMsg}` : "");
 
         for (let i = 0; i < 10; i++) {
           result.particles.push({

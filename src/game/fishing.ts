@@ -45,6 +45,42 @@ export const FISH_TYPES: Record<string, FishDef> = {
     sizeRange: [45, 60],
     accentColor: "#3498db",
   },
+  bream: {
+    id: "bream",
+    name: "Bream",
+    price: 30,
+    difficulty: 35,
+    behavior: "float",
+    sizeRange: [12, 30],
+    accentColor: "#85929e",
+  },
+  largemouth_bass: {
+    id: "largemouth_bass",
+    name: "Largemouth Bass",
+    price: 100,
+    difficulty: 50,
+    behavior: "sink_float",
+    sizeRange: [11, 31],
+    accentColor: "#2e4053",
+  },
+  catfish: {
+    id: "catfish",
+    name: "Catfish",
+    price: 200,
+    difficulty: 75,
+    behavior: "erratic",
+    sizeRange: [12, 72],
+    accentColor: "#1c2833",
+  },
+  pufferfish: {
+    id: "pufferfish",
+    name: "Pufferfish",
+    price: 200,
+    difficulty: 80,
+    behavior: "float",
+    sizeRange: [1, 36],
+    accentColor: "#f4d03f",
+  },
 };
 
 export interface FishingState {

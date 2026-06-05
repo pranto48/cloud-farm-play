@@ -41,6 +41,7 @@ export interface Tile {
   /** Placed item details. */
   placedItemId?: string;
   chestInventory?: (Item | null)[];
+  hitPoints?: number;
 }
 
 export type Tool = "hoe" | "watering_can" | "scythe" | "pickaxe" | "axe" | "sword" | "fishing_rod" | "milk_pail";
@@ -101,6 +102,38 @@ export interface MailLetter {
   claimed: boolean;
 }
 
+export interface Pet {
+  id: string;
+  type: "cat" | "dog";
+  name: string;
+  x: number;
+  y: number;
+  subX: number;
+  subY: number;
+  friendship: number; // 0 - 1000
+  pettedToday: boolean;
+  bowlX: number;
+  bowlY: number;
+  walkTimer: number;
+}
+
+export interface FarmWorker {
+  id: string;
+  name: string;
+  cabinX: number;
+  cabinY: number;
+  x: number;
+  y: number;
+  subX: number;
+  subY: number;
+  task: "idle" | "water" | "harvest" | "clear";
+  energy: number; // 0 - 100
+  hasEatenToday: boolean;
+  walkTimer: number;
+  actionTimer: number;
+  statusText: string;
+}
+
 export interface GameState {
   version: 1;
   player: {
@@ -156,6 +189,7 @@ export interface GameState {
     watering: number;
     scythe: number;
     pickaxe: number;
+    axe: number;
   };
   // Overhaul states
   animals: Animal[];
@@ -163,6 +197,8 @@ export interface GameState {
   hasUnreadMail: boolean;
   harvestLiftingTimer: number; // freeze remaining duration
   carryItem: Item | null; // visually drawn above head
+  pets?: Pet[];
+  workers?: FarmWorker[];
 }
 
 export const DAY_START_MINUTES = 6 * 60;
@@ -596,13 +632,15 @@ export function newGame(): GameState {
       currentCount: 0,
       rewardCoins: 50,
     },
-    upgrades: { hoe: 1, watering: 1, scythe: 1, pickaxe: 1 },
+    upgrades: { hoe: 1, watering: 1, scythe: 1, pickaxe: 1, axe: 1 },
     // Overhaul elements
     animals: [],
     mailboxLetters: initialLetters,
     hasUnreadMail: true,
     harvestLiftingTimer: 0,
     carryItem: null,
+    pets: [],
+    workers: [],
   };
 }
 
@@ -622,6 +660,279 @@ export function isWalkable(t: Tile): boolean {
     t.kind !== "ore_gold" &&
     t.kind !== "placed_item" // chests & sprinklers block movement
   );
+}
+
+export function isWorkerWalkable(t: Tile): boolean {
+  if (!t) return false;
+  return (
+    t.kind !== "water" &&
+    t.kind !== "tree" &&
+    t.kind !== "house" &&
+    t.kind !== "shop" &&
+    t.kind !== "npc" &&
+    t.kind !== "mine_wall" &&
+    t.kind !== "debris_stone" &&
+    t.kind !== "debris_branch" &&
+    t.kind !== "ore_copper" &&
+    t.kind !== "ore_iron" &&
+    t.kind !== "ore_gold" &&
+    (t.kind !== "placed_item" || t.cropId !== undefined || t.placedItemId === "chicken_egg")
+  );
+}
+
+export function updateEntities(state: GameState, dt: number): void {
+  if (state.inMine) return; // workers and pets stay on the farm!
+
+  const grid = state.tiles;
+
+  // 1. Pets Wander AI
+  if (!state.pets) state.pets = [];
+  state.pets.forEach((pet) => {
+    pet.subX += (pet.x - pet.subX) * 0.08;
+    pet.subY += (pet.y - pet.subY) * 0.08;
+
+    pet.walkTimer -= dt;
+    if (pet.walkTimer <= 0) {
+      pet.walkTimer = Math.random() * 4 + 3; // choose new tile in 3-7s
+
+      const dirs = [[0, 1], [0, -1], [1, 0], [-1, 0]];
+      const randomDir = dirs[Math.floor(Math.random() * dirs.length)];
+      const targetX = pet.x + randomDir[0];
+      const targetY = pet.y + randomDir[1];
+
+      if (targetX >= 0 && targetY >= 0 && targetX < COLS && targetY < ROWS) {
+        const t = grid[targetY][targetX];
+        const distToBowl = Math.abs(targetX - pet.bowlX) + Math.abs(targetY - pet.bowlY);
+        if (isWalkable(t) && distToBowl <= 10) {
+          pet.x = targetX;
+          pet.y = targetY;
+        }
+      }
+    }
+  });
+
+  // 2. Hired Workers AI
+  if (!state.workers) state.workers = [];
+  state.workers.forEach((worker) => {
+    worker.subX += (worker.x - worker.subX) * 0.08;
+    worker.subY += (worker.y - worker.subY) * 0.08;
+
+    const isShiftTime = state.time >= 8 * 60 && state.time < 17 * 60;
+    const isSleepTime = state.time >= 22 * 60 || state.time < 6 * 60;
+    const isOnStrike = worker.energy <= 0;
+
+    if (worker.actionTimer > 0) {
+      worker.actionTimer -= dt;
+      return;
+    }
+
+    if (!isShiftTime || isOnStrike) {
+      if (worker.x !== worker.cabinX || worker.y !== worker.cabinY) {
+        worker.walkTimer -= dt;
+        if (worker.walkTimer <= 0) {
+          worker.walkTimer = 0.5;
+          const dx = Math.sign(worker.cabinX - worker.x);
+          const dy = Math.sign(worker.cabinY - worker.y);
+
+          let nextX = worker.x + dx;
+          let nextY = worker.y;
+          if (dx !== 0 && isWorkerWalkable(grid[nextY]?.[nextX])) {
+            worker.x = nextX;
+          } else {
+            nextX = worker.x;
+            nextY = worker.y + dy;
+            if (dy !== 0 && isWorkerWalkable(grid[nextY]?.[nextX])) {
+              worker.y = nextY;
+            }
+          }
+        }
+      }
+
+      if (isOnStrike) {
+        worker.statusText = "On Strike (No Food!)";
+      } else if (isSleepTime) {
+        worker.statusText = "Sleeping";
+      } else {
+        worker.statusText = "Relaxing near cabin";
+      }
+      return;
+    }
+
+    worker.statusText = `Shift: Task is ${worker.task.toUpperCase()}`;
+
+    if (worker.task === "idle") {
+      worker.walkTimer -= dt;
+      if (worker.walkTimer <= 0) {
+        worker.walkTimer = Math.random() * 3 + 2;
+        const dirs = [[0, 1], [0, -1], [1, 0], [-1, 0], [0, 0]];
+        const d = dirs[Math.floor(Math.random() * dirs.length)];
+        const tx = worker.cabinX + d[0] * 2;
+        const ty = worker.cabinY + d[1] * 2;
+        if (tx >= 0 && ty >= 0 && tx < COLS && ty < ROWS && isWorkerWalkable(grid[ty]?.[tx])) {
+          worker.x = tx;
+          worker.y = ty;
+        }
+      }
+      worker.statusText = "Idle - Shift Time";
+      return;
+    }
+
+    const zoneRadius = 4;
+    let targetX = -1;
+    let targetY = -1;
+
+    for (let dy = -zoneRadius; dy <= zoneRadius; dy++) {
+      for (let dx = -zoneRadius; dx <= zoneRadius; dx++) {
+        const tx = worker.cabinX + dx;
+        const ty = worker.cabinY + dy;
+        if (tx >= 0 && ty >= 0 && tx < COLS && ty < ROWS) {
+          const t = grid[ty][tx];
+          if (worker.task === "water") {
+            if (t.kind === "soil" || (t.cropId && !t.watered && t.kind !== "watered")) {
+              targetX = tx;
+              targetY = ty;
+              break;
+            }
+          } else if (worker.task === "harvest") {
+            if (t.cropId && t.age >= (CROPS[t.cropId]?.growDays || 3)) {
+              targetX = tx;
+              targetY = ty;
+              break;
+            }
+          } else if (worker.task === "clear") {
+            if (t.kind === "debris_weed" || t.kind === "debris_branch" || t.kind === "debris_stone") {
+              targetX = tx;
+              targetY = ty;
+              break;
+            }
+          }
+        }
+      }
+      if (targetX !== -1) break;
+    }
+
+    if (targetX === -1) {
+      worker.walkTimer -= dt;
+      if (worker.walkTimer <= 0) {
+        worker.walkTimer = Math.random() * 2 + 1;
+        const dirs = [[0, 1], [0, -1], [1, 0], [-1, 0]];
+        const d = dirs[Math.floor(Math.random() * dirs.length)];
+        const tx = worker.x + d[0];
+        const ty = worker.y + d[1];
+        if (
+          Math.abs(tx - worker.cabinX) <= zoneRadius &&
+          Math.abs(ty - worker.cabinY) <= zoneRadius &&
+          tx >= 0 && ty >= 0 && tx < COLS && ty < ROWS &&
+          isWorkerWalkable(grid[ty]?.[tx])
+        ) {
+          worker.x = tx;
+          worker.y = ty;
+        }
+      }
+      worker.statusText = "Searching for tasks...";
+      return;
+    }
+
+    const dist = Math.abs(targetX - worker.x) + Math.abs(targetY - worker.y);
+    if (dist > 1) {
+      worker.walkTimer -= dt;
+      if (worker.walkTimer <= 0) {
+        worker.walkTimer = 0.4;
+        const dx = Math.sign(targetX - worker.x);
+        const dy = Math.sign(targetY - worker.y);
+
+        let nextX = worker.x + dx;
+        let nextY = worker.y;
+        if (dx !== 0 && isWorkerWalkable(grid[nextY]?.[nextX])) {
+          worker.x = nextX;
+        } else {
+          nextX = worker.x;
+          nextY = worker.y + dy;
+          if (dy !== 0 && isWorkerWalkable(grid[nextY]?.[nextX])) {
+            worker.y = nextY;
+          }
+        }
+      }
+      worker.statusText = `Moving to target (${targetX}, ${targetY})`;
+    } else {
+      if (worker.actionTimer <= 0) {
+        worker.actionTimer = 1.2;
+      } else {
+        worker.actionTimer -= dt;
+        if (worker.actionTimer <= 0) {
+          const t = grid[targetY]?.[targetX];
+          if (t) {
+            if (worker.task === "water") {
+              if (t.kind === "soil" || (t.cropId && !t.watered)) {
+                t.watered = true;
+                if (t.kind === "soil") t.kind = "watered";
+                worker.energy = Math.max(0, worker.energy - 0.2);
+                gameAudio.playWater();
+              }
+            } else if (worker.task === "harvest") {
+              if (t.cropId && t.age >= (CROPS[t.cropId]?.growDays || 3)) {
+                const cropId = t.cropId;
+                const gathered = createItem(cropId, 1);
+
+                let added = false;
+                for (let i = 0; i < state.shippingBin.length; i++) {
+                  if (state.shippingBin[i] === null) {
+                    state.shippingBin[i] = gathered;
+                    added = true;
+                    break;
+                  } else if (state.shippingBin[i]!.id === gathered.id) {
+                    state.shippingBin[i]!.count += 1;
+                    added = true;
+                    break;
+                  }
+                }
+
+                if (!added) {
+                  const cabinTile = grid[worker.cabinY]?.[worker.cabinX];
+                  if (cabinTile && cabinTile.chestInventory) {
+                    addItem(cabinTile.chestInventory, gathered);
+                  }
+                }
+
+                t.kind = "soil";
+                t.cropId = undefined;
+                t.age = -1;
+                t.watered = false;
+                worker.energy = Math.max(0, worker.energy - 0.5);
+                gameAudio.playChop();
+              }
+            } else if (worker.task === "clear") {
+              if (t.kind === "debris_weed") {
+                t.kind = "grass";
+                const cabinTile = grid[worker.cabinY]?.[worker.cabinX];
+                if (cabinTile && cabinTile.chestInventory) {
+                  addItem(cabinTile.chestInventory, createItem("fiber", 1));
+                }
+                worker.energy = Math.max(0, worker.energy - 0.3);
+                gameAudio.playChop();
+              } else if (t.kind === "debris_branch") {
+                t.kind = "grass";
+                const cabinTile = grid[worker.cabinY]?.[worker.cabinX];
+                if (cabinTile && cabinTile.chestInventory) {
+                  addItem(cabinTile.chestInventory, createItem("wood", 2));
+                }
+                worker.energy = Math.max(0, worker.energy - 0.4);
+                gameAudio.playChop();
+              } else if (t.kind === "debris_stone") {
+                t.kind = "grass";
+                const cabinTile = grid[worker.cabinY]?.[worker.cabinX];
+                if (cabinTile && cabinTile.chestInventory) {
+                  addItem(cabinTile.chestInventory, createItem("stone", 1));
+                }
+                worker.energy = Math.max(0, worker.energy - 0.4);
+                gameAudio.playMine();
+              }
+            }
+          }
+        }
+      }
+    }
+  });
 }
 
 export function frontTile(state: GameState): { x: number; y: number } | null {
@@ -656,8 +967,83 @@ export function addExperience(state: GameState, skill: keyof GameState["skills"]
   return null;
 }
 
+export function getChargedTargetTiles(
+  state: GameState,
+  px: number,
+  py: number,
+  dir: "up" | "down" | "left" | "right",
+  chargeLevel: number
+): { x: number; y: number }[] {
+  const tiles: { x: number; y: number }[] = [];
+  const maxCols = state.inMine ? 24 : COLS;
+  const maxRows = state.inMine ? 24 : ROWS;
+
+  const pushValid = (tx: number, ty: number) => {
+    if (tx >= 0 && ty >= 0 && tx < maxCols && ty < maxRows) {
+      tiles.push({ x: tx, y: ty });
+    }
+  };
+
+  // Level 1: 1 tile in front
+  if (chargeLevel <= 1) {
+    let tx = px, ty = py;
+    if (dir === "up") ty -= 1;
+    else if (dir === "down") ty += 1;
+    else if (dir === "left") tx -= 1;
+    else if (dir === "right") tx += 1;
+    pushValid(tx, ty);
+    return tiles;
+  }
+
+  // Level 2: 1x3 line in front
+  if (chargeLevel === 2) {
+    let dx = 0, dy = 0;
+    if (dir === "up") dy = -1;
+    else if (dir === "down") dy = 1;
+    else if (dir === "left") dx = -1;
+    else if (dir === "right") dx = 1;
+
+    for (let i = 1; i <= 3; i++) {
+      pushValid(px + dx * i, py + dy * i);
+    }
+    return tiles;
+  }
+
+  // Level 3: 1x5 line in front
+  if (chargeLevel === 3) {
+    let dx = 0, dy = 0;
+    if (dir === "up") dy = -1;
+    else if (dir === "down") dy = 1;
+    else if (dir === "left") dx = -1;
+    else if (dir === "right") dx = 1;
+
+    for (let i = 1; i <= 5; i++) {
+      pushValid(px + dx * i, py + dy * i);
+    }
+    return tiles;
+  }
+
+  // Level 4: 3x3 square centered 2 tiles in front
+  if (chargeLevel >= 4) {
+    let cx = px, cy = py;
+    if (dir === "up") { cx = px; cy = py - 2; }
+    else if (dir === "down") { cx = px; cy = py + 2; }
+    else if (dir === "left") { cx = px - 2; cy = py; }
+    else if (dir === "right") { cx = px + 2; cy = py; }
+
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        pushValid(cx + dx, cy + dy);
+      }
+    }
+    return tiles;
+  }
+
+  return tiles;
+}
+
 // Interact tool calculations
-export function interact(state: GameState): { message: string | null; particles: Particle[] } {
+export function interact(state: GameState, chargeLevel: number = 1): { message: string | null; particles: Particle[] } {
   const result: { message: string | null; particles: Particle[] } = { message: null, particles: [] };
 
   // Harvest freeze check
@@ -788,56 +1174,82 @@ export function interact(state: GameState): { message: string | null; particles:
   if (!heldItem) return result;
 
   switch (heldItem.id) {
-    case "hoe":
-      if (tile.kind === "grass") {
-        if (state.energy < toolEnergyCost) {
-          result.message = "No energy!";
-          return result;
-        }
-        state.energy -= toolEnergyCost;
-        tile.kind = "soil";
-        gameAudio.playTill();
-
-        for (let i = 0; i < 5; i++) {
-          result.particles.push({
-            x: px,
-            y: py,
-            vx: (Math.random() * 2 - 1) * 30,
-            vy: -Math.random() * 50 - 10,
-            color: "#8a5a3b",
-            age: 0,
-            maxAge: 0.3,
-          });
-        }
-        result.message = "Tilled soil";
+    case "hoe": {
+      const actionCost = Math.ceil(toolEnergyCost * (1 + (chargeLevel - 1) * 0.5));
+      if (state.energy < actionCost) {
+        result.message = "No energy!";
+        return result;
       }
-      break;
+      state.energy -= actionCost;
+      gameAudio.playTill();
 
-    case "watering_can":
-      if (tile.kind === "soil" || tile.cropId) {
-        if (state.energy < toolEnergyCost) {
-          result.message = "No energy!";
-          return result;
-        }
-        state.energy -= toolEnergyCost;
-        tile.watered = true;
-        if (tile.kind === "soil") tile.kind = "watered";
-        gameAudio.playWater();
+      const targets = getChargedTargetTiles(state, state.player.x, state.player.y, state.player.dir, chargeLevel);
+      let tilledCount = 0;
 
-        for (let i = 0; i < 8; i++) {
-          result.particles.push({
-            x: px + (Math.random() * 16 - 8),
-            y: py - 4,
-            vx: (Math.random() * 2 - 1) * 20,
-            vy: Math.random() * 20 + 20,
-            color: "#2980b9",
-            age: 0,
-            maxAge: 0.25,
-          });
+      for (const coord of targets) {
+        const t = grid[coord.y][coord.x];
+        if (t.kind === "grass") {
+          t.kind = "soil";
+          tilledCount++;
+
+          const tpx = coord.x * TILE + TILE / 2;
+          const tpy = coord.y * TILE + TILE / 2;
+          for (let i = 0; i < 3; i++) {
+            result.particles.push({
+              x: tpx,
+              y: tpy,
+              vx: (Math.random() * 2 - 1) * 30,
+              vy: -Math.random() * 40 - 10,
+              color: "#8a5a3b",
+              age: 0,
+              maxAge: 0.3,
+            });
+          }
         }
-        result.message = "Watered soil";
       }
+
+      result.message = tilledCount > 0 ? `Tilled ${tilledCount} soil` : "Tilled ground";
       break;
+    }
+
+    case "watering_can": {
+      const actionCost = Math.ceil(toolEnergyCost * (1 + (chargeLevel - 1) * 0.5));
+      if (state.energy < actionCost) {
+        result.message = "No energy!";
+        return result;
+      }
+      state.energy -= actionCost;
+      gameAudio.playWater();
+
+      const targets = getChargedTargetTiles(state, state.player.x, state.player.y, state.player.dir, chargeLevel);
+      let wateredCount = 0;
+
+      for (const coord of targets) {
+        const t = grid[coord.y][coord.x];
+        if (t.kind === "soil" || t.cropId) {
+          t.watered = true;
+          if (t.kind === "soil") t.kind = "watered";
+          wateredCount++;
+
+          const tpx = coord.x * TILE + TILE / 2;
+          const tpy = coord.y * TILE + TILE / 2;
+          for (let i = 0; i < 4; i++) {
+            result.particles.push({
+              x: tpx + (Math.random() * 16 - 8),
+              y: tpy - 4,
+              vx: (Math.random() * 2 - 1) * 15,
+              vy: Math.random() * 15 + 15,
+              color: "#2980b9",
+              age: 0,
+              maxAge: 0.25,
+            });
+          }
+        }
+      }
+
+      result.message = wateredCount > 0 ? `Watered ${wateredCount} soil` : "Watered soil";
+      break;
+    }
 
     case "scythe":
       // Harvest mature crop -> Trigger carrying animation
@@ -917,37 +1329,47 @@ export function interact(state: GameState): { message: string | null; particles:
         result.message = "No energy!";
         return result;
       }
+      const pickaxeLvl = state.upgrades.pickaxe || 1;
+      const pickDmg = pickaxeLvl === 1 ? 1 : pickaxeLvl === 2 ? 2 : pickaxeLvl === 3 ? 3 : 5;
+
       if (tile.kind === "debris_stone") {
+        if (tile.hitPoints === undefined) tile.hitPoints = 3;
+        tile.hitPoints -= pickDmg;
         state.energy -= toolEnergyCost;
-        tile.kind = state.inMine ? "mine_dirt" : "grass";
         gameAudio.playMine();
 
-        addItem(state.inventory, createItem("stone", 1));
-        if (Math.random() < 0.15) {
-          addItem(state.inventory, createItem("coal", 1));
-        }
+        if (tile.hitPoints <= 0) {
+          tile.kind = state.inMine ? "mine_dirt" : "grass";
+          tile.hitPoints = undefined;
+          addItem(state.inventory, createItem("stone", 1));
+          if (Math.random() < 0.15) {
+            addItem(state.inventory, createItem("coal", 1));
+          }
 
-        let gemMsg = "";
-        if (state.inMine && Math.random() < 0.05) {
-          const gemId = rollMineGem(state.mineDepth);
-          if (gemId) {
-            const gemItem = createItem(gemId, 1);
-            if (addItem(state.inventory, gemItem)) {
-              gemMsg = `. Found ${gemItem.name}!`;
+          let gemMsg = "";
+          if (state.inMine && Math.random() < 0.05) {
+            const gemId = rollMineGem(state.mineDepth);
+            if (gemId) {
+              const gemItem = createItem(gemId, 1);
+              if (addItem(state.inventory, gemItem)) {
+                gemMsg = `. Found ${gemItem.name}!`;
+              }
             }
           }
+
+          const expGained = 4;
+          const lvlMsg = addExperience(state, "mining", expGained);
+          result.message = `Broke stone${gemMsg}` + (lvlMsg ? `. ${lvlMsg}` : "");
+
+          if (state.inMine && tile.age === 999) {
+            tile.kind = "mine_ladder";
+            result.message = "Discovered a ladder leading down!";
+          }
+        } else {
+          result.message = `Struck stone (${tile.hitPoints} HP left)`;
         }
 
-        const expGained = 4;
-        const lvlMsg = addExperience(state, "mining", expGained);
-        result.message = `Broke stone${gemMsg}` + (lvlMsg ? `. ${lvlMsg}` : "");
-
-        if (state.inMine && tile.age === 999) {
-          tile.kind = "mine_ladder";
-          result.message = "Discovered a ladder leading down!";
-        }
-
-        for (let i = 0; i < 6; i++) {
+        for (let i = 0; i < 4; i++) {
           result.particles.push({
             x: px,
             y: py,
@@ -959,33 +1381,41 @@ export function interact(state: GameState): { message: string | null; particles:
           });
         }
       } else if (tile.kind === "ore_copper" || tile.kind === "ore_iron" || tile.kind === "ore_gold") {
-        state.energy -= toolEnergyCost;
         const oreMap = {
           ore_copper: { item: "copper_ore", xp: 8, color: "#d35400" },
           ore_iron: { item: "iron_ore", xp: 15, color: "#95a5a6" },
           ore_gold: { item: "gold_ore", xp: 30, color: "#f1c40f" },
         };
         const config = oreMap[tile.kind as keyof typeof oreMap];
-        tile.kind = "mine_dirt";
+
+        if (tile.hitPoints === undefined) tile.hitPoints = 4;
+        tile.hitPoints -= pickDmg;
+        state.energy -= toolEnergyCost;
         gameAudio.playMine();
 
-        addItem(state.inventory, createItem(config.item, Math.floor(Math.random() * 2) + 1));
+        if (tile.hitPoints <= 0) {
+          tile.kind = "mine_dirt";
+          tile.hitPoints = undefined;
+          addItem(state.inventory, createItem(config.item, Math.floor(Math.random() * 2) + 1));
 
-        let gemMsg = "";
-        if (state.inMine && Math.random() < 0.15) {
-          const gemId = rollMineGem(state.mineDepth);
-          if (gemId) {
-            const gemItem = createItem(gemId, 1);
-            if (addItem(state.inventory, gemItem)) {
-              gemMsg = `. Found ${gemItem.name}!`;
+          let gemMsg = "";
+          if (state.inMine && Math.random() < 0.15) {
+            const gemId = rollMineGem(state.mineDepth);
+            if (gemId) {
+              const gemItem = createItem(gemId, 1);
+              if (addItem(state.inventory, gemItem)) {
+                gemMsg = `. Found ${gemItem.name}!`;
+              }
             }
           }
+
+          const lvlMsg = addExperience(state, "mining", config.xp);
+          result.message = `Mined ${config.item.replace("_", " ")}${gemMsg}` + (lvlMsg ? `. ${lvlMsg}` : "");
+        } else {
+          result.message = `Struck ore vein (${tile.hitPoints} HP left)`;
         }
 
-        const lvlMsg = addExperience(state, "mining", config.xp);
-        result.message = `Mined ${config.item.replace("_", " ")}${gemMsg}` + (lvlMsg ? `. ${lvlMsg}` : "");
-
-        for (let i = 0; i < 10; i++) {
+        for (let i = 0; i < 6; i++) {
           result.particles.push({
             x: px,
             y: py,
@@ -997,7 +1427,6 @@ export function interact(state: GameState): { message: string | null; particles:
           });
         }
       } else if (tile.kind === "placed_item" && tile.placedItemId) {
-        // Break sprinklers/fences/chests
         state.energy -= toolEnergyCost;
         const id = tile.placedItemId;
         const itemObj = createItem(id, 1);
@@ -1008,7 +1437,6 @@ export function interact(state: GameState): { message: string | null; particles:
           }
         }
 
-        // Fences return grass backdrop
         tile.kind = "grass";
         tile.placedItemId = undefined;
         tile.chestInventory = undefined;
@@ -1022,20 +1450,29 @@ export function interact(state: GameState): { message: string | null; particles:
         result.message = "No energy!";
         return result;
       }
+      const axeLvl = state.upgrades.axe || 1;
+      const axeDmg = axeLvl === 1 ? 1 : axeLvl === 2 ? 2 : axeLvl === 3 ? 3 : 5;
+
       if (tile.kind === "tree") {
+        if (tile.hitPoints === undefined) tile.hitPoints = 5;
+        tile.hitPoints -= axeDmg;
         state.energy -= toolEnergyCost;
-        tile.kind = "grass";
         gameAudio.playChop();
 
-        addItem(state.inventory, createItem("wood", Math.floor(Math.random() * 4) + 3));
-        // Chance of dropping saplings/apples
-        if (Math.random() < 0.2) {
-          addItem(state.inventory, createItem("parsnip_seed", 1)); // stand in for tree seed
+        if (tile.hitPoints <= 0) {
+          tile.kind = "grass";
+          tile.hitPoints = undefined;
+          addItem(state.inventory, createItem("wood", Math.floor(Math.random() * 4) + 3));
+          if (Math.random() < 0.2) {
+            addItem(state.inventory, createItem("parsnip_seed", 1)); // stand in for tree seed
+          }
+          const lvlMsg = addExperience(state, "farming", 8);
+          result.message = "Chopped down tree" + (lvlMsg ? `. ${lvlMsg}` : "");
+        } else {
+          result.message = `Struck tree (${tile.hitPoints} HP left)`;
         }
-        const lvlMsg = addExperience(state, "farming", 8);
-        result.message = "Chopped down tree" + (lvlMsg ? `. ${lvlMsg}` : "");
 
-        for (let i = 0; i < 10; i++) {
+        for (let i = 0; i < 6; i++) {
           result.particles.push({
             x: px,
             y: py,
@@ -1047,13 +1484,21 @@ export function interact(state: GameState): { message: string | null; particles:
           });
         }
       } else if (tile.kind === "debris_branch") {
+        if (tile.hitPoints === undefined) tile.hitPoints = 2;
+        tile.hitPoints -= axeDmg;
         state.energy -= toolEnergyCost;
-        tile.kind = "grass";
         gameAudio.playChop();
-        addItem(state.inventory, createItem("wood", 2));
-        result.message = "Cleared branch. +2 wood";
 
-        for (let i = 0; i < 6; i++) {
+        if (tile.hitPoints <= 0) {
+          tile.kind = "grass";
+          tile.hitPoints = undefined;
+          addItem(state.inventory, createItem("wood", 2));
+          result.message = "Cleared branch. +2 wood";
+        } else {
+          result.message = `Struck branch (${tile.hitPoints} HP left)`;
+        }
+
+        for (let i = 0; i < 4; i++) {
           result.particles.push({
             x: px,
             y: py,
@@ -1129,9 +1574,47 @@ export function interact(state: GameState): { message: string | null; particles:
     if (tile.kind === "grass" || tile.kind === "mine_dirt" || tile.kind === "soil") {
       tile.kind = "placed_item";
       tile.placedItemId = heldItem.id;
+
       if (heldItem.id === "chest") {
         tile.chestInventory = Array.from({ length: 12 }, () => null);
+      } else if (heldItem.id === "worker_cabin") {
+        tile.chestInventory = Array.from({ length: 12 }, () => null);
+        if (!state.workers) state.workers = [];
+        state.workers.push({
+          id: `worker_${Date.now()}`,
+          name: "Helper Bob",
+          cabinX: f.x,
+          cabinY: f.y,
+          x: f.x,
+          y: f.y,
+          subX: f.x,
+          subY: f.y,
+          task: "idle",
+          energy: 100,
+          hasEatenToday: false,
+          walkTimer: Math.random() * 3 + 2,
+          actionTimer: 0,
+          statusText: "Idle",
+        });
+      } else if (heldItem.id === "pet_bowl_dog" || heldItem.id === "pet_bowl_cat") {
+        if (!state.pets) state.pets = [];
+        const isDog = heldItem.id === "pet_bowl_dog";
+        state.pets.push({
+          id: `pet_${Date.now()}`,
+          type: isDog ? "dog" : "cat",
+          name: isDog ? "Buddy" : "Mimi",
+          x: f.x,
+          y: f.y,
+          subX: f.x,
+          subY: f.y,
+          friendship: 100, // starts with a little friendship
+          pettedToday: false,
+          bowlX: f.x,
+          bowlY: f.y,
+          walkTimer: Math.random() * 3 + 2,
+        });
       }
+
       removeItem(state.inventory, state.hotbarIndex, 1);
       gameAudio.playTill();
       result.message = `Placed ${heldItem.name}`;
@@ -1304,6 +1787,77 @@ export function sleep(state: GameState): void {
     state.mailboxLetters.push(choice);
     state.hasUnreadMail = true;
   }
+
+  // 8. Overnight Pet Updates
+  if (!state.pets) state.pets = [];
+  state.pets.forEach((pet) => {
+    const bowlTile = state.tiles[pet.bowlY]?.[pet.bowlX];
+    if (bowlTile && bowlTile.kind === "placed_item" && (bowlTile.placedItemId === "pet_bowl_dog" || bowlTile.placedItemId === "pet_bowl_cat")) {
+      if (bowlTile.watered) {
+        pet.friendship = Math.min(1000, pet.friendship + 12);
+        bowlTile.watered = false; // consume water
+      } else {
+        pet.friendship = Math.max(0, pet.friendship - 2);
+      }
+    }
+
+    pet.pettedToday = false;
+
+    // Loyalty gift drop (if friendship > 500)
+    if (pet.friendship > 500 && Math.random() < 0.20) {
+      const dirs = [[-1,-1], [-1,0], [-1,1], [0,-1], [0,1], [1,-1], [1,0], [1,1]];
+      for (const [dy, dx] of dirs) {
+        const ny = pet.bowlY + dy, nx = pet.bowlX + dx;
+        if (ny >= 0 && ny < ROWS && nx >= 0 && nx < COLS) {
+          const adjTile = state.tiles[ny][nx];
+          if ((adjTile.kind === "grass" || adjTile.kind === "soil") && !adjTile.placedItemId && !adjTile.cropId) {
+            const gifts = ["clay", "quartz", "fiber", "stone", "wood", "coal"];
+            const giftChoice = gifts[Math.floor(Math.random() * gifts.length)];
+            adjTile.kind = "placed_item";
+            adjTile.placedItemId = giftChoice;
+            break;
+          }
+        }
+      }
+    }
+  });
+
+  // 9. Overnight Worker Updates (Feed checking)
+  if (!state.workers) state.workers = [];
+  state.workers.forEach((worker) => {
+    worker.hasEatenToday = false;
+    const cabinTile = state.tiles[worker.cabinY]?.[worker.cabinX];
+    if (cabinTile && cabinTile.kind === "placed_item" && cabinTile.placedItemId === "worker_cabin" && cabinTile.chestInventory) {
+      const foodIdx = cabinTile.chestInventory.findIndex((item) =>
+        item && (item.type === "crop" || (item.energyRestore && item.energyRestore > 0))
+      );
+
+      if (foodIdx !== -1) {
+        const foodItem = cabinTile.chestInventory[foodIdx]!;
+        foodItem.count -= 1;
+        if (foodItem.count <= 0) {
+          cabinTile.chestInventory[foodIdx] = null;
+        }
+        worker.energy = 100;
+        worker.hasEatenToday = true;
+        worker.statusText = "Sated";
+      } else {
+        worker.energy = Math.max(0, worker.energy - 20);
+        worker.hasEatenToday = false;
+        if (worker.energy === 0) {
+          worker.statusText = "On Strike (No Food!)";
+        } else {
+          worker.statusText = "Hungry";
+        }
+      }
+    } else {
+      worker.energy = Math.max(0, worker.energy - 20);
+      worker.hasEatenToday = false;
+      if (worker.energy === 0) {
+        worker.statusText = "Exhausted";
+      }
+    }
+  });
 
   gameAudio.playSleep();
 }
@@ -1541,6 +2095,33 @@ export function draw(
             ctx.fillStyle = "#7f8c8d";
             ctx.fillRect(px + 20, py + 22, 6, 2); // flag down
           }
+        } else if (id === "pet_bowl_dog" || id === "pet_bowl_cat") {
+          ctx.fillStyle = "#8d6e63"; // brown clay bowl
+          ctx.beginPath();
+          ctx.ellipse(px + 16, py + 22, 9, 5, 0, 0, Math.PI * 2);
+          ctx.fill();
+          if (t.watered) {
+            ctx.fillStyle = "#3498db"; // blue water
+            ctx.beginPath();
+            ctx.ellipse(px + 16, py + 21, 6, 3, 0, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        } else if (id === "worker_cabin") {
+          ctx.fillStyle = "#795548"; // brown log walls
+          ctx.fillRect(px + 2, py + 10, TILE - 4, TILE - 10);
+          ctx.fillStyle = "#5d4037";
+          ctx.fillRect(px + 2, py + 14, TILE - 4, 2);
+          ctx.fillRect(px + 2, py + 20, TILE - 4, 2);
+          ctx.fillRect(px + 2, py + 26, TILE - 4, 2);
+          ctx.fillStyle = "#c62828";
+          ctx.beginPath();
+          ctx.moveTo(px + 16, py + 2);
+          ctx.lineTo(px + 0, py + 10);
+          ctx.lineTo(px + TILE, py + 10);
+          ctx.closePath();
+          ctx.fill();
+          ctx.fillStyle = "#3e2723";
+          ctx.fillRect(px + 12, py + 20, 8, 12);
         }
       }
 
@@ -1622,6 +2203,86 @@ export function draw(
         ctx.font = "bold 9px monospace";
         ctx.fillText("🥛", ax + 12, ay - 4);
       }
+    });
+  }
+
+  // 3b. Draw Farm Pets
+  if (!state.inMine && state.pets) {
+    state.pets.forEach((pet) => {
+      const px = pet.subX * TILE;
+      const py = pet.subY * TILE;
+
+      const squish = 1 + Math.sin(Date.now() / 150 + pet.friendship) * 0.05;
+
+      ctx.save();
+      ctx.translate(px + 16, py + 24);
+      ctx.scale(squish, 2 - squish);
+
+      if (pet.type === "dog") {
+        ctx.fillStyle = "#ffb74d"; // golden/orange dog
+        ctx.fillRect(-6, -10, 12, 10);
+        ctx.fillStyle = "#e65100";
+        ctx.fillRect(-8, -12, 4, 5);
+        ctx.fillRect(4, -12, 4, 5);
+
+        const tailAngle = Math.sin(Date.now() / 80) * 0.3;
+        ctx.save();
+        ctx.translate(-5, -3);
+        ctx.rotate(tailAngle);
+        ctx.fillStyle = "#ffb74d";
+        ctx.fillRect(-4, -2, 4, 3);
+        ctx.restore();
+      } else {
+        ctx.fillStyle = "#b0bec5"; // grey cat
+        ctx.fillRect(-5, -9, 10, 9);
+        ctx.fillStyle = "#37474f";
+        ctx.beginPath();
+        ctx.moveTo(-5, -9);
+        ctx.lineTo(-2, -13);
+        ctx.lineTo(-1, -9);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.moveTo(5, -9);
+        ctx.lineTo(2, -13);
+        ctx.lineTo(1, -9);
+        ctx.fill();
+      }
+
+      ctx.restore();
+
+      if (pet.pettedToday) {
+        ctx.fillStyle = "#fff";
+        ctx.font = "8px monospace";
+        ctx.textAlign = "center";
+        ctx.fillText("❤️", px + 16, py - 4);
+      }
+    });
+  }
+
+  // 3c. Draw Hired Workers
+  if (!state.inMine && state.workers) {
+    state.workers.forEach((worker) => {
+      const wx = worker.subX * TILE;
+      const wy = worker.subY * TILE;
+
+      // Draw worker avatar
+      ctx.fillStyle = "#2196f3"; // shirt
+      ctx.fillRect(wx + 8, wy + 14, 16, 14);
+      ctx.fillStyle = "#8d6e63"; // overalls
+      ctx.fillRect(wx + 10, wy + 24, 12, 8);
+      ctx.fillStyle = "#ffdbac"; // skin
+      ctx.fillRect(wx + 10, wy + 4, 12, 10);
+      ctx.fillStyle = "#f4d03f"; // hat
+      ctx.fillRect(wx + 6, wy + 4, 20, 2);
+      ctx.fillRect(wx + 11, wy, 10, 4);
+
+      // Draw status banner
+      ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
+      ctx.fillRect(wx - 24, wy - 18, TILE + 48, 11);
+      ctx.fillStyle = "#fff";
+      ctx.font = "bold 7px monospace";
+      ctx.textAlign = "center";
+      ctx.fillText(`${worker.name}: ${worker.statusText}`, wx + TILE / 2, wy - 10);
     });
   }
 

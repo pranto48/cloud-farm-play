@@ -590,6 +590,33 @@ export const ITEM_DEFS: Record<string, Omit<Item, "count">> = {
     iconColor: "#ba4a00",
     iconSymbol: "🐮",
   },
+  pet_bowl_dog: {
+    id: "pet_bowl_dog",
+    name: "Dog Bowl",
+    type: "furniture",
+    description: "Place on farm to adopt a loyal Dog.",
+    price: 500,
+    iconColor: "#8d6e63",
+    iconSymbol: "🥣",
+  },
+  pet_bowl_cat: {
+    id: "pet_bowl_cat",
+    name: "Cat Bowl",
+    type: "furniture",
+    description: "Place on farm to adopt a curious Cat.",
+    price: 500,
+    iconColor: "#8d6e63",
+    iconSymbol: "🥣",
+  },
+  worker_cabin: {
+    id: "worker_cabin",
+    name: "Worker Cabin",
+    type: "furniture",
+    description: "Housing for a hired farm hand. Includes a feeding chest.",
+    price: 1000,
+    iconColor: "#a1887f",
+    iconSymbol: "🛖",
+  },
 
   // Tools additions
   milk_pail: {

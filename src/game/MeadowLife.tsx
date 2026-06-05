@@ -19,6 +19,8 @@ import {
   STATIC_POINTS,
   sortInventory,
   quickStackToChest,
+  hasItems,
+  updateEntities,
   type GameState,
   type Tile,
   type Enemy,
@@ -78,6 +80,8 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
   const [mailboxOpen, setMailboxOpen] = useState(false);
   const [readingLetter, setReadingLetter] = useState<MailLetter | null>(null);
 
+  const [selectedWorkerId, setSelectedWorkerId] = useState<string | null>(null);
+
   // Layout toggle settings
   const [useSidebar, setUseSidebar] = useState(true);
 
@@ -91,6 +95,8 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
 
   // Hovered item for tooltips inspection
   const [hoveredItem, setHoveredItem] = useState<Item | null>(null);
+  
+  const chargingToolRef = useRef<{ toolId: string; startTime: number; maxLevel: number } | null>(null);
 
   // Sync isFullscreen with standard document events (e.g. Esc key exits fullscreen)
   useEffect(() => {
@@ -174,22 +180,37 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
       const dt = (now - lastTime) / 1000;
       lastTime = now;
 
-      // Decrement player harvest freezing animation
-      if (stateRef.current.harvestLiftingTimer > 0) {
-        setState((prev) => {
-          const next = structuredClone(prev);
+      setState((prev) => {
+        const next = structuredClone(prev);
+        
+        updateEntities(next, dt);
+
+        next.animals.forEach((animal) => {
+          animal.subX += (animal.x - animal.subX) * 0.08;
+          animal.subY += (animal.y - animal.subY) * 0.08;
+        });
+
+        if (next.pets) {
+          next.pets.forEach((pet) => {
+            pet.subX += (pet.x - pet.subX) * 0.08;
+            pet.subY += (pet.y - pet.subY) * 0.08;
+          });
+        }
+
+        if (next.workers) {
+          next.workers.forEach((worker) => {
+            worker.subX += (worker.x - worker.subX) * 0.08;
+            worker.subY += (worker.y - worker.subY) * 0.08;
+          });
+        }
+
+        if (next.harvestLiftingTimer > 0) {
           next.harvestLiftingTimer = Math.max(0, next.harvestLiftingTimer - dt);
           if (next.harvestLiftingTimer <= 0) {
-            next.carryItem = null; // clear carried item
+            next.carryItem = null;
           }
-          return next;
-        });
-      }
-
-      // Smooth slide animals towards their grid coordinates
-      stateRef.current.animals.forEach((animal) => {
-        animal.subX += (animal.x - animal.subX) * 0.08;
-        animal.subY += (animal.y - animal.subY) * 0.08;
+        }
+        return next;
       });
 
       // Update particles
@@ -289,6 +310,39 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
         ctx.textAlign = "center";
         ctx.fillText(ft.text, ft.x, ft.y);
       });
+
+      if (chargingToolRef.current) {
+        const p = curState.player;
+        const ppx = p.x * TILE + 16;
+        const ppy = p.y * TILE - 8;
+
+        const duration = Date.now() - chargingToolRef.current.startTime;
+        const maxLvl = chargingToolRef.current.maxLevel;
+        const currentLvl = Math.min(maxLvl, Math.floor(duration / 500) + 1);
+        const levelProgress = (duration % 500) / 500;
+
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(ppx, ppy, 8, 0, Math.PI * 2);
+        ctx.strokeStyle = "rgba(0,0,0,0.5)";
+        ctx.lineWidth = 3;
+        ctx.stroke();
+
+        ctx.beginPath();
+        const colors = ["#e74c3c", "#f39c12", "#3498db", "#f1c40f"];
+        ctx.strokeStyle = colors[currentLvl - 1] || "#f1c40f";
+        ctx.lineWidth = 3;
+        const endAngle = (duration >= (maxLvl - 1) * 500) ? Math.PI * 2 : (levelProgress * Math.PI * 2);
+        ctx.arc(ppx, ppy, 8, -Math.PI / 2, -Math.PI / 2 + endAngle);
+        ctx.stroke();
+
+        ctx.fillStyle = "#fff";
+        ctx.font = "bold 8px monospace";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(`L${currentLvl}`, ppx, ppy);
+        ctx.restore();
+      }
 
       // Draw Fishing Minigame HUD overlay on screen if reeling
       if (curState.fishing && curState.fishing.status === "reeling") {
@@ -538,11 +592,11 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
       // Space / E Action Key
       else if (k === "e" || e.code === "Space") {
         e.preventDefault();
-        setIsSpacePressed(true);
 
         const held = curState.inventory[curState.hotbarIndex];
 
         if (held && held.id === "fishing_rod" && !curState.inMine) {
+          setIsSpacePressed(true);
           setState((prev) => {
             const next = structuredClone(prev);
             const f = frontTile(next);
@@ -574,6 +628,24 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
           return;
         }
 
+        // Charged tools logic: Hoe and Watering Can
+        if (held && (held.id === "hoe" || held.id === "watering_can")) {
+          const tId = held.id === "watering_can" ? "watering" : "hoe";
+          const maxLevel = curState.upgrades[tId] || 1;
+          if (maxLevel > 1) {
+            if (!chargingToolRef.current) {
+              chargingToolRef.current = {
+                toolId: held.id,
+                startTime: Date.now(),
+                maxLevel: maxLevel
+              };
+              setIsSpacePressed(true);
+            }
+            return;
+          }
+        }
+
+        setIsSpacePressed(true);
         setState((prev) => {
           const next = structuredClone(prev);
           const act = interact(next);
@@ -618,7 +690,6 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
               gameAudio.playLevelUp();
               toast.success(`You petted ${a.name}! ❤️`);
 
-              // Add heart particles
               for (let i = 0; i < 5; i++) {
                 particlesRef.current.push({
                   x: a.x * TILE + 16,
@@ -634,6 +705,48 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
             }
             return next;
           });
+          return;
+        }
+
+        // Check Pet petting
+        const facingPet = curState.pets?.find((p) => p.x === f.x && p.y === f.y);
+        if (facingPet) {
+          setState((prev) => {
+            const next = structuredClone(prev);
+            if (!next.pets) next.pets = [];
+            const p = next.pets.find((x) => x.id === facingPet.id);
+            if (p) {
+              if (!p.pettedToday) {
+                p.pettedToday = true;
+                p.friendship = Math.min(1000, p.friendship + 10);
+                gameAudio.playLevelUp();
+                toast.success(`You petted ${p.name}! ❤️`);
+
+                for (let i = 0; i < 5; i++) {
+                  particlesRef.current.push({
+                    x: p.x * TILE + 16,
+                    y: p.y * TILE + 16,
+                    vx: (Math.random() * 2 - 1) * 30,
+                    vy: -Math.random() * 40 - 15,
+                    color: "#ff3366",
+                    age: 0,
+                    maxAge: 0.5,
+                    type: "heart",
+                  });
+                }
+              } else {
+                toast(`You already petted ${p.name} today.`);
+              }
+            }
+            return next;
+          });
+          return;
+        }
+
+        // Check Hired Worker interaction
+        const facingWorker = curState.workers?.find((w) => w.x === f.x && w.y === f.y);
+        if (facingWorker) {
+          setSelectedWorkerId(facingWorker.id);
           return;
         }
 
@@ -656,9 +769,8 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
         } else if (curState.tiles[f.y][f.x].kind === "shop") {
           setShopOpen(true);
         } else if (curState.tiles[f.y][f.x].kind === "placed_item" && curState.tiles[f.y][f.x].placedItemId === "mailbox") {
-          // Open Mailbox
           setMailboxOpen(true);
-        } else if (curState.tiles[f.y][f.x].kind === "placed_item" && curState.tiles[f.y][f.x].placedItemId === "chest") {
+        } else if (curState.tiles[f.y][f.x].kind === "placed_item" && (curState.tiles[f.y][f.x].placedItemId === "chest" || curState.tiles[f.y][f.x].placedItemId === "worker_cabin")) {
           setChestOpenTile({ x: f.x, y: f.y });
         } else if (curState.tiles[f.y][f.x].kind === "placed_item" && curState.tiles[f.y][f.x].placedItemId === "chicken_egg") {
           // Collect Chicken Egg
@@ -686,8 +798,39 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
     };
 
     const onKeyUp = (e: KeyboardEvent) => {
-      if (e.code === "Space") {
+      const code = e.code;
+      if (code === "Space" || code === "KeyE") {
         setIsSpacePressed(false);
+
+        if (chargingToolRef.current) {
+          const charging = chargingToolRef.current;
+          const duration = Date.now() - charging.startTime;
+          const chargeLevel = Math.min(charging.maxLevel, Math.floor(duration / 500) + 1);
+
+          setState((prev) => {
+            const next = structuredClone(prev);
+            const act = interact(next, chargeLevel);
+
+            if (act.particles.length > 0) {
+              particlesRef.current = [...particlesRef.current, ...act.particles];
+            }
+
+            if (act.message) {
+              toast(act.message);
+              floatingTextsRef.current.push({
+                x: next.player.x * TILE + 16,
+                y: next.player.y * TILE - 8,
+                text: act.message,
+                color: "#f1c40f",
+                age: 0,
+                maxAge: 0.8,
+              });
+            }
+            return next;
+          });
+
+          chargingToolRef.current = null;
+        }
       }
     };
 
@@ -1002,20 +1145,53 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
     });
   };
 
+  const getUpgradeCost = (toolId: "hoe" | "watering" | "scythe" | "pickaxe", currentLvl: number) => {
+    if (currentLvl === 1) {
+      return { coins: 2000, resourceId: "copper_bar", resourceCount: 5, label: "5x Copper Bar + 2,000g" };
+    } else if (currentLvl === 2) {
+      return { coins: 5000, resourceId: "iron_bar", resourceCount: 5, label: "5x Iron Bar + 5,000g" };
+    } else if (currentLvl === 3) {
+      return { coins: 10000, resourceId: "gold_bar", resourceCount: 5, label: "5x Gold Bar + 10,000g" };
+    }
+    return null;
+  };
+
   const handleUpgrade = (toolId: "hoe" | "watering" | "scythe" | "pickaxe") => {
-    const cost = 120;
-    if (state.coins < cost) {
-      toast.error(`Need ${cost}g to upgrade tools!`);
+    const lvl = state.upgrades[toolId];
+    if (lvl >= 4) {
+      toast.error("Tool is already at maximum level.");
       return;
     }
-    if (state.upgrades[toolId] >= 3) {
-      toast.error("Tool is already at maximum level.");
+
+    const cost = getUpgradeCost(toolId, lvl);
+    if (!cost) return;
+
+    if (state.coins < cost.coins) {
+      toast.error(`Need ${cost.coins}g to upgrade!`);
+      return;
+    }
+
+    if (!hasItems(state.inventory, cost.resourceId, cost.resourceCount)) {
+      toast.error(`Need ${cost.resourceCount}x ${cost.resourceId.replace("_", " ").toUpperCase()} to upgrade!`);
       return;
     }
 
     setState((prev) => {
       const next = structuredClone(prev);
-      next.coins -= cost;
+      next.coins -= cost.coins;
+      // Deduct resource bars
+      let remainingToDeduct = cost.resourceCount;
+      for (let i = 0; i < next.inventory.length; i++) {
+        const slot = next.inventory[i];
+        if (slot && slot.id === cost.resourceId) {
+          const deduct = Math.min(slot.count, remainingToDeduct);
+          slot.count -= deduct;
+          remainingToDeduct -= deduct;
+          if (slot.count <= 0) next.inventory[i] = null;
+          if (remainingToDeduct <= 0) break;
+        }
+      }
+
       next.upgrades[toolId] += 1;
       toast.success(`${toolId.toUpperCase()} upgraded to Level ${next.upgrades[toolId]}!`);
       return next;
@@ -1337,6 +1513,9 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                   { id: "chick", name: "Baby Chick", price: 150, symbol: "🐤" },
                   { id: "calf", name: "Baby Calf", price: 400, symbol: "🐮" },
                   { id: "milk_pail", name: "Milk Pail", price: 30, symbol: "🪣" },
+                  { id: "pet_bowl_dog", name: "Dog Bowl", price: 500, symbol: "🥣" },
+                  { id: "pet_bowl_cat", name: "Cat Bowl", price: 500, symbol: "🥣" },
+                  { id: "worker_cabin", name: "Worker Cabin", price: 1000, symbol: "🛖" },
                 ].map((item) => (
                   <div
                     key={item.id}
@@ -1364,22 +1543,39 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
 
             {/* Tool upgrades */}
             {shopTab === "upgrades" && (
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                 {(["hoe", "watering", "scythe", "pickaxe"] as const).map((tId) => {
                   const lvl = state.upgrades[tId];
+                  const cost = getUpgradeCost(tId, lvl);
                   return (
                     <div
                       key={tId}
-                      className="p-3 bg-stone-950/60 rounded-lg border border-stone-800 flex justify-between items-center text-xs"
+                      className="p-3 bg-stone-950/65 rounded-lg border border-stone-850 flex flex-col justify-between text-xs"
                     >
-                      <span className="capitalize">{tId} (Level {lvl})</span>
+                      <div className="flex justify-between items-center mb-1">
+                        <span className="capitalize font-extrabold text-amber-400">
+                          {tId === "watering" ? "Watering Can" : tId}
+                        </span>
+                        <span className="text-stone-400 font-bold font-mono">Level {lvl}</span>
+                      </div>
+                      
+                      {cost ? (
+                        <div className="text-[10px] text-stone-300 font-mono mb-2 flex flex-col gap-0.5">
+                          <span className="text-stone-500">Requires:</span>
+                          <span className="text-amber-300 font-bold">{cost.label}</span>
+                        </div>
+                      ) : (
+                        <span className="text-[10px] text-emerald-400 font-bold font-mono mb-2">MAX LEVEL (Lv.4) REACHED</span>
+                      )}
+
                       <Button
                         size="xs"
                         variant="outline"
-                        disabled={lvl >= 3}
+                        disabled={lvl >= 4}
+                        className="w-full text-xs bg-[#5d4037]/20 border-stone-850 hover:bg-[#5d4037]/40 font-mono mt-auto"
                         onClick={() => handleUpgrade(tId)}
                       >
-                        {lvl >= 3 ? "MAX" : "Upgrade (120g)"}
+                        {lvl >= 4 ? "MAX" : `Upgrade to Lv.${lvl + 1}`}
                       </Button>
                     </div>
                   );
@@ -1789,7 +1985,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
           <DialogHeader>
             <DialogTitle className="text-lg font-bold flex items-center gap-2 text-amber-500 border-b border-stone-800 pb-2">
               <Compass className="h-5 w-5" />
-              <span>Wooden Chest Storage</span>
+              <span>{state.tiles[chestOpenTile.y][chestOpenTile.x].placedItemId === "worker_cabin" ? "Worker Cabin Feed Box" : "Wooden Chest Storage"}</span>
             </DialogTitle>
           </DialogHeader>
 
@@ -1797,7 +1993,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
             <div className="space-y-4 py-2">
               <div>
                 <div className="flex justify-between items-center mb-2">
-                  <h4 className="text-xs font-bold text-amber-500 font-mono">Chest Contents</h4>
+                  <h4 className="text-xs font-bold text-amber-500 font-mono">{state.tiles[chestOpenTile.y][chestOpenTile.x].placedItemId === "worker_cabin" ? "Cabin Feed Box Contents" : "Chest Contents"}</h4>
                   <div className="flex gap-2">
                     <Button 
                       size="xs" 

@@ -1143,6 +1143,7 @@ export function interact(state: GameState, chargeLevel: number = 1): { message: 
   // 1. Milking Cows logic with milk_pail
   if (heldItem && heldItem.id === "milk_pail") {
     // Check if facing a Calf/Cow animal
+    if (!state.animals) state.animals = [];
     const adjacentAnimal = state.animals.find((a) => {
       const dx = Math.abs(a.x - f.x);
       const dy = Math.abs(a.y - f.y);
@@ -1753,6 +1754,7 @@ export function sleep(state: GameState): void {
   state.player.health = state.player.maxHealth;
 
   // 3. Animal growth, pet count resets, egg/milk produce ticks
+  if (!state.animals) state.animals = [];
   state.animals.forEach((animal) => {
     animal.age += 1;
     animal.petCount = 0; // reset petting
@@ -1862,6 +1864,7 @@ export function sleep(state: GameState): void {
       },
     ];
 
+    if (!state.mailboxLetters) state.mailboxLetters = [];
     const choice = letters[Math.floor(Math.random() * letters.length)];
     state.mailboxLetters.push(choice);
     state.hasUnreadMail = true;
@@ -2238,6 +2241,7 @@ export function draw(
 
   // 3. Draw Farm Animals
   if (!state.inMine) {
+    if (!state.animals) state.animals = [];
     state.animals.forEach((animal) => {
       const ax = animal.x * TILE;
       const ay = animal.y * TILE;

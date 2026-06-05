@@ -186,6 +186,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
         
         updateEntities(next, dt);
 
+        if (!next.animals) next.animals = [];
         next.animals.forEach((animal) => {
           animal.subX += (animal.x - animal.subX) * 0.08;
           animal.subY += (animal.y - animal.subY) * 0.08;
@@ -213,6 +214,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
         }
         return next;
       });
+
 
       // Update particles
       particlesRef.current = particlesRef.current

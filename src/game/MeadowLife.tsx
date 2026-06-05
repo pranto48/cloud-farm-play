@@ -17,6 +17,8 @@ import {
   shipItem,
   generateMineFloor,
   STATIC_POINTS,
+  sortInventory,
+  quickStackToChest,
   type GameState,
   type Tile,
   type Enemy,
@@ -37,7 +39,7 @@ import {
   Coins, Sprout, Wheat, Bed, Hammer, Droplets, Scissors, Pickaxe,
   Heart, ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Hand, Swords,
   Volume2, VolumeX, Backpack, HelpCircle, Compass, Shield, MapPin, X,
-  Mail, Calendar, Trophy
+  Mail, Calendar, Trophy, Maximize, Minimize
 } from "lucide-react";
 import {
   Dialog,
@@ -81,6 +83,65 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
 
   // Audio mute
   const [muted, setMuted] = useState(gameAudio.isMuted());
+
+  // Fullscreen state and canvas size
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [canvasSize, setCanvasSize] = useState({ width: 704, height: 480 });
+  const mainContainerRef = useRef<HTMLDivElement | null>(null);
+
+  // Hovered item for tooltips inspection
+  const [hoveredItem, setHoveredItem] = useState<Item | null>(null);
+
+  // Sync isFullscreen with standard document events (e.g. Esc key exits fullscreen)
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      const isCurrentlyFullscreen = !!document.fullscreenElement;
+      setIsFullscreen(isCurrentlyFullscreen);
+      if (!isCurrentlyFullscreen) {
+        setCanvasSize({ width: 704, height: 480 });
+      }
+    };
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+    return () => {
+      document.removeEventListener("fullscreenchange", handleFullscreenChange);
+    };
+  }, []);
+
+  // Update canvas size dynamically when fullscreen is active
+  useEffect(() => {
+    if (!isFullscreen) {
+      setCanvasSize({ width: 704, height: 480 });
+      return;
+    }
+
+    const updateSize = () => {
+      const sidebarWidth = useSidebar ? 80 : 0;
+      const w = Math.max(704, window.innerWidth - sidebarWidth - 48);
+      const h = Math.max(480, window.innerHeight - 150);
+      setCanvasSize({ width: w, height: h });
+    };
+
+    updateSize();
+    window.addEventListener("resize", updateSize);
+    return () => {
+      window.removeEventListener("resize", updateSize);
+    };
+  }, [isFullscreen, useSidebar]);
+
+  const toggleFullscreen = async () => {
+    if (!mainContainerRef.current) return;
+    try {
+      if (!document.fullscreenElement) {
+        await mainContainerRef.current.requestFullscreen();
+        setIsFullscreen(true);
+      } else {
+        await document.exitFullscreen();
+        setIsFullscreen(false);
+      }
+    } catch (err) {
+      console.error("Error attempting to toggle fullscreen:", err);
+    }
+  };
 
   // Inventory holding slot
   const [heldItem, setHeldItem] = useState<{ item: Item; originalSlot: number; source: "inventory" | "chest" } | null>(null);
@@ -188,22 +249,22 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
       }
 
       // Draw game onto canvas
-      draw(ctx, stateRef.current, 704, 480);
+      draw(ctx, stateRef.current, canvasSize.width, canvasSize.height);
 
       // Draw particle overlay
       ctx.save();
       const cameraX = Math.max(
         0,
         Math.min(
-          (stateRef.current.inMine ? 24 : COLS) * TILE - 704,
-          stateRef.current.player.x * TILE + 16 - 352
+          (stateRef.current.inMine ? 24 : COLS) * TILE - canvasSize.width,
+          stateRef.current.player.x * TILE + 16 - canvasSize.width / 2
         )
       );
       const cameraY = Math.max(
         0,
         Math.min(
-          (stateRef.current.inMine ? 24 : ROWS) * TILE - 480,
-          stateRef.current.player.y * TILE + 16 - 240
+          (stateRef.current.inMine ? 24 : ROWS) * TILE - canvasSize.height,
+          stateRef.current.player.y * TILE + 16 - canvasSize.height / 2
         )
       );
       ctx.translate(-cameraX, -cameraY);
@@ -234,8 +295,8 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
         ctx.restore();
         ctx.save();
 
-        const HUD_X = 540;
-        const HUD_Y = 100;
+        const HUD_X = canvasSize.width - 164;
+        const HUD_Y = Math.max(40, canvasSize.height / 2 - 120);
         const HUD_W = 40;
         const HUD_H = 240;
 
@@ -275,7 +336,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
 
     raf = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(raf);
-  }, [isSpacePressed]);
+  }, [isSpacePressed, canvasSize]);
 
   // Slime enemy AI movements (runs in Mine every 1.5 seconds)
   useEffect(() => {
@@ -773,6 +834,103 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
     });
   };
 
+  const handleSortInventory = () => {
+    setState((prev) => {
+      const next = structuredClone(prev);
+      next.inventory = sortInventory(next.inventory);
+      toast.success("Bag inventory sorted!");
+      return next;
+    });
+  };
+
+  const handleSortChest = () => {
+    if (!chestOpenTile) return;
+    setState((prev) => {
+      const next = structuredClone(prev);
+      const chestTile = next.tiles[chestOpenTile.y][chestOpenTile.x];
+      if (chestTile.chestInventory) {
+        chestTile.chestInventory = sortInventory(chestTile.chestInventory);
+        toast.success("Chest inventory sorted!");
+      }
+      return next;
+    });
+  };
+
+  const handleQuickStack = () => {
+    if (!chestOpenTile) return;
+    setState((prev) => {
+      const next = structuredClone(prev);
+      const chestTile = next.tiles[chestOpenTile.y][chestOpenTile.x];
+      if (chestTile.chestInventory) {
+        const moved = quickStackToChest(next.inventory, chestTile.chestInventory);
+        if (moved) {
+          toast.success("Matching stacks transferred to chest!");
+          gameAudio.playCoin();
+        } else {
+          toast.info("No matching stacks to transfer.");
+        }
+      }
+      return next;
+    });
+  };
+
+  const handleSlotRightClick = (e: React.MouseEvent, index: number, source: "inventory" | "chest") => {
+    e.preventDefault(); // Prevent context menu
+    const curGrid = state.inventory;
+    const chestGrid = chestOpenTile ? state.tiles[chestOpenTile.y][chestOpenTile.x].chestInventory : null;
+
+    if (heldItem === null) {
+      const item = source === "inventory" ? curGrid[index] : chestGrid?.[index];
+      if (item && item.count > 1 && item.type !== "tool" && item.type !== "weapon") {
+        const halfCount = Math.ceil(item.count / 2);
+        const remainCount = item.count - halfCount;
+
+        const heldObj = { ...item, count: halfCount };
+        setHeldItem({ item: heldObj, originalSlot: index, source });
+
+        setState((prev) => {
+          const next = structuredClone(prev);
+          const targetInv = source === "inventory" ? next.inventory : next.tiles[chestOpenTile!.y][chestOpenTile!.x].chestInventory!;
+          if (remainCount <= 0) {
+            targetInv[index] = null;
+          } else {
+            targetInv[index]!.count = remainCount;
+          }
+          return next;
+        });
+      } else if (item) {
+        // If it's 1 item or a non-stackable tool, treat like normal click
+        handleSlotClick(index, source);
+      }
+    } else {
+      // Place exactly 1 item from held stack
+      setState((prev) => {
+        const next = structuredClone(prev);
+        const targetInv = source === "inventory" ? next.inventory : next.tiles[chestOpenTile!.y][chestOpenTile!.x].chestInventory!;
+        const targetItem = targetInv[index];
+
+        if (targetItem === null) {
+          targetInv[index] = { ...heldItem.item, count: 1 };
+          setHeldItem((prevHeld) => {
+            if (!prevHeld) return null;
+            const newCount = prevHeld.item.count - 1;
+            if (newCount <= 0) return null;
+            return { ...prevHeld, item: { ...prevHeld.item, count: newCount } };
+          });
+        } else if (targetItem.id === heldItem.item.id && targetItem.type !== "tool" && targetItem.type !== "weapon") {
+          targetItem.count += 1;
+          setHeldItem((prevHeld) => {
+            if (!prevHeld) return null;
+            const newCount = prevHeld.item.count - 1;
+            if (newCount <= 0) return null;
+            return { ...prevHeld, item: { ...prevHeld.item, count: newCount } };
+          });
+        }
+        return next;
+      });
+    }
+  };
+
   // Give item to NPC
   const handleGiveGift = () => {
     if (!npcDialogue) return;
@@ -875,9 +1033,16 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
   };
 
   return (
-    <div className="flex flex-col items-center gap-4 w-full max-w-4xl px-2">
+    <div 
+      ref={mainContainerRef} 
+      className={`flex flex-col items-center gap-4 w-full px-2 transition-all duration-300 ${
+        isFullscreen 
+          ? "bg-[#18110e] p-6 justify-center min-h-screen text-stone-200" 
+          : "max-w-4xl"
+      }`}
+    >
       {/* 1. STARDEW-STYLE WATCH CLOCK HUD & WEATHER DIAL (TOP RIGHT STYLING) */}
-      <div className="flex flex-wrap items-center justify-between w-full p-4 bg-[#3e2723] rounded-lg border-4 border-[#5d4037] shadow-xl gap-3 text-white">
+      <div className={`flex flex-wrap items-center justify-between w-full p-4 bg-[#3e2723] rounded-lg border-4 border-[#5d4037] shadow-xl gap-3 text-white ${isFullscreen ? "max-w-none" : ""}`}>
         <div className="flex items-center gap-3">
           {/* Classic circular weather/watch face dial */}
           <div className="flex h-14 w-14 items-center justify-center rounded-full border-4 border-amber-400 bg-cyan-900 shadow-inner text-2xl font-bold animate-pulse">
@@ -907,6 +1072,11 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
         )}
 
         <div className="flex items-center gap-2">
+          {/* Fullscreen toggle */}
+          <Button size="icon" variant="outline" className="bg-[#5d4037] border-stone-800 text-stone-100 hover:bg-[#7c5a3c]" onClick={toggleFullscreen}>
+            {isFullscreen ? <Minimize className="h-4 w-4" /> : <Maximize className="h-4 w-4" />}
+          </Button>
+
           {/* Mute toggle */}
           <Button size="icon" variant="outline" className="bg-[#5d4037] border-stone-800 text-stone-100 hover:bg-[#7c5a3c]" onClick={() => setMuted(gameAudio.toggleMute())}>
             {muted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
@@ -921,7 +1091,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
       </div>
 
       {/* 2. MAIN LAYOUT: VERTICAL SIDEBAR TOOL BELT + CANVAS FRAME CONTAINER */}
-      <div className="flex flex-row items-start justify-center gap-3 w-full" style={{ maxWidth: "760px" }}>
+      <div className="flex flex-row items-start justify-center gap-3 w-full" style={{ maxWidth: isFullscreen ? "none" : "760px" }}>
         {/* Left vertical Stardew tool-belt sidebar */}
         {useSidebar && (
           <div className="flex flex-col gap-1.5 bg-[#3e2723] p-2 rounded-xl border-4 border-[#5d4037] shadow-xl w-16 shrink-0">
@@ -961,11 +1131,17 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
         )}
 
         {/* Game Screen Frame */}
-        <div className="relative overflow-hidden rounded-xl border-4 border-[#3e2723] bg-black shadow-2xl flex-1 max-w-[704px]" style={{ height: "480px" }}>
+        <div 
+          className="relative overflow-hidden rounded-xl border-4 border-[#3e2723] bg-black shadow-2xl flex-1" 
+          style={{ 
+            height: `${canvasSize.height}px`,
+            maxWidth: isFullscreen ? "none" : "704px" 
+          }}
+        >
           <canvas
             ref={canvasRef}
-            width={704}
-            height={480}
+            width={canvasSize.width}
+            height={canvasSize.height}
             style={{ width: "100%", height: "100%", display: "block", imageRendering: "pixelated" }}
           />
 
@@ -1033,7 +1209,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
 
       {/* If bottom hotbar chosen instead */}
       {!useSidebar && (
-        <div className="flex flex-col items-center gap-1.5 w-full max-w-[704px]">
+        <div className="flex flex-col items-center gap-1.5 w-full" style={{ maxWidth: isFullscreen ? "none" : "704px" }}>
           <div className="grid grid-cols-8 gap-1 w-full bg-[#3e2723] p-1.5 rounded-lg border-2 border-[#5d4037]">
             {state.inventory.slice(0, 8).map((item, idx) => {
               const selected = state.hotbarIndex === idx;
@@ -1381,12 +1557,25 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
 
           <div className="py-2 min-h-[250px] max-h-[330px] overflow-y-auto">
             {activeTab === "inventory" && (
-              <div className="space-y-4">
+              <div className="space-y-3">
+                <div className="flex justify-end">
+                  <Button 
+                    size="xs" 
+                    variant="outline" 
+                    className="text-[10px] h-6 px-2.5 bg-[#5d4037]/20 border-stone-850 text-stone-300 hover:bg-[#5d4037]/40 font-mono" 
+                    onClick={handleSortInventory}
+                  >
+                    Sort Inventory
+                  </Button>
+                </div>
                 <div className="grid grid-cols-6 gap-2 bg-[#2d1e18] p-3 rounded-lg border border-stone-800">
                   {state.inventory.map((item, idx) => (
                     <button
                       key={idx}
                       onClick={() => handleSlotClick(idx, "inventory")}
+                      onContextMenu={(e) => handleSlotRightClick(e, idx, "inventory")}
+                      onMouseEnter={() => item && setHoveredItem(item)}
+                      onMouseLeave={() => setHoveredItem(null)}
                       className={`relative flex items-center justify-center h-14 rounded border transition-all ${
                         item
                           ? "bg-[#7c5a3c]/20 hover:bg-[#7c5a3c]/40 border-stone-700"
@@ -1408,12 +1597,41 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                     </button>
                   ))}
                 </div>
+
                 {heldItem && (
-                  <div className="p-2.5 bg-amber-500/10 border border-amber-500/20 rounded-md text-xs text-amber-400 flex items-center justify-between font-mono">
+                  <div className="p-2 bg-amber-500/10 border border-amber-500/20 rounded-md text-[10px] text-amber-400 flex items-center justify-between font-mono">
                     <span>Holding: {heldItem.item.name} ({heldItem.item.count}x)</span>
-                    <Button size="xs" variant="outline" className="text-xs" onClick={() => setHeldItem(null)}>
+                    <Button size="xs" variant="outline" className="text-[10px] h-5 px-1.5" onClick={() => setHeldItem(null)}>
                       Clear
                     </Button>
+                  </div>
+                )}
+
+                {/* Detailed Hover Inspection Tooltip */}
+                {hoveredItem ? (
+                  <div className="p-2.5 bg-stone-950/80 border border-[#5d4037] rounded-lg flex items-start gap-2.5 transition-all">
+                    <span className="text-2xl bg-stone-900 p-1 rounded">{hoveredItem.iconSymbol || "🎁"}</span>
+                    <div className="flex-1 text-[11px] leading-snug">
+                      <div className="flex justify-between items-center font-mono">
+                        <span className="font-extrabold text-amber-400">{hoveredItem.name}</span>
+                        {hoveredItem.price > 0 && <span className="font-bold text-yellow-500">{hoveredItem.price}g</span>}
+                      </div>
+                      <p className="text-stone-300 text-[10px] mt-0.5 font-mono">{hoveredItem.description}</p>
+                      {(hoveredItem.energyRestore !== undefined || hoveredItem.healthRestore !== undefined) && (
+                        <div className="flex gap-2 mt-1 text-[9px] font-bold font-mono">
+                          {hoveredItem.energyRestore !== undefined && hoveredItem.energyRestore !== 0 && (
+                            <span className="text-emerald-400">⚡ Energy: {hoveredItem.energyRestore > 0 ? "+" : ""}{hoveredItem.energyRestore}</span>
+                          )}
+                          {hoveredItem.healthRestore !== undefined && hoveredItem.healthRestore !== 0 && (
+                            <span className="text-red-400">❤️ Health: {hoveredItem.healthRestore > 0 ? "+" : ""}{hoveredItem.healthRestore}</span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-2 bg-stone-950/20 border border-dashed border-stone-850 rounded-lg text-center text-stone-500 text-[10px] py-3 font-mono">
+                    Hover over an item to inspect details. Right-click to split stacks.
                   </div>
                 )}
               </div>
@@ -1578,7 +1796,27 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
           {chestOpenTile && (
             <div className="space-y-4 py-2">
               <div>
-                <h4 className="text-xs font-bold text-amber-500 mb-2">Chest Contents</h4>
+                <div className="flex justify-between items-center mb-2">
+                  <h4 className="text-xs font-bold text-amber-500 font-mono">Chest Contents</h4>
+                  <div className="flex gap-2">
+                    <Button 
+                      size="xs" 
+                      variant="outline" 
+                      className="text-[10px] h-6 px-2 bg-[#5d4037]/20 border-stone-850 text-stone-300 hover:bg-[#5d4037]/40 font-mono" 
+                      onClick={handleSortChest}
+                    >
+                      Sort Chest
+                    </Button>
+                    <Button 
+                      size="xs" 
+                      variant="outline" 
+                      className="text-[10px] h-6 px-2 bg-[#5d4037]/20 border-stone-850 text-stone-300 hover:bg-[#5d4037]/40 font-mono" 
+                      onClick={handleQuickStack}
+                    >
+                      Quick Stack
+                    </Button>
+                  </div>
+                </div>
                 <div className="grid grid-cols-6 gap-2 bg-[#2d1e18] p-3 rounded-lg border border-stone-800">
                   {(
                     state.tiles[chestOpenTile.y][chestOpenTile.x].chestInventory || []
@@ -1586,6 +1824,9 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                     <button
                       key={idx}
                       onClick={() => handleSlotClick(idx, "chest")}
+                      onContextMenu={(e) => handleSlotRightClick(e, idx, "chest")}
+                      onMouseEnter={() => item && setHoveredItem(item)}
+                      onMouseLeave={() => setHoveredItem(null)}
                       className={`relative flex items-center justify-center h-12 rounded border transition-all ${
                         item
                           ? "bg-[#7c5a3c]/20 hover:bg-[#7c5a3c]/40 border-stone-700"
@@ -1610,12 +1851,25 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
               </div>
 
               <div>
-                <h4 className="text-xs font-bold text-stone-400 mb-2">Your Pack Pack</h4>
+                <div className="flex justify-between items-center mb-2">
+                  <h4 className="text-xs font-bold text-stone-400 font-mono">Your Pack Pack</h4>
+                  <Button 
+                    size="xs" 
+                    variant="outline" 
+                    className="text-[10px] h-6 px-2 bg-[#5d4037]/20 border-stone-850 text-stone-300 hover:bg-[#5d4037]/40 font-mono" 
+                    onClick={handleSortInventory}
+                  >
+                    Sort Inventory
+                  </Button>
+                </div>
                 <div className="grid grid-cols-6 gap-2 bg-stone-950/55 p-3 rounded-lg border border-stone-850">
                   {state.inventory.map((item, idx) => (
                     <button
                       key={idx}
                       onClick={() => handleSlotClick(idx, "inventory")}
+                      onContextMenu={(e) => handleSlotRightClick(e, idx, "inventory")}
+                      onMouseEnter={() => item && setHoveredItem(item)}
+                      onMouseLeave={() => setHoveredItem(null)}
                       className={`relative flex items-center justify-center h-12 rounded border transition-all ${
                         item
                           ? "bg-[#7c5a3c]/15 hover:bg-[#7c5a3c]/35 border-stone-850"
@@ -1638,6 +1892,34 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                   ))}
                 </div>
               </div>
+
+              {/* Detailed Hover Inspection Tooltip */}
+              {hoveredItem ? (
+                <div className="p-2.5 bg-stone-950/80 border border-[#5d4037] rounded-lg flex items-start gap-2.5 transition-all">
+                  <span className="text-2xl bg-stone-900 p-1 rounded">{hoveredItem.iconSymbol || "🎁"}</span>
+                  <div className="flex-1 text-[11px] leading-snug">
+                    <div className="flex justify-between items-center font-mono">
+                      <span className="font-extrabold text-amber-400">{hoveredItem.name}</span>
+                      {hoveredItem.price > 0 && <span className="font-bold text-yellow-500">{hoveredItem.price}g</span>}
+                    </div>
+                    <p className="text-stone-300 text-[10px] mt-0.5 font-mono">{hoveredItem.description}</p>
+                    {(hoveredItem.energyRestore !== undefined || hoveredItem.healthRestore !== undefined) && (
+                      <div className="flex gap-2 mt-1 text-[9px] font-bold font-mono">
+                        {hoveredItem.energyRestore !== undefined && hoveredItem.energyRestore !== 0 && (
+                          <span className="text-emerald-400">⚡ Energy: {hoveredItem.energyRestore > 0 ? "+" : ""}{hoveredItem.energyRestore}</span>
+                        )}
+                        {hoveredItem.healthRestore !== undefined && hoveredItem.healthRestore !== 0 && (
+                          <span className="text-red-400">❤️ Health: {hoveredItem.healthRestore > 0 ? "+" : ""}{hoveredItem.healthRestore}</span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="p-2 bg-stone-950/20 border border-dashed border-stone-850 rounded-lg text-center text-stone-500 text-[10px] py-3 font-mono">
+                  Hover over an item to inspect details. Right-click to split stacks.
+                </div>
+              )}
             </div>
           )}
 

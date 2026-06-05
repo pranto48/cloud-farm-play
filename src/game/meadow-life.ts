@@ -1827,3 +1827,40 @@ export function draw(
     }
   }
 }
+
+export function sortInventory(inventory: (Item | null)[]): (Item | null)[] {
+  const items = inventory.filter((item): item is Item => item !== null);
+  const typeOrder = ["tool", "weapon", "seed", "crop", "fish", "resource", "furniture", "trash"];
+  items.sort((a, b) => {
+    const indexA = typeOrder.indexOf(a.type);
+    const indexB = typeOrder.indexOf(b.type);
+    if (indexA !== indexB) {
+      return indexA - indexB;
+    }
+    return a.name.localeCompare(b.name);
+  });
+  const newInventory = Array(inventory.length).fill(null);
+  for (let i = 0; i < items.length; i++) {
+    newInventory[i] = items[i];
+  }
+  return newInventory;
+}
+
+export function quickStackToChest(playerInv: (Item | null)[], chestInv: (Item | null)[]): boolean {
+  let movedAny = false;
+  for (let i = 0; i < playerInv.length; i++) {
+    const pItem = playerInv[i];
+    if (pItem && pItem.type !== "tool" && pItem.type !== "weapon" && pItem.type !== "furniture") {
+      for (let j = 0; j < chestInv.length; j++) {
+        const cItem = chestInv[j];
+        if (cItem && cItem.id === pItem.id) {
+          cItem.count += pItem.count;
+          playerInv[i] = null;
+          movedAny = true;
+          break;
+        }
+      }
+    }
+  }
+  return movedAny;
+}

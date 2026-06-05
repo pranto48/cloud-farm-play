@@ -1988,20 +1988,22 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
       </Dialog>
 
       {/* E. CHEST STORAGE INTERFACE */}
-      <Dialog open={chestOpenTile !== null} onOpenChange={() => setChestOpenTile(null)}>
+      {chestOpenTile && (
+      <Dialog open={true} onOpenChange={() => setChestOpenTile(null)}>
         <DialogContent className="max-w-md bg-stone-900 border-stone-850 text-stone-100">
           <DialogHeader>
             <DialogTitle className="text-lg font-bold flex items-center gap-2 text-amber-500 border-b border-stone-800 pb-2">
               <Compass className="h-5 w-5" />
-              <span>{state.tiles[chestOpenTile.y][chestOpenTile.x].placedItemId === "worker_cabin" ? "Worker Cabin Feed Box" : "Wooden Chest Storage"}</span>
+              <span>{state.tiles[chestOpenTile.y]?.[chestOpenTile.x]?.placedItemId === "worker_cabin" ? "Worker Cabin Feed Box" : "Wooden Chest Storage"}</span>
             </DialogTitle>
           </DialogHeader>
+
 
           {chestOpenTile && (
             <div className="space-y-4 py-2">
               <div>
                 <div className="flex justify-between items-center mb-2">
-                  <h4 className="text-xs font-bold text-amber-500 font-mono">{state.tiles[chestOpenTile.y][chestOpenTile.x].placedItemId === "worker_cabin" ? "Cabin Feed Box Contents" : "Chest Contents"}</h4>
+                  <h4 className="text-xs font-bold text-amber-500 font-mono">{state.tiles[chestOpenTile.y]?.[chestOpenTile.x]?.placedItemId === "worker_cabin" ? "Cabin Feed Box Contents" : "Chest Contents"}</h4>
                   <div className="flex gap-2">
                     <Button 
                       size="xs" 
@@ -2023,7 +2025,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                 </div>
                 <div className="grid grid-cols-6 gap-2 bg-[#2d1e18] p-3 rounded-lg border border-stone-800">
                   {(
-                    state.tiles[chestOpenTile.y][chestOpenTile.x].chestInventory || []
+                    state.tiles[chestOpenTile.y]?.[chestOpenTile.x]?.chestInventory || []
                   ).map((item, idx) => (
                     <button
                       key={idx}
@@ -2134,8 +2136,10 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      )}
 
       {/* F. NPC DIALOG OVERLAY */}
+
       <Dialog open={npcDialogue !== null} onOpenChange={() => setNpcDialogue(null)}>
         {npcDialogue && (
           <DialogContent className="max-w-md bg-stone-900 border-stone-850 text-stone-100">

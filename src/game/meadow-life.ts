@@ -2452,26 +2452,34 @@ export function draw(
 
   // 6. Draw Player
   const walkBob = Math.sin(Date.now() / 100) * 1.5;
+  // Legs / pants
   ctx.fillStyle = "#2c3e50";
-  ctx.fillRect(px + 9 - cameraX, py + 18 - cameraY, 14, 8);
+  ctx.fillRect(playerPx - 7 - cameraX, playerPy + 10 - cameraY, 6, 8);
+  ctx.fillRect(playerPx + 1 - cameraX, playerPy + 10 - cameraY, 6, 8);
+  // Body / shirt
   ctx.fillStyle = "#e74c3c";
-  ctx.fillRect(px + 8 - cameraX, py + 8 + walkBob - cameraY, 16, 11);
+  ctx.fillRect(playerPx - 8 - cameraX, playerPy - 4 + walkBob - cameraY, 16, 14);
+  // Head / skin
   ctx.fillStyle = "#f5d0a9";
-  ctx.fillRect(px + 10 - cameraX, py + 2 + walkBob - cameraY, 12, 8);
+  ctx.fillRect(playerPx - 6 - cameraX, playerPy - 14 + walkBob - cameraY, 12, 10);
+  // Hat
   ctx.fillStyle = "#8a5a3b";
-  ctx.fillRect(px + 9 - cameraX, py + walkBob - cameraY, 14, 3);
+  ctx.fillRect(playerPx - 7 - cameraX, playerPy - 16 + walkBob - cameraY, 14, 3);
+  ctx.fillRect(playerPx - 5 - cameraX, playerPy - 19 + walkBob - cameraY, 10, 4);
 
+  // Face / direction eyes
   ctx.fillStyle = "#000";
   if (p.dir === "down") {
-    ctx.fillRect(px + 12 - cameraX, py + 6 + walkBob - cameraY, 2, 2);
-    ctx.fillRect(px + 18 - cameraX, py + 6 + walkBob - cameraY, 2, 2);
+    ctx.fillRect(playerPx - 3 - cameraX, playerPy - 9 + walkBob - cameraY, 2, 2);
+    ctx.fillRect(playerPx + 1 - cameraX, playerPy - 9 + walkBob - cameraY, 2, 2);
   } else if (p.dir === "up") {
+    // back of head - show hair only
     ctx.fillStyle = "#8a5a3b";
-    ctx.fillRect(px + 10 - cameraX, py + 2 + walkBob - cameraY, 12, 6);
+    ctx.fillRect(playerPx - 6 - cameraX, playerPy - 14 + walkBob - cameraY, 12, 8);
   } else if (p.dir === "left") {
-    ctx.fillRect(px + 11 - cameraX, py + 6 + walkBob - cameraY, 2, 2);
+    ctx.fillRect(playerPx - 4 - cameraX, playerPy - 9 + walkBob - cameraY, 2, 2);
   } else if (p.dir === "right") {
-    ctx.fillRect(px + 19 - cameraX, py + 6 + walkBob - cameraY, 2, 2);
+    ctx.fillRect(playerPx + 2 - cameraX, playerPy - 9 + walkBob - cameraY, 2, 2);
   }
 
   // 7. Draw carry item above head (Lifting animation)

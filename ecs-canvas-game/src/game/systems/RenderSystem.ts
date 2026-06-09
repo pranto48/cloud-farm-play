@@ -11,11 +11,16 @@ export class RenderSystem extends System {
   readonly requiredComponents = [PositionComponent, RenderComponent];
   private time: number = 0;
 
+  private canvas: HTMLCanvasElement;
+  private ctx: CanvasRenderingContext2D;
+
   constructor(
-    private canvas: HTMLCanvasElement,
-    private ctx: CanvasRenderingContext2D
+    canvas: HTMLCanvasElement,
+    ctx: CanvasRenderingContext2D
   ) {
     super();
+    this.canvas = canvas;
+    this.ctx = ctx;
   }
 
   update(world: World, dt: number): void {

@@ -31,7 +31,6 @@ export class CollisionSystem extends System {
     const playerEntity = playerEntities[0];
     const playerPos = world.getComponent(playerEntity, PositionComponent)!;
     const playerComp = world.getComponent(playerEntity, PlayerComponent)!;
-    const playerCollider = world.getComponent(playerEntity, ColliderComponent)!;
 
     // 2. Gem Magnet pull check
     const gems = world.getEntitiesWith([GemComponent, PositionComponent, ColliderComponent]);
@@ -75,7 +74,7 @@ export class CollisionSystem extends System {
 
         if (dist < minDist) {
           // Resolve A and B collisions
-          this.resolveCollision(world, entA, colA, posA, entB, colB, posB, toDestroy, playerComp, playerPos, playerCollider);
+          this.resolveCollision(world, entA, colA, posA, entB, colB, posB, toDestroy, playerComp, playerPos);
         }
       }
     }
@@ -96,8 +95,7 @@ export class CollisionSystem extends System {
     posB: PositionComponent,
     toDestroy: Set<string>,
     player: PlayerComponent,
-    playerPos: PositionComponent,
-    playerCollider: ColliderComponent
+    playerPos: PositionComponent
   ): void {
     const typeA = colA.type;
     const typeB = colB.type;

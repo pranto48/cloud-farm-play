@@ -1,20 +1,38 @@
 import { Component } from "../ecs/Component";
 
 export class PositionComponent extends Component {
-  constructor(public x: number = 0, public y: number = 0) {
+  public x: number;
+  public y: number;
+
+  constructor(x: number = 0, y: number = 0) {
     super();
+    this.x = x;
+    this.y = y;
   }
 }
 
 export class VelocityComponent extends Component {
-  constructor(public vx: number = 0, public vy: number = 0) {
+  public vx: number;
+  public vy: number;
+
+  constructor(vx: number = 0, vy: number = 0) {
     super();
+    this.vx = vx;
+    this.vy = vy;
   }
 }
 
 export class RenderComponent extends Component {
+  public draw: (
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    time: number,
+    entityId: string
+  ) => void;
+
   constructor(
-    public draw: (
+    draw: (
       ctx: CanvasRenderingContext2D,
       x: number,
       y: number,
@@ -23,6 +41,7 @@ export class RenderComponent extends Component {
     ) => void
   ) {
     super();
+    this.draw = draw;
   }
 }
 
@@ -31,76 +50,137 @@ export class InputComponent extends Component {
   public mouseX: number = 0;
   public mouseY: number = 0;
   public mouseClicked: boolean = false;
+  
   constructor() {
     super();
   }
 }
 
 export class PlayerComponent extends Component {
+  public hp: number;
+  public maxHp: number;
+  public score: number;
+  public level: number;
+  public xp: number;
+  public maxXp: number;
+  public fireRateTimer: number;
+  public damageFlashTimer: number;
+  public levelUpFlashTimer: number;
+
   constructor(
-    public hp: number = 100,
-    public maxHp: number = 100,
-    public score: number = 0,
-    public level: number = 1,
-    public xp: number = 0,
-    public maxXp: number = 100,
-    public fireRateTimer: number = 0,
-    public damageFlashTimer: number = 0,
-    public levelUpFlashTimer: number = 0
+    hp: number = 100,
+    maxHp: number = 100,
+    score: number = 0,
+    level: number = 1,
+    xp: number = 0,
+    maxXp: number = 100,
+    fireRateTimer: number = 0,
+    damageFlashTimer: number = 0,
+    levelUpFlashTimer: number = 0
   ) {
     super();
+    this.hp = hp;
+    this.maxHp = maxHp;
+    this.score = score;
+    this.level = level;
+    this.xp = xp;
+    this.maxXp = maxXp;
+    this.fireRateTimer = fireRateTimer;
+    this.damageFlashTimer = damageFlashTimer;
+    this.levelUpFlashTimer = levelUpFlashTimer;
   }
 }
 
 export class MonsterComponent extends Component {
+  public hp: number;
+  public maxHp: number;
+  public speed: number;
+  public damage: number;
+  public damageCooldown: number;
+
   constructor(
-    public hp: number = 15,
-    public maxHp: number = 15,
-    public speed: number = 55,
-    public damage: number = 10,
-    public damageCooldown: number = 0
+    hp: number = 15,
+    maxHp: number = 15,
+    speed: number = 55,
+    damage: number = 10,
+    damageCooldown: number = 0
   ) {
     super();
+    this.hp = hp;
+    this.maxHp = maxHp;
+    this.speed = speed;
+    this.damage = damage;
+    this.damageCooldown = damageCooldown;
   }
 }
 
 export class ProjectileComponent extends Component {
+  public damage: number;
+  public speed: number;
+  public lifeSpan: number;
+
   constructor(
-    public damage: number = 5,
-    public speed: number = 300,
-    public lifeSpan: number = 1.2
+    damage: number = 5,
+    speed: number = 300,
+    lifeSpan: number = 1.2
   ) {
     super();
+    this.damage = damage;
+    this.speed = speed;
+    this.lifeSpan = lifeSpan;
   }
 }
 
 export class ColliderComponent extends Component {
+  public radius: number;
+  public type: "player" | "monster" | "projectile" | "gem";
+
   constructor(
-    public radius: number = 12,
-    public type: "player" | "monster" | "projectile" | "gem"
+    radius: number = 12,
+    type: "player" | "monster" | "projectile" | "gem"
   ) {
     super();
+    this.radius = radius;
+    this.type = type;
   }
 }
 
 export class GemComponent extends Component {
+  public value: number;
+  public isCollected: boolean;
+
   constructor(
-    public value: number = 10,
-    public isCollected: boolean = false
+    value: number = 10,
+    isCollected: boolean = false
   ) {
     super();
+    this.value = value;
+    this.isCollected = isCollected;
   }
 }
 
 export class ParticleComponent extends Component {
+  public color: string;
+  public size: number;
+  public vx: number;
+  public vy: number;
+  public alpha: number;
+  public decay: number;
+
   constructor(
-    public color: string = "#fff",
-    public size: number = 3,
-    public vx: number = 0,
-    public vy: number = 0,
-    public alpha: number = 1.0,
-    public decay: number = 0.02
+    color: string = "#fff",
+    size: number = 3,
+    vx: number = 0,
+    vy: number = 0,
+    alpha: number = 1.0,
+    decay: number = 0.02
   ) {
     super();
+    this.color = color;
+    this.size = size;
+    this.vx = vx;
+    this.vy = vy;
+    this.alpha = alpha;
+    this.decay = decay;
   }
 }

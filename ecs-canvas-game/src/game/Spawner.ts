@@ -13,6 +13,7 @@ import {
   ParticleComponent,
   MapComponent,
   BoxColliderComponent,
+  WorkerComponent,
 } from "./components/GameComponents";
 import type { TileType } from "./components/GameComponents";
 
@@ -345,4 +346,106 @@ export function spawnMap(world: World): { entity: string; playerX: number; playe
     playerX: playerCol * tileSize + tileSize / 2,
     playerY: playerRow * tileSize + tileSize / 2,
   };
+}
+
+export function spawnWorker(world: World, x: number, y: number): string {
+  const entity = world.createEntity();
+  world.addComponent(entity, new PositionComponent(x, y));
+  world.addComponent(entity, new VelocityComponent(0, 0));
+  world.addComponent(entity, new WorkerComponent("Idle", 95, 3.5));
+  world.addComponent(
+    entity,
+    new RenderComponent((ctx, px, py, time, entityId) => {
+      const worker = world.getComponent(entityId, WorkerComponent);
+      if (!worker) return;
+
+      ctx.save();
+      ctx.translate(px, py);
+
+      const isMoving = worker.state === "Moving";
+      const bounce = isMoving ? Math.abs(Math.sin(time * 8)) : 0;
+      const scaleX = 1 + bounce * 0.1;
+      const scaleY = 1 - bounce * 0.1;
+      ctx.scale(scaleX, scaleY);
+
+      ctx.fillStyle = "rgba(0, 0, 0, 0.2)";
+      ctx.beginPath();
+      ctx.ellipse(0, 14, 8, 3, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = "#e67e22";
+      ctx.beginPath();
+      ctx.moveTo(-8, 14);
+      ctx.lineTo(8, 14);
+      ctx.lineTo(0, -2);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.fillStyle = "#d35400";
+      ctx.beginPath();
+      ctx.moveTo(-6, 14);
+      ctx.lineTo(6, 14);
+      ctx.lineTo(0, 2);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.fillStyle = "#ffdbac";
+      ctx.beginPath();
+      ctx.arc(0, -6, 5, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = "#e67e22";
+      ctx.beginPath();
+      ctx.moveTo(-7, -8);
+      ctx.lineTo(7, -8);
+      ctx.lineTo(0, -20);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.fillStyle = "#f1c40f";
+      ctx.fillRect(-2, -9, 4, 1.5);
+
+      ctx.fillStyle = "#2c3e50";
+      ctx.fillRect(-2, -7, 1.2, 1.2);
+      ctx.fillRect(1, -7, 1.2, 1.2);
+
+      if (worker.state === "Working") {
+        const swingAngle = Math.sin(time * 16) * 0.6 - 0.4;
+        
+        ctx.save();
+        ctx.translate(6, 4);
+        ctx.rotate(-swingAngle);
+        ctx.strokeStyle = "#8b4513";
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(0, 8);
+        ctx.lineTo(0, -10);
+        ctx.stroke();
+        ctx.fillStyle = "#7f8c8d";
+        ctx.beginPath();
+        ctx.moveTo(0, -10);
+        ctx.lineTo(5, -12);
+        ctx.lineTo(5, -7);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+
+        const pct = Math.max(0, worker.workTimer / worker.workDuration);
+        const barW = 24;
+        const barH = 3;
+        ctx.fillStyle = "rgba(0, 0, 0, 0.4)";
+        ctx.fillRect(-barW / 2, -28, barW, barH);
+        ctx.fillStyle = "#2ecc71";
+        ctx.fillRect(-barW / 2, -28, barW * (1 - pct), barH);
+      }
+
+      ctx.fillStyle = "rgba(255, 255, 255, 0.85)";
+      ctx.font = "bold 8px sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText(worker.state.toUpperCase(), 0, -23);
+
+      ctx.restore();
+    })
+  );
+  return entity;
 }

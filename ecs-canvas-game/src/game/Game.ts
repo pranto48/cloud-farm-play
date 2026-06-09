@@ -1,5 +1,5 @@
 import { World } from "./ecs/World";
-import { spawnPlayer, spawnMonster, spawnMap } from "./Spawner";
+import { spawnPlayer, spawnMonster, spawnMap, spawnWorker } from "./Spawner";
 import {
   InputComponent,
   PlayerComponent,
@@ -16,6 +16,7 @@ import { LifetimeSystem } from "./systems/LifetimeSystem";
 import { ParticleSystem } from "./systems/ParticleSystem";
 import { RenderSystem } from "./systems/RenderSystem";
 import { TileCollisionSystem } from "./systems/TileCollisionSystem";
+import { WorkerSystem } from "./systems/WorkerSystem";
 
 export class Game {
   private canvas: HTMLCanvasElement;
@@ -27,6 +28,7 @@ export class Game {
   private inputSystem!: InputSystem;
   private aiSystem!: AISystem;
   private tileCollisionSystem!: TileCollisionSystem;
+  private workerSystem!: WorkerSystem;
   private movementSystem!: MovementSystem;
   private collisionSystem!: CollisionSystem;
   private lifetimeSystem!: LifetimeSystem;
@@ -76,6 +78,7 @@ export class Game {
     this.inputSystem = new InputSystem();
     this.aiSystem = new AISystem();
     this.tileCollisionSystem = new TileCollisionSystem();
+    this.workerSystem = new WorkerSystem();
     this.movementSystem = new MovementSystem();
     this.collisionSystem = new CollisionSystem();
     this.lifetimeSystem = new LifetimeSystem();
@@ -84,16 +87,26 @@ export class Game {
     // Initialize rendering system (drawn on canvas)
     this.renderSystem = new RenderSystem(this.canvas, this.ctx);
 
-    // Register logic systems in World (Inputs -> AI -> Tile Collisions -> Standard Movement -> Collisions)
+    // Register logic systems in World (Inputs -> AI -> Tile Collisions -> Workers -> Standard Movement -> Collisions)
     this.world.addSystem(this.inputSystem);
     this.world.addSystem(this.aiSystem);
     this.world.addSystem(this.tileCollisionSystem);
+    this.world.addSystem(this.workerSystem);
     this.world.addSystem(this.movementSystem);
     this.world.addSystem(this.collisionSystem);
     this.world.addSystem(this.lifetimeSystem);
     this.world.addSystem(this.particleSystem);
 
     this.monsterSpawnTimer = 0;
+
+    // Spawn initial workers near the player
+    for (let i = 0; i < 3; i++) {
+      spawnWorker(
+        this.world,
+        mapData.playerX + (Math.random() * 80 - 40),
+        mapData.playerY + (Math.random() * 80 - 40)
+      );
+    }
 
     // Spawn initial monsters
     for (let i = 0; i < 4; i++) {
@@ -114,6 +127,14 @@ export class Game {
         const player = this.world.getComponent(this.playerEntityId, PlayerComponent);
         if (player && player.hp <= 0) {
           this.initWorld();
+        }
+      }
+
+      // P key to spawn a worker
+      if (e.key === "p" || e.key === "P") {
+        const pPos = this.world.getComponent(this.playerEntityId, PositionComponent);
+        if (pPos) {
+          spawnWorker(this.world, pPos.x, pPos.y);
         }
       }
     });

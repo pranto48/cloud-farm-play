@@ -212,3 +212,31 @@ export class BoxColliderComponent extends Component {
     this.height = height;
   }
 }
+
+export class WorkerComponent extends Component {
+  public state: "Idle" | "Seeking Path" | "Moving" | "Working";
+  public path: { r: number; c: number }[];
+  public currentWaypointIndex: number;
+  public targetTile: { r: number; c: number } | null;
+  public workTimer: number;
+  public workDuration: number;
+  public speed: number;
+  public searchCooldown: number;
+
+  constructor(
+    state: "Idle" | "Seeking Path" | "Moving" | "Working" = "Idle",
+    speed: number = 90,
+    workDuration: number = 4.0
+  ) {
+    super();
+    this.state = state;
+    this.path = [];
+    this.currentWaypointIndex = 0;
+    this.targetTile = null;
+    this.workTimer = 0;
+    this.workDuration = workDuration;
+    this.speed = speed;
+    this.searchCooldown = 0;
+  }
+}
+

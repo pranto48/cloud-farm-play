@@ -6,6 +6,7 @@ import {
   PlayerComponent,
   ParticleComponent,
   MapComponent,
+  WorkerComponent,
 } from "../components/GameComponents";
 
 export class RenderSystem extends System {
@@ -182,10 +183,11 @@ export class RenderSystem extends System {
     }
 
     // 8. Draw HUD (Level, HP, XP, Score)
-    this.drawHUD(width, height, playerHP, playerMaxHP, playerXP, playerMaxXP, playerLevel, playerScore);
+    this.drawHUD(world, width, height, playerHP, playerMaxHP, playerXP, playerMaxXP, playerLevel, playerScore);
   }
 
   private drawHUD(
+    world: World,
     width: number,
     height: number,
     hp: number,
@@ -197,7 +199,7 @@ export class RenderSystem extends System {
   ): void {
     // Glassmorphism HUD Panel at top-left
     const panelW = 260;
-    const panelH = 95;
+    const panelH = 115;
     this.ctx.fillStyle = "rgba(44, 62, 80, 0.75)";
     this.ctx.strokeStyle = "rgba(255, 255, 255, 0.15)";
     this.ctx.lineWidth = 1.5;
@@ -257,12 +259,25 @@ export class RenderSystem extends System {
     this.ctx.textAlign = "center";
     this.ctx.fillText(`XP: ${xp} / ${maxXp}`, 26 + barW / 2, xpY + 9);
 
+    // Worker Count & Key Instructions inside HUD
+    const workerCount = world.getEntitiesWith([WorkerComponent]).length;
+    const statsY = 100;
+    this.ctx.fillStyle = "#34e7e4";
+    this.ctx.font = "bold 11px sans-serif";
+    this.ctx.textAlign = "left";
+    this.ctx.fillText(`Workers: ${workerCount}`, 26, statsY);
+    
+    this.ctx.fillStyle = "#95a5a6";
+    this.ctx.font = "10px sans-serif";
+    this.ctx.textAlign = "right";
+    this.ctx.fillText("Press [P] to Spawn Worker", 16 + panelW - 12, statsY - 0.5);
+
     // Key instructions at bottom center
     this.ctx.fillStyle = "rgba(255, 255, 255, 0.6)";
     this.ctx.font = "11px sans-serif";
     this.ctx.textAlign = "center";
     this.ctx.fillText(
-      "Controls: [W][A][S][D] or [Arrows] to move  |  [Mouse Left Click] or [Space] to shoot spells",
+      "Controls: [W][A][S][D] or [Arrows] to move  |  [P] Spawn Worker  |  [Mouse Left Click] or [Space] to shoot spells",
       width / 2,
       height - 24
     );

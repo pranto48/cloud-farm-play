@@ -1,5 +1,5 @@
 import { World } from "./ecs/World";
-import { spawnPlayer, spawnMonster } from "./Spawner";
+import { spawnPlayer, spawnMonster, spawnMap } from "./Spawner";
 import {
   InputComponent,
   PlayerComponent,
@@ -15,6 +15,7 @@ import { CollisionSystem } from "./systems/CollisionSystem";
 import { LifetimeSystem } from "./systems/LifetimeSystem";
 import { ParticleSystem } from "./systems/ParticleSystem";
 import { RenderSystem } from "./systems/RenderSystem";
+import { TileCollisionSystem } from "./systems/TileCollisionSystem";
 
 export class Game {
   private canvas: HTMLCanvasElement;
@@ -25,6 +26,7 @@ export class Game {
   // Systems
   private inputSystem!: InputSystem;
   private aiSystem!: AISystem;
+  private tileCollisionSystem!: TileCollisionSystem;
   private movementSystem!: MovementSystem;
   private collisionSystem!: CollisionSystem;
   private lifetimeSystem!: LifetimeSystem;
@@ -64,12 +66,16 @@ export class Game {
   private initWorld(): void {
     this.world = new World();
 
-    // Spawn player at center of arena
-    this.playerEntityId = spawnPlayer(this.world, 0, 0);
+    // Spawn Perlin noise tilemap
+    const mapData = spawnMap(this.world);
+
+    // Spawn player at valid starting grass tile
+    this.playerEntityId = spawnPlayer(this.world, mapData.playerX, mapData.playerY);
 
     // Initialize logic systems
     this.inputSystem = new InputSystem();
     this.aiSystem = new AISystem();
+    this.tileCollisionSystem = new TileCollisionSystem();
     this.movementSystem = new MovementSystem();
     this.collisionSystem = new CollisionSystem();
     this.lifetimeSystem = new LifetimeSystem();
@@ -78,9 +84,10 @@ export class Game {
     // Initialize rendering system (drawn on canvas)
     this.renderSystem = new RenderSystem(this.canvas, this.ctx);
 
-    // Register logic systems in World
+    // Register logic systems in World (Inputs -> AI -> Tile Collisions -> Standard Movement -> Collisions)
     this.world.addSystem(this.inputSystem);
     this.world.addSystem(this.aiSystem);
+    this.world.addSystem(this.tileCollisionSystem);
     this.world.addSystem(this.movementSystem);
     this.world.addSystem(this.collisionSystem);
     this.world.addSystem(this.lifetimeSystem);

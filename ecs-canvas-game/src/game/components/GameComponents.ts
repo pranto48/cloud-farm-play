@@ -184,3 +184,31 @@ export class ParticleComponent extends Component {
     this.decay = decay;
   }
 }
+
+export type TileType = "grass" | "water" | "stone" | "forest";
+
+export class MapComponent extends Component {
+  public width: number;
+  public height: number;
+  public tileSize: number;
+  public tiles: TileType[][];
+
+  constructor(tiles: TileType[][], width: number = 100, height: number = 100, tileSize: number = 64) {
+    super();
+    this.tiles = tiles;
+    this.width = width;
+    this.height = height;
+    this.tileSize = tileSize;
+  }
+}
+
+export class BoxColliderComponent extends Component {
+  public width: number;
+  public height: number;
+
+  constructor(width: number = 24, height: number = 24) {
+    super();
+    this.width = width;
+    this.height = height;
+  }
+}

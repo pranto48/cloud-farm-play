@@ -1,4 +1,5 @@
 import { World } from "./ecs/World";
+import { ImprovedNoise } from "./utils/Noise";
 import {
   PositionComponent,
   VelocityComponent,
@@ -10,7 +11,10 @@ import {
   ColliderComponent,
   GemComponent,
   ParticleComponent,
+  MapComponent,
+  BoxColliderComponent,
 } from "./components/GameComponents";
+import type { TileType } from "./components/GameComponents";
 
 export function spawnPlayer(world: World, x: number, y: number): string {
   const entity = world.createEntity();
@@ -19,6 +23,7 @@ export function spawnPlayer(world: World, x: number, y: number): string {
   world.addComponent(entity, new InputComponent());
   world.addComponent(entity, new PlayerComponent());
   world.addComponent(entity, new ColliderComponent(14, "player"));
+  world.addComponent(entity, new BoxColliderComponent(20, 20));
   world.addComponent(
     entity,
     new RenderComponent((ctx, px, py, time) => {
@@ -276,4 +281,68 @@ export function spawnParticle(
     })
   );
   return entity;
+}
+
+export function spawnMap(world: World): { entity: string; playerX: number; playerY: number } {
+  const width = 100;
+  const height = 100;
+  const tileSize = 64;
+  const tiles: TileType[][] = [];
+
+  const noiseGen = new ImprovedNoise();
+  const scale = 0.08;
+
+  for (let r = 0; r < height; r++) {
+    const row: TileType[] = [];
+    for (let c = 0; c < width; c++) {
+      // Perlin Noise values scaled to get organic regions
+      const val = noiseGen.noise(c * scale, r * scale, 0);
+
+      let type: TileType = "grass";
+      if (val < -0.15) {
+        type = "water";
+      } else if (val < 0.25) {
+        type = "grass";
+      } else if (val < 0.5) {
+        type = "forest";
+      } else {
+        type = "stone";
+      }
+      row.push(type);
+    }
+    tiles.push(row);
+  }
+
+  // Find a grass tile starting coordinate near the center
+  let playerCol = 50;
+  let playerRow = 50;
+  let found = false;
+
+  for (let searchRad = 0; searchRad < 35; searchRad++) {
+    for (let dr = -searchRad; dr <= searchRad; dr++) {
+      for (let dc = -searchRad; dc <= searchRad; dc++) {
+        const tc = 50 + dc;
+        const tr = 50 + dr;
+        if (tc >= 0 && tc < width && tr >= 0 && tr < height) {
+          if (tiles[tr][tc] === "grass") {
+            playerCol = tc;
+            playerRow = tr;
+            found = true;
+            break;
+          }
+        }
+      }
+      if (found) break;
+    }
+    if (found) break;
+  }
+
+  const mapEntity = world.createEntity();
+  world.addComponent(mapEntity, new MapComponent(tiles, width, height, tileSize));
+
+  return {
+    entity: mapEntity,
+    playerX: playerCol * tileSize + tileSize / 2,
+    playerY: playerRow * tileSize + tileSize / 2,
+  };
 }

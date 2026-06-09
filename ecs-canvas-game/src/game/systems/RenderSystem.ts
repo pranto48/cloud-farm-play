@@ -5,6 +5,7 @@ import {
   RenderComponent,
   PlayerComponent,
   ParticleComponent,
+  MapComponent,
 } from "../components/GameComponents";
 
 export class RenderSystem extends System {
@@ -65,38 +66,84 @@ export class RenderSystem extends System {
     this.ctx.fillStyle = "#1e272c"; // dark slate slate color
     this.ctx.fillRect(0, 0, width, height);
 
-    // 3. Tiled Grass Grid (translated)
+    // 3. Render Tiled Map (from MapComponent)
     this.ctx.save();
     this.ctx.translate(-camX, -camY);
 
-    const tileSize = 64;
-    const arenaSize = 800;
+    const maps = world.getEntitiesWith([MapComponent]);
+    if (maps.length > 0) {
+      const mapEntity = maps[0];
+      const map = world.getComponent(mapEntity, MapComponent)!;
+      const ts = map.tileSize;
 
-    // Draw grid border limits
-    this.ctx.fillStyle = "#2c3e50";
-    this.ctx.fillRect(-arenaSize - 20, -arenaSize - 20, arenaSize * 2 + 40, arenaSize * 2 + 40);
-    this.ctx.fillStyle = "#16a085"; // beautiful dark green/emerald arena grass
-    this.ctx.fillRect(-arenaSize, -arenaSize, arenaSize * 2, arenaSize * 2);
+      // Draw map boundaries / outside void background
+      this.ctx.fillStyle = "#1e272c";
+      this.ctx.fillRect(-200, -200, map.width * ts + 400, map.height * ts + 400);
 
-    // Draw subtle grid tiles within camera bounds
-    this.ctx.strokeStyle = "#148f77";
-    this.ctx.lineWidth = 1;
-    const startX = Math.max(-arenaSize, Math.floor(camX / tileSize) * tileSize);
-    const endX = Math.min(arenaSize, Math.ceil((camX + width) / tileSize) * tileSize);
-    const startY = Math.max(-arenaSize, Math.floor(camY / tileSize) * tileSize);
-    const endY = Math.min(arenaSize, Math.ceil((camY + height) / tileSize) * tileSize);
+      // Compute visible columns and rows for culling
+      const startCol = Math.max(0, Math.floor(camX / ts));
+      const endCol = Math.min(map.width - 1, Math.ceil((camX + width) / ts));
+      const startRow = Math.max(0, Math.floor(camY / ts));
+      const endRow = Math.min(map.height - 1, Math.ceil((camY + height) / ts));
 
-    for (let x = startX; x <= endX; x += tileSize) {
-      this.ctx.beginPath();
-      this.ctx.moveTo(x, Math.max(-arenaSize, camY));
-      this.ctx.lineTo(x, Math.min(arenaSize, camY + height));
-      this.ctx.stroke();
-    }
-    for (let y = startY; y <= endY; y += tileSize) {
-      this.ctx.beginPath();
-      this.ctx.moveTo(Math.max(-arenaSize, camX), y);
-      this.ctx.lineTo(Math.min(arenaSize, camX + width), y);
-      this.ctx.stroke();
+      for (let r = startRow; r <= endRow; r++) {
+        for (let c = startCol; c <= endCol; c++) {
+          const type = map.tiles[r][c];
+          const tx = c * ts;
+          const ty = r * ts;
+
+          // Draw procedural tile visual graphics
+          if (type === "grass") {
+            // Grass green tiles with alternating checker shades
+            this.ctx.fillStyle = (c + r) % 2 === 0 ? "#2ecc71" : "#27ae60";
+            this.ctx.fillRect(tx, ty, ts, ts);
+
+            // Subtle grass flower/blade accents
+            if ((c * 7 + r * 11) % 11 === 0) {
+              this.ctx.fillStyle = "#1abc9c";
+              this.ctx.fillRect(tx + 16, ty + 20, 2, 4);
+              this.ctx.fillRect(tx + 40, ty + 44, 2, 4);
+            }
+          } else if (type === "water") {
+            // Water deep blue with wave ripples
+            this.ctx.fillStyle = "#2980b9";
+            this.ctx.fillRect(tx, ty, ts, ts);
+
+            const wave = Math.sin(this.time * 2.5 + c * 0.4) * 2;
+            this.ctx.fillStyle = "#3498db";
+            this.ctx.fillRect(tx + 12, ty + 20 + wave, 12, 2);
+            this.ctx.fillRect(tx + 36, ty + 44 - wave, 16, 2);
+          } else if (type === "stone") {
+            // Mountain stone rock walls
+            this.ctx.fillStyle = "#7f8c8d";
+            this.ctx.fillRect(tx, ty, ts, ts);
+
+            // Inner rock crack details
+            this.ctx.fillStyle = "#95a5a6";
+            this.ctx.fillRect(tx + 4, ty + 4, ts - 8, ts - 8);
+            this.ctx.fillStyle = "#34495e";
+            this.ctx.fillRect(tx + 12, ty + 30, 40, 4);
+            this.ctx.fillRect(tx + 30, ty + 12, 4, 40);
+          } else if (type === "forest") {
+            // Forest grass base
+            this.ctx.fillStyle = (c + r) % 2 === 0 ? "#27ae60" : "#1e8449";
+            this.ctx.fillRect(tx, ty, ts, ts);
+
+            // Pine tree overlay
+            this.ctx.fillStyle = "#145a32"; // pine green
+            this.ctx.beginPath();
+            this.ctx.moveTo(tx + ts / 2, ty + 8);
+            this.ctx.lineTo(tx + 12, ty + 50);
+            this.ctx.lineTo(tx + ts - 12, ty + 50);
+            this.ctx.closePath();
+            this.ctx.fill();
+
+            // Tree trunk
+            this.ctx.fillStyle = "#5c3a21";
+            this.ctx.fillRect(tx + ts / 2 - 3, ty + 50, 6, 8);
+          }
+        }
+      }
     }
 
     // 4. Gather and Y-Sort entities (for depth sorting)

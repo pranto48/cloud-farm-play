@@ -6,6 +6,15 @@ import {
   MonsterComponent,
   MapComponent,
   WorkerComponent,
+  VelocityComponent,
+  StorageComponent,
+  HungerComponent,
+  CropComponent,
+  GemComponent,
+  ProjectileComponent,
+  ColliderComponent,
+  BoxColliderComponent,
+  RenderComponent,
 } from "./components/GameComponents";
 import type { WorkerRole } from "./components/GameComponents";
 
@@ -50,6 +59,7 @@ export class Game {
   // Spawn settings
   private monsterSpawnTimer: number = 0;
   private readonly MONSTER_SPAWN_INTERVAL = 1.6; // Spawns every 1.6 seconds
+  private saveTimer: number = 0;
 
   constructor(canvasId: string) {
     this.canvas = document.getElementById(canvasId) as HTMLCanvasElement;
@@ -74,12 +84,6 @@ export class Game {
 
   private initWorld(): void {
     this.world = new World();
-
-    // Spawn Perlin noise tilemap
-    const mapData = spawnMap(this.world);
-
-    // Spawn player at valid starting grass tile
-    this.playerEntityId = spawnPlayer(this.world, mapData.playerX, mapData.playerY);
 
     // Initialize logic systems
     this.inputSystem = new InputSystem();
@@ -107,24 +111,34 @@ export class Game {
     this.world.addSystem(this.particleSystem);
 
     this.monsterSpawnTimer = 0;
+    this.saveTimer = 0;
 
-    // Spawn global Storage building near player spawn
-    spawnStorage(this.world, mapData.playerX + 80, mapData.playerY);
+    // Try to load game state from localStorage
+    const loadSuccess = this.loadGame();
 
-    // Spawn initial workers near the player with balanced cycled roles
-    const initialRoles: WorkerRole[] = ["Woodcutter", "Miner", "Farmer"];
-    for (let i = 0; i < 3; i++) {
-      spawnWorker(
-        this.world,
-        mapData.playerX + (Math.random() * 80 - 40),
-        mapData.playerY + (Math.random() * 80 - 40),
-        initialRoles[i]
-      );
-    }
+    if (!loadSuccess) {
+      console.log("[Save/Load] No save game found, initializing fresh procedural map.");
+      const mapData = spawnMap(this.world);
+      this.playerEntityId = spawnPlayer(this.world, mapData.playerX, mapData.playerY);
 
-    // Spawn initial monsters
-    for (let i = 0; i < 4; i++) {
-      this.spawnMonsterOffscreen();
+      // Spawn global Storage building near player spawn
+      spawnStorage(this.world, mapData.playerX + 80, mapData.playerY);
+
+      // Spawn initial workers near the player with balanced cycled roles
+      const initialRoles: WorkerRole[] = ["Woodcutter", "Miner", "Farmer"];
+      for (let i = 0; i < 3; i++) {
+        spawnWorker(
+          this.world,
+          mapData.playerX + (Math.random() * 80 - 40),
+          mapData.playerY + (Math.random() * 80 - 40),
+          initialRoles[i]
+        );
+      }
+
+      // Spawn initial monsters
+      for (let i = 0; i < 4; i++) {
+        this.spawnMonsterOffscreen();
+      }
     }
   }
 
@@ -234,6 +248,13 @@ export class Game {
     const input = this.world.getComponent(this.playerEntityId, InputComponent);
 
     if (player && player.hp > 0 && pPos) {
+      // Autosave timer
+      this.saveTimer += dt;
+      if (this.saveTimer >= 30.0) {
+        this.saveTimer = 0;
+        this.saveGame();
+      }
+
       // Drag-to-build dirt roads if held down in road mode
       if (this.activeTool === "road" && input && input.mouseClicked) {
         this.buildRoadAtMouse(input.mouseX, input.mouseY);
@@ -277,14 +298,13 @@ export class Game {
   private setupToolbar(): void {
     const btnSpell = document.getElementById("btn-spell");
     const btnRoad = document.getElementById("btn-road");
+    const btnReset = document.getElementById("btn-reset");
 
     if (btnSpell && btnRoad) {
       btnSpell.addEventListener("click", () => {
         this.activeTool = "spell";
         btnSpell.classList.add("active");
         btnRoad.classList.remove("active");
-        
-        // Refocus canvas so WASD keys work instantly
         this.canvas.focus();
       });
 
@@ -292,7 +312,15 @@ export class Game {
         this.activeTool = "road";
         btnRoad.classList.add("active");
         btnSpell.classList.remove("active");
-        
+        this.canvas.focus();
+      });
+    }
+
+    if (btnReset) {
+      btnReset.addEventListener("click", () => {
+        localStorage.removeItem("arcane_survivors_save");
+        console.log("[Save/Load] Game reset requested. Wiped localStorage.");
+        this.initWorld();
         this.canvas.focus();
       });
     }
@@ -308,22 +336,19 @@ export class Game {
     const col = Math.floor(worldX / ts);
     const row = Math.floor(worldY / ts);
 
-    // Bounds check
     if (col >= 0 && col < map.width && row >= 0 && row < map.height) {
       if (map.tiles[row][col] === "grass") {
         map.tiles[row][col] = "road";
 
-        // Dynamic recalculation: Set active moving/seeking workers to seek paths immediately
         const workers = this.world.getEntitiesWith([WorkerComponent]);
         for (const workerId of workers) {
           const worker = this.world.getComponent(workerId, WorkerComponent)!;
           if (worker.state === "Moving" || worker.state === "Seeking Path") {
             worker.state = "Seeking Path";
-            worker.searchCooldown = 0; // force immediate pathfind
+            worker.searchCooldown = 0;
           }
         }
 
-        // Spawn placement dust particles
         const particleX = col * ts + ts / 2;
         const particleY = row * ts + ts / 2;
         for (let i = 0; i < 4; i++) {
@@ -336,6 +361,513 @@ export class Game {
           );
         }
       }
+    }
+  }
+
+  private saveGame(): void {
+    const player = this.world.getComponent(this.playerEntityId, PlayerComponent);
+    if (!player || player.hp <= 0) return;
+
+    const serializedEntities: any[] = [];
+    const entities = this.world.getEntities();
+
+    for (const ent of entities) {
+      const components = this.world.getEntityComponents(ent);
+      const serializedComponents: any[] = [];
+
+      for (const comp of components) {
+        const type = comp.constructor.name;
+        if (type === "RenderComponent") continue;
+
+        const data: any = {};
+        for (const key of Object.keys(comp)) {
+          data[key] = (comp as any)[key];
+        }
+
+        serializedComponents.push({ type, data });
+      }
+
+      if (serializedComponents.length > 0) {
+        serializedEntities.push({
+          id: ent,
+          components: serializedComponents,
+        });
+      }
+    }
+
+    const saveData = {
+      playerEntityId: this.playerEntityId,
+      entities: serializedEntities,
+      activeTool: this.activeTool,
+      timestamp: Date.now(),
+    };
+
+    localStorage.setItem("arcane_survivors_save", JSON.stringify(saveData));
+    console.log("[Save/Load] Autosaved game state to localStorage.");
+
+    const pPos = this.world.getComponent(this.playerEntityId, PositionComponent);
+    if (pPos) {
+      for (let i = 0; i < 5; i++) {
+        spawnParticle(this.world, pPos.x, pPos.y, "#55efc4", 2.5);
+      }
+    }
+  }
+
+  private loadGame(): boolean {
+    const saveStr = localStorage.getItem("arcane_survivors_save");
+    if (!saveStr) return false;
+
+    try {
+      const saveData = JSON.parse(saveStr);
+      if (!saveData || !saveData.entities) return false;
+
+      this.world.clear();
+      this.playerEntityId = saveData.playerEntityId;
+      this.activeTool = saveData.activeTool || "spell";
+
+      const COMPONENT_REGISTRY: Record<string, any> = {
+        PositionComponent,
+        VelocityComponent,
+        PlayerComponent,
+        MonsterComponent,
+        MapComponent,
+        WorkerComponent,
+        StorageComponent,
+        HungerComponent,
+        CropComponent,
+        GemComponent,
+        ProjectileComponent,
+        ColliderComponent,
+        BoxColliderComponent,
+      };
+
+      for (const serializedEnt of saveData.entities) {
+        const entId = serializedEnt.id;
+        this.world.createEntity(entId);
+
+        for (const serializedComp of serializedEnt.components) {
+          const ClassRef = COMPONENT_REGISTRY[serializedComp.type];
+          if (!ClassRef) continue;
+
+          const compInstance = new ClassRef();
+          Object.assign(compInstance, serializedComp.data);
+          this.world.addComponent(entId, compInstance);
+        }
+      }
+
+      const allEntities = this.world.getEntities();
+      for (const ent of allEntities) {
+        if (this.world.hasComponent(ent, PlayerComponent)) {
+          const playerDraw = (ctx: CanvasRenderingContext2D, px: number, py: number, time: number) => {
+            const staffAngle = time * 2;
+            ctx.save();
+            ctx.translate(px, py);
+
+            ctx.strokeStyle = "rgba(52, 152, 219, 0.35)";
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(0, 16, 16 + Math.sin(time * 5) * 1.5, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.save();
+            ctx.rotate(-staffAngle * 0.5);
+            ctx.setLineDash([4, 6]);
+            ctx.stroke();
+            ctx.restore();
+
+            ctx.fillStyle = "#2980b9";
+            ctx.beginPath();
+            ctx.moveTo(-10, 16);
+            ctx.lineTo(10, 16);
+            ctx.lineTo(0, -6);
+            ctx.closePath();
+            ctx.fill();
+
+            ctx.fillStyle = "#1b4f72";
+            ctx.beginPath();
+            ctx.moveTo(-8, 16);
+            ctx.lineTo(8, 16);
+            ctx.lineTo(0, -2);
+            ctx.closePath();
+            ctx.fill();
+
+            ctx.fillStyle = "#f5d0a9";
+            ctx.beginPath();
+            ctx.arc(0, -8, 6, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = "#2980b9";
+            ctx.beginPath();
+            ctx.moveTo(-9, -10);
+            ctx.lineTo(9, -10);
+            ctx.lineTo(0, -26);
+            ctx.closePath();
+            ctx.fill();
+            ctx.fillStyle = "#f1c40f";
+            ctx.fillRect(-3, -11, 6, 2);
+
+            ctx.fillStyle = "#34e7e4";
+            ctx.fillRect(-3, -9, 2, 2);
+            ctx.fillRect(1, -9, 2, 2);
+
+            ctx.save();
+            ctx.translate(12, 0);
+            ctx.rotate(Math.sin(time * 3) * 0.1);
+            ctx.strokeStyle = "#8e44ad";
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(0, 16);
+            ctx.lineTo(0, -18);
+            ctx.stroke();
+            ctx.fillStyle = "#00d2d3";
+            ctx.shadowBlur = 8;
+            ctx.shadowColor = "#00d2d3";
+            ctx.beginPath();
+            ctx.moveTo(0, -24);
+            ctx.lineTo(4, -18);
+            ctx.lineTo(0, -12);
+            ctx.lineTo(-4, -18);
+            ctx.closePath();
+            ctx.fill();
+            ctx.restore();
+
+            ctx.restore();
+          };
+          this.world.addComponent(ent, new RenderComponent(playerDraw));
+
+        } else if (this.world.hasComponent(ent, WorkerComponent)) {
+          const workerDraw = (ctx: CanvasRenderingContext2D, px: number, py: number, time: number, entityId: string) => {
+            const worker = this.world.getComponent(entityId, WorkerComponent)!;
+
+            ctx.save();
+            ctx.translate(px, py);
+
+            const isMoving = worker.state === "Moving";
+            const bounce = isMoving ? Math.abs(Math.sin(time * 8)) : 0;
+            const scaleX = 1 + bounce * 0.1;
+            const scaleY = 1 - bounce * 0.1;
+            ctx.scale(scaleX, scaleY);
+
+            ctx.fillStyle = "rgba(0, 0, 0, 0.2)";
+            ctx.beginPath();
+            ctx.ellipse(0, 14, 8, 3, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            let primaryColor = "#e67e22";
+            let secondaryColor = "#d35400";
+            if (worker.role === "Miner") {
+              primaryColor = "#7f8c8d";
+              secondaryColor = "#34495e";
+            } else if (worker.role === "Farmer") {
+              primaryColor = "#2ecc71";
+              secondaryColor = "#27ae60";
+            }
+
+            if (worker.isCarryingFood) {
+              ctx.save();
+              ctx.translate(-7, 2);
+              ctx.rotate(-0.3);
+              ctx.strokeStyle = "#d35400";
+              ctx.lineWidth = 1.2;
+              ctx.beginPath();
+              ctx.moveTo(0, 8);
+              ctx.lineTo(0, -4);
+              ctx.moveTo(-2, 8);
+              ctx.lineTo(1, -4);
+              ctx.stroke();
+              ctx.fillStyle = "#f1c40f";
+              ctx.fillRect(-2, -6, 5, 4);
+              ctx.restore();
+            }
+
+            ctx.fillStyle = primaryColor;
+            ctx.beginPath();
+            ctx.moveTo(-8, 14);
+            ctx.lineTo(8, 14);
+            ctx.lineTo(0, -2);
+            ctx.closePath();
+            ctx.fill();
+
+            ctx.fillStyle = secondaryColor;
+            ctx.beginPath();
+            ctx.moveTo(-6, 14);
+            ctx.lineTo(6, 14);
+            ctx.lineTo(0, 2);
+            ctx.closePath();
+            ctx.fill();
+
+            ctx.fillStyle = "#ffdbac";
+            ctx.beginPath();
+            ctx.arc(0, -6, 5, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = primaryColor;
+            ctx.beginPath();
+            ctx.moveTo(-7, -8);
+            ctx.lineTo(7, -8);
+            ctx.lineTo(0, -20);
+            ctx.closePath();
+            ctx.fill();
+
+            ctx.fillStyle = "#f1c40f";
+            ctx.fillRect(-2, -9, 4, 1.5);
+
+            ctx.fillStyle = "#2c3e50";
+            ctx.fillRect(-2, -7, 1.2, 1.2);
+            ctx.fillRect(1, -7, 1.2, 1.2);
+
+            if (worker.state === "Working") {
+              const swingAngle = Math.sin(time * 16) * 0.6 - 0.4;
+              
+              ctx.save();
+              ctx.translate(6, 4);
+              ctx.rotate(-swingAngle);
+
+              if (worker.role === "Woodcutter") {
+                ctx.strokeStyle = "#8b4513";
+                ctx.lineWidth = 1.5;
+                ctx.beginPath();
+                ctx.moveTo(0, 8);
+                ctx.lineTo(0, -10);
+                ctx.stroke();
+                ctx.fillStyle = "#7f8c8d";
+                ctx.beginPath();
+                ctx.moveTo(0, -10);
+                ctx.lineTo(5, -12);
+                ctx.lineTo(5, -7);
+                ctx.closePath();
+                ctx.fill();
+              } else if (worker.role === "Miner") {
+                ctx.strokeStyle = "#8b4513";
+                ctx.lineWidth = 1.5;
+                ctx.beginPath();
+                ctx.moveTo(0, 8);
+                ctx.lineTo(0, -10);
+                ctx.stroke();
+                ctx.strokeStyle = "#bdc3c7";
+                ctx.lineWidth = 2.0;
+                ctx.beginPath();
+                ctx.arc(0, -10, 5, Math.PI - 0.4, Math.PI * 2 + 0.4);
+                ctx.stroke();
+              } else if (worker.role === "Farmer") {
+                ctx.strokeStyle = "#8b4513";
+                ctx.lineWidth = 1.5;
+                ctx.beginPath();
+                ctx.moveTo(0, 8);
+                ctx.lineTo(0, -10);
+                ctx.stroke();
+                ctx.fillStyle = "#34495e";
+                ctx.fillRect(-1.5, -12, 5, 2.5);
+              }
+
+              ctx.restore();
+
+              const pct = Math.max(0, worker.workTimer / worker.workDuration);
+              const barW = 24;
+              const barH = 3;
+              ctx.fillStyle = "rgba(0, 0, 0, 0.4)";
+              ctx.fillRect(-barW / 2, -28, barW, barH);
+              ctx.fillStyle = "#2ecc71";
+              ctx.fillRect(-barW / 2, -28, barW * (1 - pct), barH);
+            }
+
+            if (worker.state === "Starving") {
+              ctx.fillStyle = "#ff7675";
+              ctx.font = "bold 9px sans-serif";
+              ctx.textAlign = "center";
+              ctx.fillText("💀 STARVING", 0, -32);
+            }
+
+            ctx.fillStyle = "rgba(255, 255, 255, 0.85)";
+            ctx.font = "bold 8px sans-serif";
+            ctx.textAlign = "center";
+            ctx.fillText(`${worker.role.toUpperCase()} - ${worker.state.toUpperCase()}`, 0, -23);
+
+            ctx.restore();
+          };
+          this.world.addComponent(ent, new RenderComponent(workerDraw));
+
+        } else if (this.world.hasComponent(ent, StorageComponent)) {
+          const storageDraw = (ctx: CanvasRenderingContext2D, px: number, py: number, _time: number, entityId: string) => {
+            const storage = this.world.getComponent(entityId, StorageComponent)!;
+            ctx.save();
+            ctx.translate(px, py);
+
+            ctx.fillStyle = "rgba(0, 0, 0, 0.25)";
+            ctx.beginPath();
+            ctx.ellipse(0, 16, 16, 4, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = "#922b21";
+            ctx.beginPath();
+            ctx.roundRect(-14, -22, 28, 36, [4, 4, 0, 0]);
+            ctx.fill();
+
+            ctx.fillStyle = "#34495e";
+            ctx.beginPath();
+            ctx.arc(0, -22, 14, Math.PI, 0, false);
+            ctx.fill();
+
+            ctx.fillStyle = "#bdc3c7";
+            ctx.fillRect(-14, -10, 28, 2.5);
+            ctx.fillRect(-14, 4, 28, 2.5);
+
+            ctx.fillStyle = "#f1c40f";
+            ctx.font = "bold 9px sans-serif";
+            ctx.textAlign = "center";
+            ctx.fillText(`🌾 Stored: ${storage.foodCount}`, 0, -28);
+
+            ctx.restore();
+          };
+          this.world.addComponent(ent, new RenderComponent(storageDraw));
+
+        } else if (this.world.hasComponent(ent, CropComponent)) {
+          const cropDraw = (ctx: CanvasRenderingContext2D, px: number, py: number, time: number, entityId: string) => {
+            const crop = this.world.getComponent(entityId, CropComponent)!;
+            ctx.save();
+            ctx.translate(px, py);
+
+            if (!crop.isFullyGrown) {
+              if (crop.growthTimer > 40.0) {
+                ctx.fillStyle = "#2ecc71";
+                ctx.fillRect(-2, 6, 4, 8);
+                ctx.fillRect(-5, 4, 3, 2);
+                ctx.fillRect(2, 2, 3, 2);
+              } else {
+                ctx.fillStyle = "#27ae60";
+                ctx.beginPath();
+                ctx.ellipse(0, 4, 5, 9, 0, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = "#2ecc71";
+                ctx.fillRect(-1.5, 6, 3, 8);
+              }
+            } else {
+              const wave = Math.sin(time * 3 + px * 0.05) * 0.08;
+              ctx.rotate(wave);
+
+              ctx.strokeStyle = "#e67e22";
+              ctx.lineWidth = 2.0;
+              ctx.beginPath();
+              ctx.moveTo(0, 14);
+              ctx.lineTo(0, -6);
+              ctx.stroke();
+
+              ctx.fillStyle = "#f1c40f";
+              ctx.beginPath();
+              ctx.arc(0, -8, 4.5, 0, Math.PI * 2);
+              ctx.arc(2.5, -12, 3, 0, Math.PI * 2);
+              ctx.arc(-2.5, -12, 3, 0, Math.PI * 2);
+              ctx.arc(0, -16, 2, 0, Math.PI * 2);
+              ctx.fill();
+            }
+
+            ctx.restore();
+          };
+          this.world.addComponent(ent, new RenderComponent(cropDraw));
+
+        } else if (this.world.hasComponent(ent, MonsterComponent)) {
+          const monsterDraw = (ctx: CanvasRenderingContext2D, px: number, py: number, time: number) => {
+            const bounce = Math.abs(Math.sin(time * 6));
+            const scaleX = 1 + bounce * 0.15;
+            const scaleY = 1 - bounce * 0.15;
+
+            ctx.save();
+            ctx.translate(px, py + 12);
+            ctx.scale(scaleX, scaleY);
+
+            ctx.fillStyle = "rgba(0, 0, 0, 0.25)";
+            ctx.beginPath();
+            ctx.ellipse(0, 0, 10, 4, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = "#8e44ad";
+            ctx.beginPath();
+            ctx.arc(0, -12, 10, Math.PI, 0, false);
+            ctx.lineTo(10, 0);
+            ctx.lineTo(6, -4);
+            ctx.lineTo(0, 0);
+            ctx.lineTo(-6, -4);
+            ctx.lineTo(-10, 0);
+            ctx.closePath();
+            ctx.fill();
+
+            ctx.fillStyle = "#fff";
+            ctx.fillRect(-3, -13, 2, 2);
+            ctx.fillRect(1, -13, 2, 2);
+            ctx.fillStyle = "#ff7675";
+            ctx.fillRect(-2, -12, 1, 1);
+            ctx.fillRect(2, -12, 1, 1);
+
+            ctx.restore();
+          };
+          this.world.addComponent(ent, new RenderComponent(monsterDraw));
+
+        } else if (this.world.hasComponent(ent, GemComponent)) {
+          const gemDraw = (ctx: CanvasRenderingContext2D, px: number, py: number, time: number) => {
+            ctx.save();
+            ctx.translate(px, py + Math.sin(time * 4) * 2);
+
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = "#2ecc71";
+            
+            ctx.fillStyle = "#2ecc71";
+            ctx.beginPath();
+            ctx.moveTo(0, -6);
+            ctx.lineTo(4, 0);
+            ctx.lineTo(0, 6);
+            ctx.lineTo(-4, 0);
+            ctx.closePath();
+            ctx.fill();
+
+            ctx.fillStyle = "#fff";
+            ctx.beginPath();
+            ctx.moveTo(0, -4);
+            ctx.lineTo(1.5, 0);
+            ctx.lineTo(0, 4);
+            ctx.lineTo(-1.5, 0);
+            ctx.closePath();
+            ctx.fill();
+
+            ctx.restore();
+          };
+          this.world.addComponent(ent, new RenderComponent(gemDraw));
+
+        } else if (this.world.hasComponent(ent, ProjectileComponent)) {
+          const spellDraw = (ctx: CanvasRenderingContext2D, px: number, py: number) => {
+            ctx.save();
+            ctx.shadowBlur = 8;
+            ctx.shadowColor = "#34e7e4";
+            ctx.fillStyle = "#34e7e4";
+            ctx.beginPath();
+            ctx.arc(px, py, 4, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = "#fff";
+            ctx.beginPath();
+            ctx.arc(px, py, 2, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+          };
+          this.world.addComponent(ent, new RenderComponent(spellDraw));
+        }
+      }
+
+      const btnSpell = document.getElementById("btn-spell");
+      const btnRoad = document.getElementById("btn-road");
+      if (btnSpell && btnRoad) {
+        if (this.activeTool === "spell") {
+          btnSpell.classList.add("active");
+          btnRoad.classList.remove("active");
+        } else {
+          btnRoad.classList.add("active");
+          btnSpell.classList.remove("active");
+        }
+      }
+
+      console.log(`[Save/Load] Successfully loaded game state. Recreated ${allEntities.length} entities.`);
+      return true;
+    } catch (e) {
+      console.error("[Save/Load] Failed to load game state:", e);
+      return false;
     }
   }
 }

@@ -6,8 +6,8 @@ export class World {
   private componentsByEntity = new Map<string, Map<Function, Component>>();
   private systems: System[] = [];
 
-  createEntity(): string {
-    const id = `entity_${Math.random().toString(36).substring(2, 11)}`;
+  createEntity(predefinedId?: string): string {
+    const id = predefinedId || `entity_${Math.random().toString(36).substring(2, 11)}`;
     this.entities.add(id);
     this.componentsByEntity.set(id, new Map());
     return id;
@@ -62,6 +62,20 @@ export class World {
       }
     }
     return result;
+  }
+
+  getEntities(): string[] {
+    return Array.from(this.entities);
+  }
+
+  getEntityComponents(entity: string): Component[] {
+    const comps = this.componentsByEntity.get(entity);
+    return comps ? Array.from(comps.values()) : [];
+  }
+
+  clear(): void {
+    this.entities.clear();
+    this.componentsByEntity.clear();
   }
 
   addSystem(system: System): void {

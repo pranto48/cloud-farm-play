@@ -1,10 +1,12 @@
 import { World } from "./ecs/World";
-import { spawnPlayer, spawnMonster, spawnMap, spawnWorker } from "./Spawner";
+import { spawnPlayer, spawnMonster, spawnMap, spawnWorker, spawnParticle } from "./Spawner";
 import {
   InputComponent,
   PlayerComponent,
   PositionComponent,
   MonsterComponent,
+  MapComponent,
+  WorkerComponent,
 } from "./components/GameComponents";
 
 // Systems
@@ -23,6 +25,7 @@ export class Game {
   private ctx: CanvasRenderingContext2D;
   private world!: World;
   private playerEntityId!: string;
+  public activeTool: "spell" | "road" = "spell";
 
   // Systems
   private inputSystem!: InputSystem;
@@ -52,6 +55,7 @@ export class Game {
     this.resizeCanvas();
     this.initWorld();
     this.setupInput();
+    this.setupToolbar();
 
     window.addEventListener("resize", () => this.resizeCanvas());
     
@@ -187,6 +191,10 @@ export class Game {
   }
 
   private loop(currentTime: number): void {
+    // Sync tool states before updating systems
+    this.inputSystem.activeTool = this.activeTool;
+    this.renderSystem.activeTool = this.activeTool;
+
     // Delta time calculation
     const elapsed = currentTime - this.lastTime;
     this.lastTime = currentTime;
@@ -210,8 +218,14 @@ export class Game {
   private updateLogic(dt: number): void {
     const player = this.world.getComponent(this.playerEntityId, PlayerComponent);
     const pPos = this.world.getComponent(this.playerEntityId, PositionComponent);
+    const input = this.world.getComponent(this.playerEntityId, InputComponent);
 
     if (player && player.hp > 0 && pPos) {
+      // Drag-to-build dirt roads if held down in road mode
+      if (this.activeTool === "road" && input && input.mouseClicked) {
+        this.buildRoadAtMouse(input.mouseX, input.mouseY);
+      }
+
       // Spawn new monsters over time
       this.monsterSpawnTimer += dt;
       if (this.monsterSpawnTimer >= this.MONSTER_SPAWN_INTERVAL) {
@@ -245,5 +259,70 @@ export class Game {
     const spawnY = pPos.y + Math.sin(angle) * dist;
 
     spawnMonster(this.world, spawnX, spawnY);
+  }
+
+  private setupToolbar(): void {
+    const btnSpell = document.getElementById("btn-spell");
+    const btnRoad = document.getElementById("btn-road");
+
+    if (btnSpell && btnRoad) {
+      btnSpell.addEventListener("click", () => {
+        this.activeTool = "spell";
+        btnSpell.classList.add("active");
+        btnRoad.classList.remove("active");
+        
+        // Refocus canvas so WASD keys work instantly
+        this.canvas.focus();
+      });
+
+      btnRoad.addEventListener("click", () => {
+        this.activeTool = "road";
+        btnRoad.classList.add("active");
+        btnSpell.classList.remove("active");
+        
+        this.canvas.focus();
+      });
+    }
+  }
+
+  private buildRoadAtMouse(worldX: number, worldY: number): void {
+    const maps = this.world.getEntitiesWith([MapComponent]);
+    if (maps.length === 0) return;
+    const mapEntity = maps[0];
+    const map = this.world.getComponent(mapEntity, MapComponent)!;
+    const ts = map.tileSize;
+
+    const col = Math.floor(worldX / ts);
+    const row = Math.floor(worldY / ts);
+
+    // Bounds check
+    if (col >= 0 && col < map.width && row >= 0 && row < map.height) {
+      if (map.tiles[row][col] === "grass") {
+        map.tiles[row][col] = "road";
+
+        // Dynamic recalculation: Set active moving/seeking workers to seek paths immediately
+        const workers = this.world.getEntitiesWith([WorkerComponent]);
+        for (const workerId of workers) {
+          const worker = this.world.getComponent(workerId, WorkerComponent)!;
+          if (worker.state === "Moving" || worker.state === "Seeking Path") {
+            worker.state = "Seeking Path";
+            worker.searchCooldown = 0; // force immediate pathfind
+          }
+        }
+
+        // Spawn placement dust particles
+        const particleX = col * ts + ts / 2;
+        const particleY = row * ts + ts / 2;
+        for (let i = 0; i < 4; i++) {
+          spawnParticle(
+            this.world,
+            particleX + (Math.random() * 24 - 12),
+            particleY + (Math.random() * 24 - 12),
+            "#b8863b",
+            2 + Math.random() * 2
+          );
+        }
+      }
+    }
   }
 }

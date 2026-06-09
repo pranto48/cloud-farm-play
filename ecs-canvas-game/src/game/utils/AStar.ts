@@ -156,7 +156,8 @@ export function findPath(
         continue;
       }
 
-      const gScore = curr.g + 1;
+      const weight = tileType === "road" ? 0.5 : 1.0;
+      const gScore = curr.g + weight;
       if (gScore >= openGValues[nIdx]) {
         continue;
       }

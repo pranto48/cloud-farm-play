@@ -8,6 +8,19 @@
   </head>
   <body>
     <canvas id="game-canvas"></canvas>
+
+    <!-- Floating Tool Builder UI -->
+    <div id="toolbar-container">
+      <button class="tool-btn active" id="btn-spell" title="Combat Spell (Left Click shoots)">
+        <span class="tool-icon">🔮</span>
+        <span class="tool-label">Spells</span>
+      </button>
+      <button class="tool-btn" id="btn-road" title="Build Dirt Road (Left Click/Drag on Grass)">
+        <span class="tool-icon">🛣️</span>
+        <span class="tool-label">Road (0.5x Cost)</span>
+      </button>
+    </div>
+
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

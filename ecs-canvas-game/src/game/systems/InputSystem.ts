@@ -10,6 +10,7 @@ import { spawnPlayerSpell } from "../Spawner";
 
 export class InputSystem extends System {
   readonly requiredComponents = [PlayerComponent, InputComponent, PositionComponent, VelocityComponent];
+  public activeTool: "spell" | "road" = "spell";
 
   update(world: World, dt: number): void {
     const entities = world.getEntitiesWith(this.requiredComponents);
@@ -50,8 +51,8 @@ export class InputSystem extends System {
         player.fireRateTimer -= dt;
       }
 
-      // Shoot spells when clicked or Space pressed
-      if ((input.mouseClicked || input.keys[" "]) && player.fireRateTimer <= 0) {
+      // Shoot spells when clicked or Space pressed (only in spell mode)
+      if (this.activeTool === "spell" && (input.mouseClicked || input.keys[" "]) && player.fireRateTimer <= 0) {
         player.fireRateTimer = 0.25; // Casting interval in seconds
 
         let targetX = pos.x;

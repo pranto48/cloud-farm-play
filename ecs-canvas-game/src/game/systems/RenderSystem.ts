@@ -7,6 +7,7 @@ import {
   ParticleComponent,
   MapComponent,
   WorkerComponent,
+  InputComponent,
 } from "../components/GameComponents";
 
 export class RenderSystem extends System {
@@ -15,6 +16,7 @@ export class RenderSystem extends System {
 
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
+  public activeTool: "spell" | "road" = "spell";
 
   constructor(
     canvas: HTMLCanvasElement,
@@ -45,10 +47,12 @@ export class RenderSystem extends System {
     let damageFlash = 0;
     let levelFlash = 0;
 
+    let inputComp: InputComponent | undefined;
     if (players.length > 0) {
       playerEntityId = players[0];
       const pPos = world.getComponent(playerEntityId, PositionComponent)!;
       const pComp = world.getComponent(playerEntityId, PlayerComponent)!;
+      inputComp = world.getComponent(playerEntityId, InputComponent);
       camX = pPos.x - width / 2;
       camY = pPos.y - height / 2;
       playerHP = pComp.hp;
@@ -142,7 +146,44 @@ export class RenderSystem extends System {
             // Tree trunk
             this.ctx.fillStyle = "#5c3a21";
             this.ctx.fillRect(tx + ts / 2 - 3, ty + 50, 6, 8);
+          } else if (type === "road") {
+            // Dirt Road
+            this.ctx.fillStyle = "#cb9952";
+            this.ctx.fillRect(tx, ty, ts, ts);
+
+            // Small dirt gravel details
+            this.ctx.fillStyle = "#b8863b";
+            this.ctx.fillRect(tx + 8, ty + 12, 2, 2);
+            this.ctx.fillRect(tx + 36, ty + 24, 2, 2);
+            this.ctx.fillRect(tx + 20, ty + 48, 2, 2);
+            this.ctx.fillRect(tx + 48, ty + 16, 2, 2);
+
+            // Borders
+            this.ctx.strokeStyle = "#a7772c";
+            this.ctx.lineWidth = 1;
+            this.ctx.strokeRect(tx + 1, ty + 1, ts - 2, ts - 2);
           }
+        }
+      }
+
+      // Draw road placement preview under mouse
+      if (this.activeTool === "road" && inputComp) {
+        const mouseCol = Math.floor(inputComp.mouseX / ts);
+        const mouseRow = Math.floor(inputComp.mouseY / ts);
+
+        if (mouseCol >= 0 && mouseCol < map.width && mouseRow >= 0 && mouseRow < map.height) {
+          const tileType = map.tiles[mouseRow][mouseCol];
+          const isBuildable = tileType === "grass";
+
+          this.ctx.save();
+          this.ctx.strokeStyle = isBuildable ? "#2ecc71" : "#e74c3c";
+          this.ctx.lineWidth = 2.5;
+          this.ctx.setLineDash([4, 4]);
+          this.ctx.strokeRect(mouseCol * ts + 1.5, mouseRow * ts + 1.5, ts - 3, ts - 3);
+
+          this.ctx.fillStyle = isBuildable ? "rgba(46, 204, 113, 0.15)" : "rgba(231, 76, 60, 0.15)";
+          this.ctx.fillRect(mouseCol * ts + 2, mouseRow * ts + 2, ts - 4, ts - 4);
+          this.ctx.restore();
         }
       }
     }

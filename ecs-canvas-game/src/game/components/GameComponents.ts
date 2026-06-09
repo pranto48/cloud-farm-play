@@ -185,7 +185,7 @@ export class ParticleComponent extends Component {
   }
 }
 
-export type TileType = "grass" | "water" | "stone" | "forest";
+export type TileType = "grass" | "water" | "stone" | "forest" | "road";
 
 export class MapComponent extends Component {
   public width: number;

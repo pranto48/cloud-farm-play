@@ -44,7 +44,9 @@ export class PlayerComponent extends Component {
     public level: number = 1,
     public xp: number = 0,
     public maxXp: number = 100,
-    public fireRateTimer: number = 0
+    public fireRateTimer: number = 0,
+    public damageFlashTimer: number = 0,
+    public levelUpFlashTimer: number = 0
   ) {
     super();
   }

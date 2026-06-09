@@ -139,6 +139,8 @@ export interface GameState {
   player: {
     x: number;
     y: number;
+    subX?: number;
+    subY?: number;
     dir: "up" | "down" | "left" | "right";
     health: number;
     maxHealth: number;
@@ -602,6 +604,8 @@ export function newGame(): GameState {
     player: {
       x: STATIC_POINTS.playerSpawn.x,
       y: STATIC_POINTS.playerSpawn.y,
+      subX: STATIC_POINTS.playerSpawn.x,
+      subY: STATIC_POINTS.playerSpawn.y,
       dir: "down",
       health: 100,
       maxHealth: 100,
@@ -703,10 +707,21 @@ export function migrateState(raw: unknown): GameState {
     })(),
 
 
-    // Nested objects
-    player: s.player && typeof s.player === "object"
-      ? { ...base.player, ...(s.player as Partial<GameState["player"]>) }
-      : base.player,
+    player: (() => {
+      const pBase = base.player;
+      if (s.player && typeof s.player === "object") {
+        const pObj = s.player as Record<string, any>;
+        const x = typeof pObj.x === "number" ? pObj.x : pBase.x;
+        const y = typeof pObj.y === "number" ? pObj.y : pBase.y;
+        return {
+          ...pBase,
+          ...pObj,
+          subX: typeof pObj.subX === "number" ? pObj.subX : x,
+          subY: typeof pObj.subY === "number" ? pObj.subY : y,
+        };
+      }
+      return pBase;
+    })(),
 
     skills: s.skills && typeof s.skills === "object"
       ? { ...base.skills, ...(s.skills as Partial<GameState["skills"]>) }
@@ -1993,8 +2008,8 @@ export function draw(
   const gridCols = currentGrid[0]?.length || 0;
 
   const p = state.player;
-  const playerPx = p.x * TILE + TILE / 2;
-  const playerPy = p.y * TILE + TILE / 2;
+  const playerPx = (p.subX !== undefined ? p.subX : p.x) * TILE + TILE / 2;
+  const playerPy = (p.subY !== undefined ? p.subY : p.y) * TILE + TILE / 2;
 
   const cameraX = Math.max(
     0,
@@ -2107,6 +2122,39 @@ export function draw(
         ctx.fillRect(px + 4, py + 6, TILE - 8, TILE - 6);
         ctx.fillStyle = "#17202a";
         ctx.fillRect(px + 8, py + 12, TILE - 16, TILE - 12);
+      } else if (t.kind === "tree") {
+        // Draw grass background first
+        ctx.fillStyle = (x + y) % 2 === 0 ? "#7ec77a" : "#74bf72";
+        ctx.fillRect(px, py, TILE, TILE);
+
+        // Wind sway calculation
+        const sway = Math.sin(Date.now() / 600 + x * 0.5) * 2.5;
+
+        // Trunk
+        ctx.fillStyle = "#8a5a3b"; // brown trunk
+        ctx.fillRect(px + 13, py + 12, 6, 20);
+
+        // Branches/Leaves (Swaying)
+        ctx.fillStyle = "#27ae60"; // dark green base
+        ctx.beginPath();
+        ctx.arc(px + 16 + sway, py + 6, 12, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = "#2ecc71"; // light green highlights
+        ctx.beginPath();
+        ctx.arc(px + 12 + sway, py + 2, 8, 0, Math.PI * 2);
+        ctx.arc(px + 20 + sway, py + 4, 7, 0, Math.PI * 2);
+        ctx.fill();
+
+        // If it's a fruit tree, draw some red apples!
+        if ((x * 7 + y * 13) % 5 === 0) {
+          ctx.fillStyle = "#e74c3c"; // red apples
+          ctx.beginPath();
+          ctx.arc(px + 12 + sway, py + 6, 2.5, 0, Math.PI * 2);
+          ctx.arc(px + 18 + sway, py + 0, 2.5, 0, Math.PI * 2);
+          ctx.arc(px + 15 + sway, py + 10, 2.5, 0, Math.PI * 2);
+          ctx.fill();
+        }
       }
 
       // Draw weeds/branches/stones debris
@@ -2451,35 +2499,53 @@ export function draw(
   }
 
   // 6. Draw Player
-  const walkBob = Math.sin(Date.now() / 100) * 1.5;
-  // Legs / pants
-  ctx.fillStyle = "#2c3e50";
-  ctx.fillRect(playerPx - 7 - cameraX, playerPy + 10 - cameraY, 6, 8);
-  ctx.fillRect(playerPx + 1 - cameraX, playerPy + 10 - cameraY, 6, 8);
-  // Body / shirt
+  const isMoving = Math.abs(p.x - (p.subX ?? p.x)) > 0.01 || Math.abs(p.y - (p.subY ?? p.y)) > 0.01;
+  const walkTime = isMoving ? Date.now() / 80 : 0;
+  const walkBob = isMoving ? Math.sin(walkTime * 2) * 2 : 0;
+
+  // Left and Right leg height offsets to simulate stepping
+  const leftLegOffset = isMoving ? Math.sin(walkTime) * 3 : 0;
+  const rightLegOffset = isMoving ? -Math.sin(walkTime) * 3 : 0;
+
+  // Draw Legs (pants / shoes)
+  ctx.fillStyle = "#2c3e50"; // dark blue pants
+  ctx.fillRect(playerPx - 7, playerPy + 10 + leftLegOffset, 6, 8 - leftLegOffset);
+  ctx.fillRect(playerPx + 1, playerPy + 10 + rightLegOffset, 6, 8 - rightLegOffset);
+
+  // Body / Shirt (Red)
   ctx.fillStyle = "#e74c3c";
-  ctx.fillRect(playerPx - 8 - cameraX, playerPy - 4 + walkBob - cameraY, 16, 14);
-  // Head / skin
+  ctx.fillRect(playerPx - 8, playerPy - 4 + walkBob, 16, 14);
+
+  // Head / Skin (Peach)
   ctx.fillStyle = "#f5d0a9";
-  ctx.fillRect(playerPx - 6 - cameraX, playerPy - 14 + walkBob - cameraY, 12, 10);
-  // Hat
-  ctx.fillStyle = "#8a5a3b";
-  ctx.fillRect(playerPx - 7 - cameraX, playerPy - 16 + walkBob - cameraY, 14, 3);
-  ctx.fillRect(playerPx - 5 - cameraX, playerPy - 19 + walkBob - cameraY, 10, 4);
+  ctx.fillRect(playerPx - 6, playerPy - 14 + walkBob, 12, 10);
+
+  // Hair
+  ctx.fillStyle = "#5c3a21"; // brown hair
+  ctx.fillRect(playerPx - 6, playerPy - 12 + walkBob, 2, 8); // sideburn left
+  ctx.fillRect(playerPx + 4, playerPy - 12 + walkBob, 2, 8); // sideburn right
+
+  // Hat (Straw hat / Blacksmith cap)
+  ctx.fillStyle = "#d2b48c"; // tan/straw color hat
+  ctx.fillRect(playerPx - 9, playerPy - 15 + walkBob, 18, 2); // wider brim
+  ctx.fillStyle = "#a0522d"; // brown band
+  ctx.fillRect(playerPx - 6, playerPy - 17 + walkBob, 12, 2);
+  ctx.fillStyle = "#d2b48c"; // top
+  ctx.fillRect(playerPx - 5, playerPy - 21 + walkBob, 10, 4);
 
   // Face / direction eyes
   ctx.fillStyle = "#000";
   if (p.dir === "down") {
-    ctx.fillRect(playerPx - 3 - cameraX, playerPy - 9 + walkBob - cameraY, 2, 2);
-    ctx.fillRect(playerPx + 1 - cameraX, playerPy - 9 + walkBob - cameraY, 2, 2);
+    ctx.fillRect(playerPx - 3, playerPy - 9 + walkBob, 2, 2);
+    ctx.fillRect(playerPx + 1, playerPy - 9 + walkBob, 2, 2);
   } else if (p.dir === "up") {
     // back of head - show hair only
-    ctx.fillStyle = "#8a5a3b";
-    ctx.fillRect(playerPx - 6 - cameraX, playerPy - 14 + walkBob - cameraY, 12, 8);
+    ctx.fillStyle = "#5c3a21";
+    ctx.fillRect(playerPx - 6, playerPy - 14 + walkBob, 12, 8);
   } else if (p.dir === "left") {
-    ctx.fillRect(playerPx - 4 - cameraX, playerPy - 9 + walkBob - cameraY, 2, 2);
+    ctx.fillRect(playerPx - 4, playerPy - 9 + walkBob, 2, 2);
   } else if (p.dir === "right") {
-    ctx.fillRect(playerPx + 2 - cameraX, playerPy - 9 + walkBob - cameraY, 2, 2);
+    ctx.fillRect(playerPx + 2, playerPy - 9 + walkBob, 2, 2);
   }
 
   // 7. Draw carry item above head (Lifting animation)
@@ -2489,8 +2555,8 @@ export function draw(
     ctx.textAlign = "center";
     ctx.fillText(
       state.carryItem.iconSymbol || "🥬",
-      playerPx - cameraX,
-      playerPy - 24 - cameraY
+      playerPx,
+      playerPy - 24
     );
   }
 
@@ -2499,7 +2565,7 @@ export function draw(
   if (f && state.harvestLiftingTimer <= 0) {
     ctx.strokeStyle = "rgba(255, 255, 255, 0.4)";
     ctx.lineWidth = 1.5;
-    ctx.strokeRect(f.x * TILE + 2 - cameraX, f.y * TILE + 2 - cameraY, TILE - 4, TILE - 4);
+    ctx.strokeRect(f.x * TILE + 2, f.y * TILE + 2, TILE - 4, TILE - 4);
 
     const held = state.inventory[state.hotbarIndex];
     if (held && held.id === "sword" && Math.sin(Date.now() / 60) > 0.6) {
@@ -2507,8 +2573,8 @@ export function draw(
       ctx.lineWidth = 4;
       ctx.beginPath();
       ctx.arc(
-        playerPx + (f.x - p.x) * 18 - cameraX,
-        playerPy + (f.y - p.y) * 18 - cameraY,
+        playerPx + (f.x - p.x) * 18,
+        playerPy + (f.y - p.y) * 18,
         14,
         0,
         Math.PI * 2
@@ -2526,21 +2592,21 @@ export function draw(
       ctx.strokeStyle = "rgba(255, 255, 255, 0.6)";
       ctx.lineWidth = 1;
       ctx.beginPath();
-      ctx.moveTo(playerPx - cameraX, playerPy - 4 - cameraY);
-      ctx.lineTo(bx - cameraX, by - cameraY);
+      ctx.moveTo(playerPx, playerPy - 4);
+      ctx.lineTo(bx, by);
       ctx.stroke();
 
       const bBob = Math.sin(Date.now() / 200) * 2;
       ctx.fillStyle = "#e74c3c";
-      ctx.fillRect(bx - 3 - cameraX, by - 3 + bBob - cameraY, 6, 6);
+      ctx.fillRect(bx - 3, by - 3 + bBob, 6, 6);
       ctx.fillStyle = "#fff";
-      ctx.fillRect(bx - 3 - cameraX, by - 3 + bBob - cameraY, 6, 2);
+      ctx.fillRect(bx - 3, by - 3 + bBob, 6, 2);
 
       if (fState.status === "nibble") {
         ctx.fillStyle = "#e74c3c";
         ctx.font = "bold 14px monospace";
         ctx.textAlign = "center";
-        ctx.fillText("!", bx - cameraX, by - 12 + bBob - cameraY);
+        ctx.fillText("!", bx, by - 12 + bBob);
       }
     }
   }

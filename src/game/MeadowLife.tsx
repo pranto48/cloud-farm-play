@@ -184,6 +184,12 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
       setState((prev) => {
         const next = structuredClone(prev);
         
+        // Smoothly interpolate player coordinates
+        if (next.player.subX === undefined) next.player.subX = next.player.x;
+        if (next.player.subY === undefined) next.player.subY = next.player.y;
+        next.player.subX += (next.player.x - next.player.subX) * 0.2;
+        next.player.subY += (next.player.y - next.player.subY) * 0.2;
+
         updateEntities(next, dt);
 
         if (!next.animals) next.animals = [];
@@ -280,18 +286,21 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
 
       // Draw particle overlay
       ctx.save();
+      const p = stateRef.current.player;
+      const pSubX = p.subX !== undefined ? p.subX : p.x;
+      const pSubY = p.subY !== undefined ? p.subY : p.y;
       const cameraX = Math.max(
         0,
         Math.min(
           (stateRef.current.inMine ? 24 : COLS) * TILE - canvasSize.width,
-          stateRef.current.player.x * TILE + 16 - canvasSize.width / 2
+          pSubX * TILE + 16 - canvasSize.width / 2
         )
       );
       const cameraY = Math.max(
         0,
         Math.min(
           (stateRef.current.inMine ? 24 : ROWS) * TILE - canvasSize.height,
-          stateRef.current.player.y * TILE + 16 - canvasSize.height / 2
+          pSubY * TILE + 16 - canvasSize.height / 2
         )
       );
       ctx.translate(-cameraX, -cameraY);
@@ -319,8 +328,8 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
 
       if (chargingToolRef.current) {
         const p = curState.player;
-        const ppx = p.x * TILE + 16;
-        const ppy = p.y * TILE - 8;
+        const ppx = (p.subX !== undefined ? p.subX : p.x) * TILE + 16;
+        const ppy = (p.subY !== undefined ? p.subY : p.y) * TILE - 8;
 
         const duration = Date.now() - chargingToolRef.current.startTime;
         const maxLvl = chargingToolRef.current.maxLevel;

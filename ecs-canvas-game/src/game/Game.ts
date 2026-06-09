@@ -1,5 +1,4 @@
-import { World } from "./ecs/World";
-import { spawnPlayer, spawnMonster, spawnMap, spawnWorker, spawnParticle } from "./Spawner";
+import { spawnPlayer, spawnMonster, spawnMap, spawnWorker, spawnParticle, spawnStorage } from "./Spawner";
 import {
   InputComponent,
   PlayerComponent,
@@ -8,8 +7,10 @@ import {
   MapComponent,
   WorkerComponent,
 } from "./components/GameComponents";
+import type { WorkerRole } from "./components/GameComponents";
 
 // Systems
+import { World } from "./ecs/World";
 import { InputSystem } from "./systems/InputSystem";
 import { AISystem } from "./systems/AISystem";
 import { MovementSystem } from "./systems/MovementSystem";
@@ -19,6 +20,7 @@ import { ParticleSystem } from "./systems/ParticleSystem";
 import { RenderSystem } from "./systems/RenderSystem";
 import { TileCollisionSystem } from "./systems/TileCollisionSystem";
 import { WorkerSystem } from "./systems/WorkerSystem";
+import { CropSystem } from "./systems/CropSystem";
 
 export class Game {
   private canvas: HTMLCanvasElement;
@@ -32,6 +34,7 @@ export class Game {
   private aiSystem!: AISystem;
   private tileCollisionSystem!: TileCollisionSystem;
   private workerSystem!: WorkerSystem;
+  private cropSystem!: CropSystem;
   private movementSystem!: MovementSystem;
   private collisionSystem!: CollisionSystem;
   private lifetimeSystem!: LifetimeSystem;
@@ -83,6 +86,7 @@ export class Game {
     this.aiSystem = new AISystem();
     this.tileCollisionSystem = new TileCollisionSystem();
     this.workerSystem = new WorkerSystem();
+    this.cropSystem = new CropSystem();
     this.movementSystem = new MovementSystem();
     this.collisionSystem = new CollisionSystem();
     this.lifetimeSystem = new LifetimeSystem();
@@ -91,11 +95,12 @@ export class Game {
     // Initialize rendering system (drawn on canvas)
     this.renderSystem = new RenderSystem(this.canvas, this.ctx);
 
-    // Register logic systems in World (Inputs -> AI -> Tile Collisions -> Workers -> Standard Movement -> Collisions)
+    // Register logic systems in World (Inputs -> AI -> Tile Collisions -> Workers -> Crops -> Standard Movement -> Collisions)
     this.world.addSystem(this.inputSystem);
     this.world.addSystem(this.aiSystem);
     this.world.addSystem(this.tileCollisionSystem);
     this.world.addSystem(this.workerSystem);
+    this.world.addSystem(this.cropSystem);
     this.world.addSystem(this.movementSystem);
     this.world.addSystem(this.collisionSystem);
     this.world.addSystem(this.lifetimeSystem);
@@ -103,12 +108,17 @@ export class Game {
 
     this.monsterSpawnTimer = 0;
 
-    // Spawn initial workers near the player
+    // Spawn global Storage building near player spawn
+    spawnStorage(this.world, mapData.playerX + 80, mapData.playerY);
+
+    // Spawn initial workers near the player with balanced cycled roles
+    const initialRoles: WorkerRole[] = ["Woodcutter", "Miner", "Farmer"];
     for (let i = 0; i < 3; i++) {
       spawnWorker(
         this.world,
         mapData.playerX + (Math.random() * 80 - 40),
-        mapData.playerY + (Math.random() * 80 - 40)
+        mapData.playerY + (Math.random() * 80 - 40),
+        initialRoles[i]
       );
     }
 
@@ -134,11 +144,14 @@ export class Game {
         }
       }
 
-      // P key to spawn a worker
+      // P key to spawn a worker (cycling roles)
       if (e.key === "p" || e.key === "P") {
         const pPos = this.world.getComponent(this.playerEntityId, PositionComponent);
         if (pPos) {
-          spawnWorker(this.world, pPos.x, pPos.y);
+          const currentWorkerCount = this.world.getEntitiesWith([WorkerComponent]).length;
+          const roles: WorkerRole[] = ["Woodcutter", "Miner", "Farmer"];
+          const assignedRole = roles[currentWorkerCount % 3];
+          spawnWorker(this.world, pPos.x, pPos.y, assignedRole);
         }
       }
     });

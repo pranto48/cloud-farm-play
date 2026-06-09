@@ -213,8 +213,12 @@ export class BoxColliderComponent extends Component {
   }
 }
 
+export type WorkerState = "Idle" | "Seeking Path" | "Moving" | "Working" | "Seeking Storage" | "Starving";
+export type WorkerRole = "Woodcutter" | "Miner" | "Farmer";
+
 export class WorkerComponent extends Component {
-  public state: "Idle" | "Seeking Path" | "Moving" | "Working";
+  public state: WorkerState;
+  public role: WorkerRole;
   public path: { r: number; c: number }[];
   public currentWaypointIndex: number;
   public targetTile: { r: number; c: number } | null;
@@ -222,13 +226,17 @@ export class WorkerComponent extends Component {
   public workDuration: number;
   public speed: number;
   public searchCooldown: number;
+  public isCarryingFood: boolean;
+  public savedRoleState: WorkerState;
 
   constructor(
-    state: "Idle" | "Seeking Path" | "Moving" | "Working" = "Idle",
-    speed: number = 90,
-    workDuration: number = 4.0
+    role: WorkerRole = "Woodcutter",
+    state: WorkerState = "Idle",
+    speed: number = 95,
+    workDuration: number = 3.5
   ) {
     super();
+    this.role = role;
     this.state = state;
     this.path = [];
     this.currentWaypointIndex = 0;
@@ -237,6 +245,39 @@ export class WorkerComponent extends Component {
     this.workDuration = workDuration;
     this.speed = speed;
     this.searchCooldown = 0;
+    this.isCarryingFood = false;
+    this.savedRoleState = "Idle";
+  }
+}
+
+export class StorageComponent extends Component {
+  public foodCount: number;
+
+  constructor(foodCount: number = 5) {
+    super();
+    this.foodCount = foodCount;
+  }
+}
+
+export class HungerComponent extends Component {
+  public hungerTimer: number;
+  public isHungry: boolean;
+
+  constructor() {
+    super();
+    this.hungerTimer = 0;
+    this.isHungry = false;
+  }
+}
+
+export class CropComponent extends Component {
+  public growthTimer: number;
+  public isFullyGrown: boolean;
+
+  constructor(growthTimer: number = 60.0) {
+    super();
+    this.growthTimer = growthTimer;
+    this.isFullyGrown = false;
   }
 }
 

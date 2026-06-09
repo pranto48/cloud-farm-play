@@ -8,6 +8,7 @@ import {
   MapComponent,
   WorkerComponent,
   InputComponent,
+  StorageComponent,
 } from "../components/GameComponents";
 
 export class RenderSystem extends System {
@@ -239,8 +240,8 @@ export class RenderSystem extends System {
     score: number
   ): void {
     // Glassmorphism HUD Panel at top-left
-    const panelW = 260;
-    const panelH = 115;
+    const panelW = 265;
+    const panelH = 145;
     this.ctx.fillStyle = "rgba(44, 62, 80, 0.75)";
     this.ctx.strokeStyle = "rgba(255, 255, 255, 0.15)";
     this.ctx.lineWidth = 1.5;
@@ -300,13 +301,25 @@ export class RenderSystem extends System {
     this.ctx.textAlign = "center";
     this.ctx.fillText(`XP: ${xp} / ${maxXp}`, 26 + barW / 2, xpY + 9);
 
-    // Worker Count & Key Instructions inside HUD
-    const workerCount = world.getEntitiesWith([WorkerComponent]).length;
+    // Detailed Worker Roles & Storage Food Stock inside HUD
+    const workers = world.getEntitiesWith([WorkerComponent]);
+    const workerCount = workers.length;
+    const woodcutters = workers.filter(w => world.getComponent(w, WorkerComponent)!.role === "Woodcutter").length;
+    const miners = workers.filter(w => world.getComponent(w, WorkerComponent)!.role === "Miner").length;
+    const farmers = workers.filter(w => world.getComponent(w, WorkerComponent)!.role === "Farmer").length;
+
+    const storages = world.getEntitiesWith([StorageComponent]);
+    const storageFood = storages.length > 0 ? world.getComponent(storages[0], StorageComponent)!.foodCount : 0;
+
     const statsY = 100;
     this.ctx.fillStyle = "#34e7e4";
     this.ctx.font = "bold 11px sans-serif";
     this.ctx.textAlign = "left";
-    this.ctx.fillText(`Workers: ${workerCount}`, 26, statsY);
+    this.ctx.fillText(`Workers: ${workerCount} (🪓:${woodcutters} ⛏️:${miners} 🌾:${farmers})`, 26, statsY);
+
+    this.ctx.fillStyle = "#f1c40f";
+    this.ctx.font = "bold 11px sans-serif";
+    this.ctx.fillText(`Storage Food: ${storageFood} 🌾`, 26, statsY + 16);
     
     this.ctx.fillStyle = "#95a5a6";
     this.ctx.font = "10px sans-serif";

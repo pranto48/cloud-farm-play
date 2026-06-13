@@ -195,6 +195,22 @@ export function spawnGenerator(world: World, x: number, y: number, gridX: number
   return entity;
 }
 
+export function spawnStorageHouse(world: World, x: number, y: number, gridX: number, gridY: number): string {
+  const entity = world.createEntity();
+  world.addComponent(entity, new PositionComponent(x, y));
+  const struct = new StructureComponent("storage_house", gridX, gridY, 90);
+  world.addComponent(entity, struct);
+  return entity;
+}
+
+export function spawnWorkerHouse(world: World, x: number, y: number, gridX: number, gridY: number): string {
+  const entity = world.createEntity();
+  world.addComponent(entity, new PositionComponent(x, y));
+  const struct = new StructureComponent("worker_house", gridX, gridY, 90);
+  world.addComponent(entity, struct);
+  return entity;
+}
+
 export function spawnItemEntity(world: World, x: number, y: number, type: ItemType): string {
   const entity = world.createEntity();
   world.addComponent(entity, new PositionComponent(x, y));

@@ -111,6 +111,9 @@ export class Game {
       playerComp.inventory["chest"] = 5;
       playerComp.inventory["pole"] = 15;
       playerComp.inventory["generator"] = 2;
+      playerComp.inventory["road"] = 50;
+      playerComp.inventory["storage_house"] = 5;
+      playerComp.inventory["worker_house"] = 5;
     }
   }
 
@@ -210,8 +213,35 @@ export class Game {
   }
 
   private setupToolbar(): void {
-    const tools: BuildTool[] = ["belt", "inserter", "drill", "furnace", "assembler", "chest", "pole", "generator"];
+    const tools: BuildTool[] = [
+      "belt", "inserter", "drill", "furnace", "assembler", "chest", "pole", "generator",
+      "road", "storage_house", "worker_house"
+    ];
     const btnReset = document.getElementById("btn-reset");
+
+    // Tab switching handlers
+    const tabFactory = document.getElementById("tab-factory");
+    const tabBuilder = document.getElementById("tab-builder");
+    const groupFactory = document.getElementById("tools-factory-group");
+    const groupBuilder = document.getElementById("tools-builder-group");
+
+    if (tabFactory && tabBuilder && groupFactory && groupBuilder) {
+      tabFactory.addEventListener("click", () => {
+        tabFactory.classList.add("active");
+        tabBuilder.classList.remove("active");
+        groupFactory.classList.add("active");
+        groupBuilder.classList.remove("active");
+        this.canvas.focus();
+      });
+
+      tabBuilder.addEventListener("click", () => {
+        tabBuilder.classList.add("active");
+        tabFactory.classList.remove("active");
+        groupBuilder.classList.add("active");
+        groupFactory.classList.remove("active");
+        this.canvas.focus();
+      });
+    }
 
     tools.forEach((tool) => {
       const btn = document.getElementById(`btn-${tool}`);
@@ -239,7 +269,32 @@ export class Game {
   }
 
   private updateToolbarActiveClasses(activeTool: BuildTool): void {
-    const tools: BuildTool[] = ["belt", "inserter", "drill", "furnace", "assembler", "chest", "pole", "generator"];
+    const tools: BuildTool[] = [
+      "belt", "inserter", "drill", "furnace", "assembler", "chest", "pole", "generator",
+      "road", "storage_house", "worker_house"
+    ];
+    
+    // Auto sync tab display if active tool is changed externally (e.g. via hotkeys)
+    const tabFactory = document.getElementById("tab-factory");
+    const tabBuilder = document.getElementById("tab-builder");
+    const groupFactory = document.getElementById("tools-factory-group");
+    const groupBuilder = document.getElementById("tools-builder-group");
+    
+    if (tabFactory && tabBuilder && groupFactory && groupBuilder) {
+      const isBuilderTool = activeTool === "road" || activeTool === "storage_house" || activeTool === "worker_house";
+      if (isBuilderTool) {
+        tabBuilder.classList.add("active");
+        tabFactory.classList.remove("active");
+        groupBuilder.classList.add("active");
+        groupFactory.classList.remove("active");
+      } else {
+        tabFactory.classList.add("active");
+        tabBuilder.classList.remove("active");
+        groupFactory.classList.add("active");
+        groupBuilder.classList.remove("active");
+      }
+    }
+
     tools.forEach((tool) => {
       const btn = document.getElementById(`btn-${tool}`);
       if (btn) {

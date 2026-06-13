@@ -57,7 +57,7 @@ export class InputComponent extends Component {
   }
 }
 
-export type BuildTool = "belt" | "inserter" | "drill" | "furnace" | "assembler" | "chest" | "pole" | "generator";
+export type BuildTool = "belt" | "inserter" | "drill" | "furnace" | "assembler" | "chest" | "pole" | "generator" | "road" | "storage_house" | "worker_house";
 
 export class PlayerComponent extends Component {
   public inventory: Record<string, number> = {};
@@ -83,6 +83,7 @@ export class MapComponent extends Component {
   public height: number;
   public tileSize: number;
   public tiles: TileType[][];
+  public weights: number[][];
 
   constructor(tiles: TileType[][], width: number = 100, height: number = 100, tileSize: number = 64) {
     super();
@@ -90,6 +91,31 @@ export class MapComponent extends Component {
     this.width = width;
     this.height = height;
     this.tileSize = tileSize;
+    
+    // Initialize weights
+    this.weights = [];
+    for (let r = 0; r < height; r++) {
+      const row: number[] = [];
+      for (let c = 0; c < width; c++) {
+        row.push(this.getTileWeight(tiles[r][c]));
+      }
+      this.weights.push(row);
+    }
+  }
+
+  public getTileWeight(type: TileType): number {
+    if (type === "road") return 0.5;
+    if (type === "grass") return 1.0;
+    if (type === "water" || type === "forest" || type === "stone") return Infinity;
+    return 1.0; // ores / veins
+  }
+
+  public updateTile(row: number, col: number, type: TileType): void {
+    if (row >= 0 && row < this.height && col >= 0 && col < this.width) {
+      this.tiles[row][col] = type;
+      this.weights[row][col] = this.getTileWeight(type);
+      console.log(`[Pathfinding Graph] Updated tile at (${row}, ${col}) to ${type}. Weight: ${this.weights[row][col]}`);
+    }
   }
 }
 
@@ -126,7 +152,9 @@ export type StructureType =
   | "assembler" 
   | "chest" 
   | "pole" 
-  | "generator";
+  | "generator"
+  | "storage_house"
+  | "worker_house";
 
 export interface Recipe {
   name: string;

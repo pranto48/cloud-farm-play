@@ -149,6 +149,33 @@ export class RenderSystem extends System {
             this.ctx.fillRect(tx + 34, ty + 32, 14, 14);
             this.ctx.fillStyle = "#2c3e50";
             this.ctx.fillRect(tx + 32, ty + 10, 10, 10);
+          } else if (type === "road") {
+            // Dusty dirt gravel road
+            this.ctx.fillStyle = "#d5a980";
+            this.ctx.fillRect(tx, ty, ts, ts);
+            this.ctx.fillStyle = "#b88c60";
+            if ((c * 5 + r * 3) % 4 === 0) {
+              this.ctx.fillRect(tx + 8, ty + 12, 4, 3);
+              this.ctx.fillRect(tx + 40, ty + 36, 3, 3);
+            }
+            if ((c * 2 + r * 7) % 5 === 0) {
+              this.ctx.fillStyle = "#e5cbb3";
+              this.ctx.fillRect(tx + 24, ty + 20, 5, 2);
+              this.ctx.fillRect(tx + 48, ty + 10, 2, 4);
+            }
+          }
+
+          // Pathfinding weights overlay when using builder tools
+          const isBuilderTool = this.activeTool === "road" || this.activeTool === "storage_house" || this.activeTool === "worker_house";
+          if (isBuilderTool) {
+            const weight = map.weights[r]?.[c];
+            if (weight !== undefined && weight !== Infinity) {
+              this.ctx.fillStyle = "rgba(255, 255, 255, 0.45)";
+              this.ctx.font = "bold 9px monospace";
+              this.ctx.textAlign = "left";
+              this.ctx.textBaseline = "top";
+              this.ctx.fillText(weight.toFixed(1), tx + 4, ty + 4);
+            }
           }
         }
       }
@@ -669,6 +696,113 @@ export class RenderSystem extends System {
         ctx.fillText("GENERATOR", 0, 32);
         break;
       }
+
+      case "storage_house": {
+        // Red barn style storage house
+        // Roof shadow
+        ctx.fillStyle = "rgba(0,0,0,0.15)";
+        ctx.fillRect(-22, 12, 44, 4);
+
+        // Main walls (red wood)
+        ctx.fillStyle = "#962d2d";
+        ctx.beginPath();
+        ctx.roundRect(-20, -14, 40, 28, 3);
+        ctx.fill();
+        ctx.strokeStyle = "#5a1818";
+        ctx.lineWidth = 2;
+        ctx.strokeRect(-20, -14, 40, 28);
+
+        // Barn roof (dark gray/black metal slats)
+        ctx.fillStyle = "#353b48";
+        ctx.beginPath();
+        ctx.moveTo(-24, -14);
+        ctx.lineTo(0, -32);
+        ctx.lineTo(24, -14);
+        ctx.closePath();
+        ctx.fill();
+        ctx.strokeStyle = "#2f3640";
+        ctx.stroke();
+
+        // Big wooden double doors
+        ctx.fillStyle = "#8a5a3b";
+        ctx.fillRect(-12, 2, 24, 12);
+        ctx.strokeStyle = "#4d3013";
+        ctx.strokeRect(-12, 2, 24, 12);
+        // Center split line
+        ctx.beginPath();
+        ctx.moveTo(0, 2);
+        ctx.lineTo(0, 14);
+        ctx.stroke();
+
+        // Barn window
+        ctx.fillStyle = "#f1c40f"; // yellow glowing window
+        ctx.fillRect(-6, -10, 12, 6);
+        ctx.strokeStyle = "#2f3640";
+        ctx.strokeRect(-6, -10, 12, 6);
+
+        ctx.fillStyle = "rgba(255,255,255,0.7)";
+        ctx.font = "bold 8px sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText("STORAGE", 0, 26);
+        break;
+      }
+
+      case "worker_house": {
+        // Blue cozy cottage style worker house
+        // Shadow
+        ctx.fillStyle = "rgba(0,0,0,0.15)";
+        ctx.fillRect(-20, 14, 40, 3);
+
+        // Cottage walls (light blue wood panels)
+        ctx.fillStyle = "#4682b4";
+        ctx.beginPath();
+        ctx.roundRect(-18, -12, 36, 26, 3);
+        ctx.fill();
+        ctx.strokeStyle = "#244d70";
+        ctx.lineWidth = 2;
+        ctx.strokeRect(-18, -12, 36, 26);
+
+        // Roof (slanted warm orange clay tiles)
+        ctx.fillStyle = "#d35400";
+        ctx.beginPath();
+        ctx.moveTo(-22, -12);
+        ctx.lineTo(0, -28);
+        ctx.lineTo(22, -12);
+        ctx.closePath();
+        ctx.fill();
+        ctx.strokeStyle = "#a04000";
+        ctx.stroke();
+
+        // Little chimney
+        ctx.fillStyle = "#7f8c8d";
+        ctx.fillRect(8, -26, 6, 12);
+
+        // Cozy front door
+        ctx.fillStyle = "#8a5a3b";
+        ctx.fillRect(-10, 2, 8, 12);
+        ctx.fillStyle = "#f1c40f"; // brass doorknob
+        ctx.beginPath();
+        ctx.arc(-4, 8, 1, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Cozy square window
+        ctx.fillStyle = "#3b8c88"; // glass blue
+        ctx.fillRect(4, -2, 8, 8);
+        ctx.strokeStyle = "#244d70";
+        ctx.strokeRect(4, -2, 8, 8);
+        // Window cross
+        ctx.strokeStyle = "rgba(255, 255, 255, 0.4)";
+        ctx.beginPath();
+        ctx.moveTo(8, -2); ctx.lineTo(8, 6);
+        ctx.moveTo(4, 2); ctx.lineTo(12, 2);
+        ctx.stroke();
+
+        ctx.fillStyle = "rgba(255,255,255,0.7)";
+        ctx.font = "bold 8px sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText("WORKER HS", 0, 26);
+        break;
+      }
     }
 
     ctx.restore();
@@ -739,6 +873,9 @@ export class RenderSystem extends System {
         else if (name === "copper_wire") symbol = "🧶";
         else if (name === "electronic_circuit") symbol = "📟";
         else if (name === "science_pack") symbol = "🧪";
+        else if (name === "road") symbol = "🛣️";
+        else if (name === "storage_house") symbol = "🏠";
+        else if (name === "worker_house") symbol = "🏡";
 
         this.ctx.fillStyle = "#f1c40f";
         this.ctx.fillText(`${symbol} ${name.replace("_", " ")}:`, colX, invY + 42);

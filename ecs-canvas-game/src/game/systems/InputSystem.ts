@@ -8,6 +8,7 @@ import {
   MapComponent,
   StructureComponent,
   BuildTool,
+  TileType,
 } from "../components/GameComponents";
 import { 
   spawnBelt, 
@@ -17,7 +18,9 @@ import {
   spawnAssembler, 
   spawnChest, 
   spawnPowerPole, 
-  spawnGenerator 
+  spawnGenerator,
+  spawnStorageHouse,
+  spawnWorkerHouse
 } from "../Spawner";
 import { toast } from "../utils/Toast";
 
@@ -74,15 +77,23 @@ export class InputSystem extends System {
       this.keyDebounce["r"] = false;
     }
 
-    // 3. Hotbar Selection via keys 1-8
-    const tools: BuildTool[] = ["belt", "inserter", "drill", "furnace", "assembler", "chest", "pole", "generator"];
-    for (let i = 1; i <= 8; i++) {
-      if (input.keys[i.toString()]) {
+    // 3. Hotbar Selection via keys 1-9, 0, -
+    const tools: BuildTool[] = [
+      "belt", "inserter", "drill", "furnace", "assembler", "chest", "pole", "generator",
+      "road", "storage_house", "worker_house"
+    ];
+    for (let i = 1; i <= 11; i++) {
+      let keyStr = "";
+      if (i <= 9) keyStr = i.toString();
+      else if (i === 10) keyStr = "0";
+      else if (i === 11) keyStr = "-";
+
+      if (input.keys[keyStr]) {
         const selected = tools[i - 1];
         if (selected && player.activeTool !== selected) {
           player.activeTool = selected;
           this.activeTool = selected;
-          toast.success(`Selected tool: ${selected.toUpperCase()}`);
+          toast.success(`Selected tool: ${selected.toUpperCase().replace("_", " ")}`);
         }
       }
     }
@@ -100,22 +111,21 @@ export class InputSystem extends System {
     // Grid bounds check
     if (col >= 0 && col < mapComp.width && row >= 0 && row < mapComp.height) {
       const tileType = mapComp.tiles[row][col];
-      const isWalkableTile = tileType !== "water" && tileType !== "stone";
+
+      // Query to check if grid slot is already occupied
+      const structures = world.getEntitiesWith([StructureComponent]);
+      const isOccupied = structures.some(ent => {
+        const struct = world.getComponent(ent, StructureComponent)!;
+        return struct.gridX === col && struct.gridY === row;
+      });
 
       // 4a. Left Click: Build Structure
       if (input.mouseClicked && this.placementDebounceTimer <= 0) {
-        // Query to check if grid slot is already occupied
-        const structures = world.getEntitiesWith([StructureComponent]);
-        const isOccupied = structures.some(ent => {
-          const struct = world.getComponent(ent, StructureComponent)!;
-          return struct.gridX === col && struct.gridY === row;
-        });
-
-        if (!isOccupied && isWalkableTile) {
+        if (this.canBuild(player.activeTool, tileType, isOccupied)) {
           const tool = player.activeTool;
           const count = player.inventory[tool] || 0;
 
-          if (count > 0 || tool === "belt") { // conveyor belt is free or requires 1 plate (we can allow unlimited belts for fun testing, or cost 1 plate)
+          if (count > 0 || tool === "belt") { // conveyor belt is free or costs 1 plate
             const costItem = this.getCostItem(tool);
             const costCount = this.getCostCount(tool);
             const hasMaterials = !costItem || (player.inventory[costItem] >= costCount);
@@ -156,6 +166,16 @@ export class InputSystem extends System {
                 case "generator":
                   spawnedEntity = spawnGenerator(world, spawnX, spawnY, col, row, player.buildRotation);
                   break;
+                case "road":
+                  mapComp.updateTile(row, col, "road");
+                  spawnedEntity = "road_placed";
+                  break;
+                case "storage_house":
+                  spawnedEntity = spawnStorageHouse(world, spawnX, spawnY, col, row);
+                  break;
+                case "worker_house":
+                  spawnedEntity = spawnWorkerHouse(world, spawnX, spawnY, col, row);
+                  break;
               }
 
               if (spawnedEntity) {
@@ -169,9 +189,8 @@ export class InputSystem extends System {
         }
       }
 
-      // 4b. Right Click: Deconstruct Structure
+      // 4b. Right Click: Deconstruct Structure / Road
       if (input.mouseRightClicked) {
-        const structures = world.getEntitiesWith([StructureComponent]);
         const occupiedStructureEntity = structures.find(ent => {
           const struct = world.getComponent(ent, StructureComponent)!;
           return struct.gridX === col && struct.gridY === row;
@@ -193,11 +212,38 @@ export class InputSystem extends System {
           }
 
           world.destroyEntity(occupiedStructureEntity);
-          toast.info(`Deconstructed ${struct.type.toUpperCase()}`);
+          toast.info(`Deconstructed ${struct.type.toUpperCase().replace("_", " ")}`);
           input.mouseRightClicked = false; // Reset trigger
+        } else if (mapComp.tiles[row][col] === "road") {
+          // Revert road to grass and refund road
+          mapComp.updateTile(row, col, "grass");
+          player.inventory["road"] = (player.inventory["road"] || 0) + 1;
+          toast.info("Deconstructed ROAD");
+          input.mouseRightClicked = false;
         }
       }
     }
+  }
+
+  private canBuild(tool: BuildTool, tileType: TileType, isOccupied: boolean): boolean {
+    if (isOccupied) return false;
+
+    // Road, storage house, and worker house can ONLY be placed on empty grass tiles
+    if (tool === "road" || tool === "storage_house" || tool === "worker_house") {
+      return tileType === "grass";
+    }
+
+    // General buildings cannot be placed on water or stone
+    if (tileType === "water" || tileType === "stone") {
+      return false;
+    }
+
+    // Buildings cannot be placed on trees (forest), except drills which harvest them
+    if (tileType === "forest") {
+      return tool === "drill";
+    }
+
+    return true;
   }
 
   private getRotationName(rot: number): string {
@@ -220,6 +266,9 @@ export class InputSystem extends System {
       case "chest": return "wood";
       case "pole": return "copper_wire";
       case "generator": return "gear";
+      case "road": return "road";
+      case "storage_house": return "storage_house";
+      case "worker_house": return "worker_house";
       default: return null;
     }
   }
@@ -234,6 +283,9 @@ export class InputSystem extends System {
       case "chest": return 6;
       case "pole": return 5;
       case "generator": return 12;
+      case "road": return 1;
+      case "storage_house": return 1;
+      case "worker_house": return 1;
       default: return 0;
     }
   }

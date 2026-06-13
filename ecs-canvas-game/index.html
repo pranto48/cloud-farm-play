@@ -11,42 +11,69 @@
 
     <!-- Floating Tool Builder UI -->
     <div id="toolbar-container">
-      <button class="tool-btn active" id="btn-belt" title="Conveyor Belt (Left Click/Drag to Place)">
-        <span class="tool-icon">🔀</span>
-        <span class="tool-label">Belt</span>
-      </button>
-      <button class="tool-btn" id="btn-inserter" title="Inserter (Left Click to Place, R to Rotate)">
-        <span class="tool-icon">🦾</span>
-        <span class="tool-label">Inserter</span>
-      </button>
-      <button class="tool-btn" id="btn-drill" title="Mining Drill (Place on Ore Veins/Trees)">
-        <span class="tool-icon">⛏️</span>
-        <span class="tool-label">Drill</span>
-      </button>
-      <button class="tool-btn" id="btn-furnace" title="Smelting Furnace (Smelts Ore using Coal)">
-        <span class="tool-icon">🔥</span>
-        <span class="tool-label">Furnace</span>
-      </button>
-      <button class="tool-btn" id="btn-assembler" title="Assembly Machine (Crafts items automatically)">
-        <span class="tool-icon">⚙️</span>
-        <span class="tool-label">Assembler</span>
-      </button>
-      <button class="tool-btn" id="btn-chest" title="Wooden Chest (Stores items)">
-        <span class="tool-icon">📦</span>
-        <span class="tool-label">Chest</span>
-      </button>
-      <button class="tool-btn" id="btn-pole" title="Power Pole (Distributes electricity in a grid)">
-        <span class="tool-icon">⚡</span>
-        <span class="tool-label">Pole</span>
-      </button>
-      <button class="tool-btn" id="btn-generator" title="Coal Generator (Burns coal to power your network)">
-        <span class="tool-icon">🏭</span>
-        <span class="tool-label">Generator</span>
-      </button>
-      <button class="tool-btn danger" id="btn-reset" title="Wipe save state and restart factory">
-        <span class="tool-icon">🔄</span>
-        <span class="tool-label">Reset</span>
-      </button>
+      <div id="toolbar-tabs">
+        <button class="tab-btn active" id="tab-factory">Factory Tools</button>
+        <button class="tab-btn" id="tab-builder">Town Builder</button>
+      </div>
+
+      <div id="toolbar-content-row">
+        <div id="tools-factory-group" class="tools-group active">
+          <button class="tool-btn active" id="btn-belt" title="Conveyor Belt (Left Click/Drag to Place)">
+            <span class="tool-icon">🔀</span>
+            <span class="tool-label">Belt</span>
+          </button>
+          <button class="tool-btn" id="btn-inserter" title="Inserter (Left Click to Place, R to Rotate)">
+            <span class="tool-icon">🦾</span>
+            <span class="tool-label">Inserter</span>
+          </button>
+          <button class="tool-btn" id="btn-drill" title="Mining Drill (Place on Ore Veins/Trees)">
+            <span class="tool-icon">⛏️</span>
+            <span class="tool-label">Drill</span>
+          </button>
+          <button class="tool-btn" id="btn-furnace" title="Smelting Furnace (Smelts Ore using Coal)">
+            <span class="tool-icon">🔥</span>
+            <span class="tool-label">Furnace</span>
+          </button>
+          <button class="tool-btn" id="btn-assembler" title="Assembly Machine (Crafts items automatically)">
+            <span class="tool-icon">⚙️</span>
+            <span class="tool-label">Assembler</span>
+          </button>
+          <button class="tool-btn" id="btn-chest" title="Wooden Chest (Stores items)">
+            <span class="tool-icon">📦</span>
+            <span class="tool-label">Chest</span>
+          </button>
+          <button class="tool-btn" id="btn-pole" title="Power Pole (Distributes electricity in a grid)">
+            <span class="tool-icon">⚡</span>
+            <span class="tool-label">Pole</span>
+          </button>
+          <button class="tool-btn" id="btn-generator" title="Coal Generator (Burns coal to power your network)">
+            <span class="tool-icon">🏭</span>
+            <span class="tool-label">Generator</span>
+          </button>
+        </div>
+
+        <div id="tools-builder-group" class="tools-group">
+          <button class="tool-btn" id="btn-road" title="Dirt Road (Place on empty Grass to speed up movement. Cost: 0.5)">
+            <span class="tool-icon">🛣️</span>
+            <span class="tool-label">Road</span>
+          </button>
+          <button class="tool-btn" id="btn-storage_house" title="Storage House (Red barn for material storage)">
+            <span class="tool-icon">🏠</span>
+            <span class="tool-label">Storage House</span>
+          </button>
+          <button class="tool-btn" id="btn-worker_house" title="Worker House (Blue cottage for farm workers)">
+            <span class="tool-icon">🏡</span>
+            <span class="tool-label">Worker House</span>
+          </button>
+        </div>
+
+        <div id="toolbar-divider"></div>
+
+        <button class="tool-btn danger" id="btn-reset" title="Wipe save state and restart factory">
+          <span class="tool-icon">🔄</span>
+          <span class="tool-label">Reset</span>
+        </button>
+      </div>
     </div>
 
     <script type="module" src="/src/main.ts"></script>

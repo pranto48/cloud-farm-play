@@ -119,8 +119,22 @@ export class InputSystem extends System {
         return struct.gridX === col && struct.gridY === row;
       });
 
-      // 4a. Left Click: Build Structure
+      // 4a. Left Click: Build Structure / Inspect Worker Cottage
       if (input.mouseClicked && this.placementDebounceTimer <= 0) {
+        const clickedHouse = structures.find(ent => {
+          const struct = world.getComponent(ent, StructureComponent)!;
+          return struct.gridX === col && struct.gridY === row && struct.type === "worker_house";
+        });
+
+        if (clickedHouse) {
+          if ((window as any).refreshWorkerDialog) {
+            (window as any).refreshWorkerDialog(clickedHouse, world);
+            input.mouseClicked = false;
+            this.placementDebounceTimer = 0.3; // 300ms debounce
+            return;
+          }
+        }
+
         if (this.canBuild(player.activeTool, tileType, isOccupied)) {
           const tool = player.activeTool;
           const count = player.inventory[tool] || 0;

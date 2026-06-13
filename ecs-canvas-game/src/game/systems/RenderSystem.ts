@@ -10,6 +10,7 @@ import {
   ItemComponent,
   ItemType,
   TileType,
+  WorkerComponent,
 } from "../components/GameComponents";
 
 export class RenderSystem extends System {
@@ -252,7 +253,8 @@ export class RenderSystem extends System {
       const isItem = world.hasComponent(ent, ItemComponent);
       const isStructure = world.hasComponent(ent, StructureComponent);
       const isParticle = world.hasComponent(ent, ParticleComponent);
-      return { ent, pos, isItem, isStructure, isParticle };
+      const isWorker = world.hasComponent(ent, WorkerComponent);
+      return { ent, pos, isItem, isStructure, isParticle, isWorker };
     });
 
     renderableList.sort((a, b) => {
@@ -291,6 +293,15 @@ export class RenderSystem extends System {
       } else if (item.isStructure) {
         const struct = world.getComponent(entId, StructureComponent)!;
         this.drawStructure(this.ctx, px, py, struct, entId);
+      } else if (item.isWorker) {
+        const wComp = world.getComponent(entId, WorkerComponent)!;
+        this.drawWorker(this.ctx, px, py, wComp);
+
+        const isBuilderTool = this.activeTool === "road" || this.activeTool === "storage_house" || this.activeTool === "worker_house";
+        if (isBuilderTool && wComp.path && wComp.path.length > 0) {
+          const mapComp = world.getComponent(maps[0], MapComponent)!;
+          this.drawWorkerPath(this.ctx, wComp, mapComp.tileSize);
+        }
       } else if (entId === playerEntityId) {
         this.drawPlayer(this.ctx, px, py);
       }
@@ -885,5 +896,132 @@ export class RenderSystem extends System {
         colX += 115;
       }
     }
+  }
+
+  private drawWorker(ctx: CanvasRenderingContext2D, px: number, py: number, w: WorkerComponent): void {
+    ctx.save();
+    ctx.translate(px, py);
+
+    // Draw shadow
+    ctx.fillStyle = "rgba(0,0,0,0.25)";
+    ctx.beginPath();
+    ctx.ellipse(0, 10, 8, 3, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Body (warm orange worker shirt / dungarees)
+    ctx.fillStyle = "#e67e22";
+    ctx.beginPath();
+    ctx.moveTo(-6, 10);
+    ctx.lineTo(6, 10);
+    ctx.lineTo(5, -2);
+    ctx.lineTo(-5, -2);
+    ctx.closePath();
+    ctx.fill();
+
+    // Dark grey pants
+    ctx.fillStyle = "#2c3e50";
+    ctx.fillRect(-6, 8, 12, 3);
+
+    // Head
+    ctx.fillStyle = "#f3d1b0";
+    ctx.beginPath();
+    ctx.arc(0, -7, 4.5, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Worker Cap (Safety yellow hard hat)
+    ctx.fillStyle = "#f1c40f";
+    ctx.beginPath();
+    ctx.ellipse(0, -11, 7, 2.5, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(0, -12, 3.5, Math.PI, 0, false);
+    ctx.fill();
+
+    // Eyes
+    ctx.fillStyle = "#000";
+    ctx.fillRect(-2, -8, 1, 1);
+    ctx.fillRect(1, -8, 1, 1);
+
+    // Draw tool held in hand based on role
+    ctx.strokeStyle = "#7f8c8d";
+    ctx.lineWidth = 1.5;
+    
+    if (w.role === "woodcutter") {
+      ctx.beginPath();
+      ctx.moveTo(-4, 2);
+      ctx.lineTo(-10, -6);
+      ctx.stroke();
+      
+      ctx.fillStyle = "#bdc3c7";
+      ctx.beginPath();
+      ctx.moveTo(-10, -6);
+      ctx.lineTo(-14, -8);
+      ctx.lineTo(-12, -12);
+      ctx.lineTo(-8, -10);
+      ctx.closePath();
+      ctx.fill();
+    } else if (w.role === "miner") {
+      ctx.beginPath();
+      ctx.moveTo(-4, 2);
+      ctx.lineTo(-10, -6);
+      ctx.stroke();
+
+      ctx.strokeStyle = "#7f8c8d";
+      ctx.lineWidth = 2.0;
+      ctx.beginPath();
+      ctx.arc(-13, -9, 5, -Math.PI / 4, Math.PI / 2);
+      ctx.stroke();
+    } else if (w.role === "farmer") {
+      ctx.beginPath();
+      ctx.moveTo(-4, 4);
+      ctx.lineTo(-12, -8);
+      ctx.stroke();
+
+      ctx.strokeStyle = "#f1c40f";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(-12, -8);
+      ctx.lineTo(-16, -11);
+      ctx.moveTo(-12, -8);
+      ctx.lineTo(-14, -13);
+      ctx.moveTo(-12, -8);
+      ctx.lineTo(-10, -11);
+      ctx.stroke();
+    }
+
+    // Draw held item on their head if carrying resources
+    if (w.heldItem) {
+      ctx.translate(0, -18);
+      this.drawItemIcon(ctx, 0, 0, w.heldItem);
+    }
+
+    ctx.restore();
+  }
+
+  private drawWorkerPath(ctx: CanvasRenderingContext2D, w: WorkerComponent, ts: number): void {
+    ctx.save();
+    ctx.strokeStyle = "rgba(52, 231, 228, 0.4)";
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([3, 4]);
+    ctx.beginPath();
+
+    const startNode = w.path[w.pathIndex];
+    if (startNode) {
+      ctx.moveTo(startNode[1] * ts + ts / 2, startNode[0] * ts + ts / 2);
+      for (let i = w.pathIndex + 1; i < w.path.length; i++) {
+        const node = w.path[i];
+        ctx.lineTo(node[1] * ts + ts / 2, node[0] * ts + ts / 2);
+      }
+      ctx.stroke();
+      
+      const endNode = w.path[w.path.length - 1];
+      if (endNode) {
+        ctx.fillStyle = "rgba(52, 231, 228, 0.6)";
+        ctx.beginPath();
+        ctx.arc(endNode[1] * ts + ts / 2, endNode[0] * ts + ts / 2, 4, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+    ctx.restore();
   }
 }

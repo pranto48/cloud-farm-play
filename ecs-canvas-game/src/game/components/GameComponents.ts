@@ -117,6 +117,99 @@ export class MapComponent extends Component {
       console.log(`[Pathfinding Graph] Updated tile at (${row}, ${col}) to ${type}. Weight: ${this.weights[row][col]}`);
     }
   }
+
+  public findPath(startRow: number, startCol: number, goalRow: number, goalCol: number): [number, number][] | null {
+    if (startRow === goalRow && startCol === goalCol) return [];
+    
+    if (startRow < 0 || startRow >= this.height || startCol < 0 || startCol >= this.width ||
+        goalRow < 0 || goalRow >= this.height || goalCol < 0 || goalCol >= this.width) {
+      return null;
+    }
+
+    interface PathNode {
+      r: number;
+      c: number;
+      g: number;
+      h: number;
+      f: number;
+      parent: PathNode | null;
+    }
+
+    const openList: PathNode[] = [];
+    const closedSet = new Set<string>();
+
+    const startNode: PathNode = {
+      r: startRow,
+      c: startCol,
+      g: 0,
+      h: Math.abs(startRow - goalRow) + Math.abs(startCol - goalCol),
+      f: 0,
+      parent: null,
+    };
+    startNode.f = startNode.g + startNode.h;
+    openList.push(startNode);
+
+    const key = (r: number, c: number) => `${r},${c}`;
+
+    while (openList.length > 0) {
+      openList.sort((a, b) => a.f - b.f || a.h - b.h);
+      const current = openList.shift()!;
+
+      if (current.r === goalRow && current.c === goalCol) {
+        const path: [number, number][] = [];
+        let curr: PathNode | null = current;
+        while (curr !== null) {
+          path.push([curr.r, curr.c]);
+          curr = curr.parent;
+        }
+        return path.reverse();
+      }
+
+      closedSet.add(key(current.r, current.c));
+
+      const dirs = [
+        [-1, 0],
+        [1, 0],
+        [0, -1],
+        [0, 1],
+      ];
+
+      for (const [dr, dc] of dirs) {
+        const nr = current.r + dr;
+        const nc = current.c + dc;
+
+        if (nr < 0 || nr >= this.height || nc < 0 || nc >= this.width) continue;
+        if (closedSet.has(key(nr, nc))) continue;
+
+        const weight = this.weights[nr][nc];
+        if (weight === Infinity) continue;
+
+        const gScore = current.g + weight;
+        const hScore = Math.abs(nr - goalRow) + Math.abs(nc - goalCol);
+        const fScore = gScore + hScore;
+
+        const existingNode = openList.find(node => node.r === nr && node.c === nc);
+        if (existingNode) {
+          if (gScore < existingNode.g) {
+            existingNode.g = gScore;
+            existingNode.f = fScore;
+            existingNode.parent = current;
+          }
+        } else {
+          openList.push({
+            r: nr,
+            c: nc,
+            g: gScore,
+            h: hScore,
+            f: fScore,
+            parent: current,
+          });
+        }
+      }
+    }
+
+    return null;
+  }
 }
 
 export type ItemType = 
@@ -130,7 +223,8 @@ export type ItemType =
   | "gear"
   | "copper_wire"
   | "electronic_circuit"
-  | "science_pack";
+  | "science_pack"
+  | "wheat";
 
 export class ItemComponent extends Component {
   public type: ItemType;
@@ -276,5 +370,26 @@ export class BoxColliderComponent extends Component {
     super();
     this.width = width;
     this.height = height;
+  }
+}
+
+export class WorkerComponent extends Component {
+  public state: "idle" | "seeking" | "moving" | "working" | "returning";
+  public role: "woodcutter" | "miner" | "farmer" | null;
+  public houseEntityId: string;
+  public path: [number, number][]; // [row, col] grid path
+  public pathIndex: number;
+  public timer: number;
+  public heldItem: ItemType | null;
+
+  constructor(houseEntityId: string) {
+    super();
+    this.state = "idle";
+    this.role = null;
+    this.houseEntityId = houseEntityId;
+    this.path = [];
+    this.pathIndex = 0;
+    this.timer = 0;
+    this.heldItem = null;
   }
 }

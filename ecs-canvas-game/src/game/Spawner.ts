@@ -10,6 +10,7 @@ import {
   BoxColliderComponent,
   StructureComponent,
   ItemComponent,
+  WorkerComponent,
 } from "./components/GameComponents";
 import type { TileType, ItemType, StructureType } from "./components/GameComponents";
 
@@ -208,6 +209,14 @@ export function spawnWorkerHouse(world: World, x: number, y: number, gridX: numb
   world.addComponent(entity, new PositionComponent(x, y));
   const struct = new StructureComponent("worker_house", gridX, gridY, 90);
   world.addComponent(entity, struct);
+  return entity;
+}
+
+export function spawnWorker(world: World, x: number, y: number, houseEntityId: string): string {
+  const entity = world.createEntity();
+  world.addComponent(entity, new PositionComponent(x, y));
+  world.addComponent(entity, new VelocityComponent(0, 0));
+  world.addComponent(entity, new WorkerComponent(houseEntityId));
   return entity;
 }
 

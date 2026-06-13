@@ -76,6 +76,35 @@
       </div>
     </div>
 
+    <!-- Worker cottage interaction dialog overlay -->
+    <div id="worker-house-dialog" class="dialog-overlay" style="display: none;">
+      <div class="dialog-content">
+        <h3>🏡 Hired Worker Cottage</h3>
+        <p id="dialog-house-status">Status: No worker hired.</p>
+        
+        <div id="dialog-hire-actions">
+          <p class="dialog-desc">Hire a dedicated worker for this cottage to automate resource gathering.</p>
+          <p class="dialog-cost">Cost: 🪓 10 Wood, 🪙 10 Iron Plate</p>
+          <button id="btn-hire-worker" class="dialog-btn success">Buy/Hire Worker</button>
+        </div>
+
+        <div id="dialog-worker-settings" style="display: none;">
+          <div class="form-group">
+            <label for="worker-role-select" class="form-label">Assign Worker Role:</label>
+            <select id="worker-role-select" class="dialog-select">
+              <option value="">-- Select Role --</option>
+              <option value="woodcutter">🪓 Woodcutter (Harvests Forest Trees)</option>
+              <option value="miner">⛏️ Miner (Extracts Iron/Copper/Coal)</option>
+              <option value="farmer">🌾 Farmer (Harvests Wheat from Grass)</option>
+            </select>
+          </div>
+          <button id="btn-fire-worker" class="dialog-btn danger">Dismiss Worker</button>
+        </div>
+
+        <button id="btn-close-dialog" class="dialog-btn secondary">Close Menu</button>
+      </div>
+    </div>
+
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

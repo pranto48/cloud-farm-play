@@ -2,6 +2,7 @@ import {
   spawnPlayer,
   spawnMap,
   spawnParticle,
+  spawnWorker,
 } from "./Spawner";
 import {
   InputComponent,
@@ -14,6 +15,7 @@ import {
   ParticleComponent,
   BuildTool,
   BoxColliderComponent,
+  WorkerComponent,
 } from "./components/GameComponents";
 
 // Systems
@@ -24,6 +26,7 @@ import { FactorySystem } from "./systems/FactorySystem";
 import { MovementSystem } from "./systems/MovementSystem";
 import { ParticleSystem } from "./systems/ParticleSystem";
 import { RenderSystem } from "./systems/RenderSystem";
+import { WorkerSystem } from "./systems/WorkerSystem";
 
 export class Game {
   private canvas: HTMLCanvasElement;
@@ -58,6 +61,7 @@ export class Game {
     this.initWorld();
     this.setupInput();
     this.setupToolbar();
+    this.setupDialogs();
 
     window.addEventListener("resize", () => this.resizeCanvas());
     
@@ -90,6 +94,7 @@ export class Game {
     this.world.addSystem(this.factorySystem);
     this.world.addSystem(this.movementSystem);
     this.world.addSystem(this.particleSystem);
+    this.world.addSystem(new WorkerSystem());
 
     this.saveTimer = 0;
 
@@ -376,6 +381,7 @@ export class Game {
         ParticleComponent,
         InputComponent,
         BoxColliderComponent,
+        WorkerComponent,
       };
 
       for (const serializedEnt of saveData.entities) {
@@ -398,6 +404,120 @@ export class Game {
     } catch (e) {
       console.error("[Save/Load] Failed to load game state:", e);
       return false;
+    }
+  }
+
+  private setupDialogs(): void {
+    const btnClose = document.getElementById("btn-close-dialog");
+    const btnHire = document.getElementById("btn-hire-worker");
+    const btnFire = document.getElementById("btn-fire-worker");
+    const roleSelect = document.getElementById("worker-role-select") as HTMLSelectElement;
+    const dialog = document.getElementById("worker-house-dialog");
+
+    if (btnClose && dialog) {
+      btnClose.addEventListener("click", () => {
+        dialog.style.display = "none";
+        this.canvas.focus();
+      });
+    }
+
+    if (btnHire) {
+      btnHire.addEventListener("click", () => {
+        const houseId = (window as any).activeWorkerHouseId;
+        const world = (window as any).gameWorld;
+        if (!houseId || !world) return;
+
+        const playerEnt = world.getEntitiesWith([PlayerComponent])[0];
+        if (!playerEnt) return;
+        const player = world.getComponent(playerEnt, PlayerComponent)!;
+        
+        const woodCount = player.inventory["wood"] || 0;
+        const plateCount = player.inventory["iron_plate"] || 0;
+
+        if (woodCount >= 10 && plateCount >= 10) {
+          player.inventory["wood"] -= 10;
+          player.inventory["iron_plate"] -= 10;
+
+          const housePos = world.getComponent(houseId, PositionComponent)!;
+          spawnWorker(world, housePos.x, housePos.y, houseId);
+
+          this.refreshWorkerDialog(houseId, world);
+        }
+      });
+    }
+
+    if (btnFire) {
+      btnFire.addEventListener("click", () => {
+        const houseId = (window as any).activeWorkerHouseId;
+        const world = (window as any).gameWorld;
+        if (!houseId || !world) return;
+
+        const workers = world.getEntitiesWith([WorkerComponent]);
+        const workerEnt = workers.find(w => world.getComponent(w, WorkerComponent)!.houseEntityId === houseId);
+
+        if (workerEnt) {
+          const playerEnt = world.getEntitiesWith([PlayerComponent])[0];
+          if (playerEnt) {
+            const player = world.getComponent(playerEnt, PlayerComponent)!;
+            player.inventory["wood"] = (player.inventory["wood"] || 0) + 5;
+            player.inventory["iron_plate"] = (player.inventory["iron_plate"] || 0) + 5;
+          }
+
+          world.destroyEntity(workerEnt);
+          this.refreshWorkerDialog(houseId, world);
+        }
+      });
+    }
+
+    if (roleSelect) {
+      roleSelect.addEventListener("change", () => {
+        const houseId = (window as any).activeWorkerHouseId;
+        const world = (window as any).gameWorld;
+        if (!houseId || !world) return;
+
+        const workers = world.getEntitiesWith([WorkerComponent]);
+        const workerEnt = workers.find(w => world.getComponent(w, WorkerComponent)!.houseEntityId === houseId);
+
+        if (workerEnt) {
+          const wComp = world.getComponent(workerEnt, WorkerComponent)!;
+          wComp.role = (roleSelect.value as any) || null;
+          wComp.state = "seeking";
+          wComp.path = [];
+          wComp.pathIndex = 0;
+
+          this.refreshWorkerDialog(houseId, world);
+        }
+      });
+    }
+
+    // Bind window handler for opening modal
+    (window as any).refreshWorkerDialog = (houseEntityId: string, worldRef: World) => {
+      (window as any).activeWorkerHouseId = houseEntityId;
+      (window as any).gameWorld = worldRef;
+      if (dialog) dialog.style.display = "flex";
+      this.refreshWorkerDialog(houseEntityId, worldRef);
+    };
+  }
+
+  private refreshWorkerDialog(houseEntityId: string, world: World): void {
+    const status = document.getElementById("dialog-house-status")!;
+    const hireActions = document.getElementById("dialog-hire-actions")!;
+    const workerSettings = document.getElementById("dialog-worker-settings")!;
+    const roleSelect = document.getElementById("worker-role-select") as HTMLSelectElement;
+
+    const workers = world.getEntitiesWith([WorkerComponent]);
+    const workerEnt = workers.find(w => world.getComponent(w, WorkerComponent)!.houseEntityId === houseEntityId);
+
+    if (workerEnt) {
+      const wComp = world.getComponent(workerEnt, WorkerComponent)!;
+      status.textContent = `Status: Worker hired (Role: ${wComp.role ? wComp.role.toUpperCase() : "NONE"}, State: ${wComp.state.toUpperCase()})`;
+      hireActions.style.display = "none";
+      workerSettings.style.display = "block";
+      roleSelect.value = wComp.role || "";
+    } else {
+      status.textContent = "Status: No worker hired.";
+      hireActions.style.display = "block";
+      workerSettings.style.display = "none";
     }
   }
 }

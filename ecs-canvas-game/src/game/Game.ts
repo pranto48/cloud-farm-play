@@ -28,6 +28,7 @@ import { ParticleSystem } from "./systems/ParticleSystem";
 import { RenderSystem } from "./systems/RenderSystem";
 import { WorkerSystem } from "./systems/WorkerSystem";
 import { toast } from "./utils/Toast";
+import { ensureAuthenticated, saveToCloud, loadFromCloud } from "./FirebaseSync";
 
 export class Game {
   private canvas: HTMLCanvasElement;
@@ -55,6 +56,10 @@ export class Game {
   private screenMouseX: number = 0;
   private screenMouseY: number = 0;
 
+  // Firebase Anonymous Auth & loading states
+  private uid: string | null = null;
+  private isLoaded: boolean = false;
+
   constructor(canvasId: string) {
     this.canvas = document.getElementById(canvasId) as HTMLCanvasElement;
     this.ctx = this.canvas.getContext("2d")!;
@@ -63,21 +68,60 @@ export class Game {
     this.canvas.addEventListener("contextmenu", (e) => e.preventDefault());
 
     this.resizeCanvas();
-    this.initWorld();
-    this.setupInput();
-    this.setupToolbar();
-    this.setupDialogs();
+    this.initGame();
 
     window.addEventListener("resize", () => this.resizeCanvas());
-    
-    // Start game loop
-    this.lastTime = performance.now();
-    requestAnimationFrame((time) => this.loop(time));
   }
 
   private resizeCanvas(): void {
     this.canvas.width = window.innerWidth;
     this.canvas.height = window.innerHeight;
+  }
+
+  private drawLoadingScreen(text: string): void {
+    this.ctx.fillStyle = "#1b1e22";
+    this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+
+    this.ctx.fillStyle = "#ffffff";
+    this.ctx.font = "20px monospace";
+    this.ctx.textAlign = "center";
+    this.ctx.textBaseline = "middle";
+    this.ctx.fillText(text, this.canvas.width / 2, this.canvas.height / 2);
+  }
+
+  private async initGame(): Promise<void> {
+    this.initWorld();
+    this.setupInput();
+    this.setupToolbar();
+    this.setupDialogs();
+
+    this.drawLoadingScreen("Connecting to database...");
+
+    try {
+      const user = await ensureAuthenticated();
+      this.uid = user.uid;
+      console.log("[Firebase] Authenticated with anonymous UID:", this.uid);
+
+      this.drawLoadingScreen("Loading game from cloud...");
+      const cloudLoadSuccess = await this.loadGameFromCloud();
+      if (!cloudLoadSuccess) {
+        const localLoadSuccess = this.loadGameFromLocal();
+        if (!localLoadSuccess) {
+          this.initializeFreshWorld();
+        }
+      }
+    } catch (e) {
+      console.error("[Firebase] Initialization failed. Falling back to local storage.", e);
+      const localLoadSuccess = this.loadGameFromLocal();
+      if (!localLoadSuccess) {
+        this.initializeFreshWorld();
+      }
+    }
+
+    // Mark as loaded and start the loop
+    this.isLoaded = true;
+    this.lastTime = performance.now();
+    requestAnimationFrame((time) => this.loop(time));
   }
 
   private initWorld(): void {
@@ -102,25 +146,25 @@ export class Game {
     this.world.addSystem(new WorkerSystem());
 
     this.saveTimer = 0;
+  }
 
-    // Load game from localStorage or initialize new procedural map
-    const loadSuccess = this.loadGame();
+  private initializeFreshWorld(): void {
+    console.log("[Save/Load] Initializing fresh procedural map.");
+    const mapData = spawnMap(this.world);
+    this.playerEntityId = spawnPlayer(this.world, mapData.playerX, mapData.playerY);
 
-    if (!loadSuccess) {
-      console.log("[Save/Load] No save game found, initializing fresh procedural map.");
-      const mapData = spawnMap(this.world);
-      this.playerEntityId = spawnPlayer(this.world, mapData.playerX, mapData.playerY);
-
-      // Equip player with items for placing
-      const playerComp = this.world.getComponent(this.playerEntityId, PlayerComponent)!;
-      playerComp.inventory["belt"] = 25;
-      playerComp.inventory["inserter"] = 12;
-      playerComp.inventory["drill"] = 6;
-      playerComp.inventory["furnace"] = 4;
-      playerComp.inventory["assembler"] = 2;
-      playerComp.inventory["chest"] = 5;
-      playerComp.inventory["pole"] = 15;
-      playerComp.inventory["generator"] = 2;
+    // Equip player with items for placing
+    const playerEnt = this.world.getEntitiesWith([PlayerComponent])[0];
+    if (playerEnt) {
+      const playerComp = this.world.getComponent(playerEnt, PlayerComponent)!;
+      playerComp.inventory["belt"] = 100;
+      playerComp.inventory["inserter"] = 30;
+      playerComp.inventory["drill"] = 15;
+      playerComp.inventory["furnace"] = 10;
+      playerComp.inventory["assembler"] = 5;
+      playerComp.inventory["chest"] = 10;
+      playerComp.inventory["pole"] = 25;
+      playerComp.inventory["generator"] = 5;
       playerComp.inventory["road"] = 50;
       playerComp.inventory["storage_house"] = 5;
       playerComp.inventory["worker_house"] = 5;
@@ -132,6 +176,7 @@ export class Game {
   private setupInput(): void {
     // Keyboard inputs
     window.addEventListener("keydown", (e) => {
+      if (!this.isLoaded) return;
       const input = this.world.getComponent(this.playerEntityId, InputComponent);
       if (input) {
         input.keys[e.key] = true;
@@ -139,6 +184,7 @@ export class Game {
     });
 
     window.addEventListener("keyup", (e) => {
+      if (!this.isLoaded) return;
       const input = this.world.getComponent(this.playerEntityId, InputComponent);
       if (input) {
         input.keys[e.key] = false;
@@ -149,6 +195,7 @@ export class Game {
     window.addEventListener("mousemove", (e) => {
       this.screenMouseX = e.clientX;
       this.screenMouseY = e.clientY;
+      if (!this.isLoaded) return;
       const input = this.world.getComponent(this.playerEntityId, InputComponent);
       if (input) {
         input.mouseX = this.screenMouseX + this.renderSystem.camX;
@@ -158,6 +205,7 @@ export class Game {
 
     // Mouse click bindings
     window.addEventListener("mousedown", (e) => {
+      if (!this.isLoaded) return;
       const input = this.world.getComponent(this.playerEntityId, InputComponent);
       if (input) {
         if (e.button === 0) {
@@ -169,6 +217,7 @@ export class Game {
     });
 
     window.addEventListener("mouseup", (e) => {
+      if (!this.isLoaded) return;
       const input = this.world.getComponent(this.playerEntityId, InputComponent);
       if (input) {
         if (e.button === 0) {
@@ -181,6 +230,7 @@ export class Game {
   }
 
   private loop(currentTime: number): void {
+    if (!this.isLoaded) return;
     // Sync tool states before updating systems
     const player = this.world.getComponent(this.playerEntityId, PlayerComponent);
     if (player) {
@@ -218,7 +268,7 @@ export class Game {
   private updateLogic(dt: number): void {
     // Autosave timer
     this.saveTimer += dt;
-    if (this.saveTimer >= 30.0) {
+    if (this.saveTimer >= 60.0) {
       this.saveTimer = 0;
       this.saveGame();
     }
@@ -291,9 +341,11 @@ export class Game {
 
     if (btnReset) {
       btnReset.addEventListener("click", () => {
+        console.log("[Save/Load] Game reset requested.");
         localStorage.removeItem("arcane_survivors_save");
-        console.log("[Save/Load] Game reset requested. Wiped localStorage.");
-        this.initWorld();
+        this.world.clear();
+        this.initializeFreshWorld();
+        this.saveGame();
         this.canvas.focus();
       });
     }
@@ -380,18 +432,31 @@ export class Game {
       timestamp: Date.now(),
     };
 
+    // Save to local storage as double persistence / local cache
     localStorage.setItem("arcane_survivors_save", JSON.stringify(saveData));
     console.log("[Save/Load] Autosaved game state to localStorage.");
 
-    const pPos = this.world.getComponent(this.playerEntityId, PositionComponent);
-    if (pPos) {
-      for (let i = 0; i < 5; i++) {
-        spawnParticle(this.world, pPos.x, pPos.y, "#2ecc71", 2.5);
-      }
+    // Save to Firebase Cloud Firestore with compression
+    if (this.uid) {
+      saveToCloud(this.uid, saveData)
+        .then(() => {
+          console.log("[Save/Load] Compressed game state successfully saved to Cloud Firestore 'saves' collection.");
+          
+          // Spawn green save particles around the player on successful cloud sync
+          const pPos = this.world.getComponent(this.playerEntityId, PositionComponent);
+          if (pPos) {
+            for (let i = 0; i < 5; i++) {
+              spawnParticle(this.world, pPos.x, pPos.y, "#2ecc71", 2.5);
+            }
+          }
+        })
+        .catch((err) => {
+          console.error("[Save/Load] Cloud save failed:", err);
+        });
     }
   }
 
-  private loadGame(): boolean {
+  private loadGameFromLocal(): boolean {
     const saveStr = localStorage.getItem("arcane_survivors_save");
     if (!saveStr) return false;
 
@@ -399,52 +464,73 @@ export class Game {
       const saveData = JSON.parse(saveStr);
       if (!saveData || !saveData.entities) return false;
 
-      this.world.clear();
-      this.playerEntityId = saveData.playerEntityId;
-      this.activeTool = saveData.activeTool || "belt";
-
-      const COMPONENT_REGISTRY: Record<string, any> = {
-        PositionComponent,
-        VelocityComponent,
-        PlayerComponent,
-        MapComponent,
-        StructureComponent,
-        ItemComponent,
-        ParticleComponent,
-        InputComponent,
-        BoxColliderComponent,
-        WorkerComponent,
-      };
-
-      for (const serializedEnt of saveData.entities) {
-        const entId = serializedEnt.id;
-        this.world.createEntity(entId);
-
-        for (const serializedComp of serializedEnt.components) {
-          const ClassRef = COMPONENT_REGISTRY[serializedComp.type];
-          if (!ClassRef) continue;
-
-          const compInstance = new ClassRef();
-          Object.assign(compInstance, serializedComp.data);
-          this.world.addComponent(entId, compInstance);
-        }
-      }
-
-      this.updateToolbarActiveClasses(this.activeTool);
-      
-      // Sync unlocked buttons visibility
-      const playerEnt = this.world.getEntitiesWith([PlayerComponent])[0];
-      if (playerEnt) {
-        const playerComp = this.world.getComponent(playerEnt, PlayerComponent)!;
-        if (!playerComp.unlockedTechs) playerComp.unlockedTechs = {};
-        this.updateUnlockedButtonsVisibility(playerComp.unlockedTechs);
-      }
-      
-      console.log(`[Save/Load] Successfully loaded game state. Recreated ${saveData.entities.length} entities.`);
+      this.deserializeGame(saveData);
+      console.log(`[Save/Load] Successfully loaded game state from localStorage. Recreated ${saveData.entities.length} entities.`);
       return true;
     } catch (e) {
-      console.error("[Save/Load] Failed to load game state:", e);
+      console.error("[Save/Load] Failed to load local game state:", e);
       return false;
+    }
+  }
+
+  private async loadGameFromCloud(): Promise<boolean> {
+    if (!this.uid) return false;
+    console.log("[Save/Load] Fetching cloud save from Firestore...");
+    try {
+      const saveData = await loadFromCloud(this.uid);
+      if (!saveData) {
+        console.log("[Save/Load] No cloud save found in Firestore.");
+        return false;
+      }
+      this.deserializeGame(saveData);
+      console.log(`[Save/Load] Successfully loaded game state from Cloud Firestore. Recreated ${saveData.entities.length} entities.`);
+      return true;
+    } catch (e) {
+      console.error("[Save/Load] Failed to load cloud save:", e);
+      return false;
+    }
+  }
+
+  private deserializeGame(saveData: any): void {
+    this.world.clear();
+    this.playerEntityId = saveData.playerEntityId;
+    this.activeTool = saveData.activeTool || "belt";
+
+    const COMPONENT_REGISTRY: Record<string, any> = {
+      PositionComponent,
+      VelocityComponent,
+      PlayerComponent,
+      MapComponent,
+      StructureComponent,
+      ItemComponent,
+      ParticleComponent,
+      InputComponent,
+      BoxColliderComponent,
+      WorkerComponent,
+    };
+
+    for (const serializedEnt of saveData.entities) {
+      const entId = serializedEnt.id;
+      this.world.createEntity(entId);
+
+      for (const serializedComp of serializedEnt.components) {
+        const ClassRef = COMPONENT_REGISTRY[serializedComp.type];
+        if (!ClassRef) continue;
+
+        const compInstance = new ClassRef();
+        Object.assign(compInstance, serializedComp.data);
+        this.world.addComponent(entId, compInstance);
+      }
+    }
+
+    this.updateToolbarActiveClasses(this.activeTool);
+    
+    // Sync unlocked buttons visibility
+    const playerEnt = this.world.getEntitiesWith([PlayerComponent])[0];
+    if (playerEnt) {
+      const playerComp = this.world.getComponent(playerEnt, PlayerComponent)!;
+      if (!playerComp.unlockedTechs) playerComp.unlockedTechs = {};
+      this.updateUnlockedButtonsVisibility(playerComp.unlockedTechs);
     }
   }
 

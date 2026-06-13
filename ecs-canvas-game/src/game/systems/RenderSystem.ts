@@ -386,6 +386,8 @@ export class RenderSystem extends System {
       case "copper_wire": symbol = "🧶"; color = "#f39c12"; break;
       case "electronic_circuit": symbol = "📟"; color = "#2ecc71"; break;
       case "science_pack": symbol = "🧪"; color = "#3498db"; break;
+      case "wheat": symbol = "🌾"; color = "#f1c40f"; break;
+      case "food": symbol = "🍞"; color = "#e67e22"; break;
     }
 
     ctx.fillStyle = color;
@@ -814,6 +816,102 @@ export class RenderSystem extends System {
         ctx.fillText("WORKER HS", 0, 26);
         break;
       }
+      case "crop": {
+        // Draw soil patch under the crop
+        ctx.fillStyle = "#5c4033"; // rich brown soil
+        ctx.beginPath();
+        ctx.ellipse(0, 10, 16, 6, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.save();
+        if (s.cropGrowth < 0.4) {
+          // Stage 1: Small green shoots
+          ctx.strokeStyle = "#2ecc71"; // vibrant green
+          ctx.lineWidth = 2.5;
+          ctx.lineCap = "round";
+          // Left shoot
+          ctx.beginPath();
+          ctx.moveTo(-6, 10);
+          ctx.quadraticCurveTo(-10, 2, -8, -2);
+          ctx.stroke();
+          // Right shoot
+          ctx.beginPath();
+          ctx.moveTo(6, 10);
+          ctx.quadraticCurveTo(10, 4, 8, 0);
+          ctx.stroke();
+          // Center shoot
+          ctx.beginPath();
+          ctx.moveTo(0, 10);
+          ctx.quadraticCurveTo(0, 0, 2, -4);
+          ctx.stroke();
+        } else if (s.cropGrowth < 0.85) {
+          // Stage 2: Growing taller, yellowish-green
+          ctx.strokeStyle = "#a3cb38"; // yellowish green
+          ctx.lineWidth = 3;
+          ctx.lineCap = "round";
+          
+          // Left stalk
+          ctx.beginPath();
+          ctx.moveTo(-8, 10);
+          ctx.quadraticCurveTo(-14, -2, -10, -10);
+          ctx.stroke();
+          // Right stalk
+          ctx.beginPath();
+          ctx.moveTo(8, 10);
+          ctx.quadraticCurveTo(14, 0, 10, -8);
+          ctx.stroke();
+          // Center stalk
+          ctx.beginPath();
+          ctx.moveTo(0, 10);
+          ctx.quadraticCurveTo(-2, -6, 0, -14);
+          ctx.stroke();
+        } else {
+          // Stage 3: Fully grown golden wheat
+          ctx.strokeStyle = "#f1c40f"; // golden yellow
+          ctx.lineWidth = 3.5;
+          ctx.lineCap = "round";
+          
+          // Draw three stalks of golden wheat
+          // Stalk 1 (Left)
+          ctx.beginPath();
+          ctx.moveTo(-10, 10);
+          ctx.quadraticCurveTo(-18, -4, -12, -18);
+          ctx.stroke();
+          // Stalk 2 (Center)
+          ctx.beginPath();
+          ctx.moveTo(0, 10);
+          ctx.quadraticCurveTo(-2, -10, 0, -22);
+          ctx.stroke();
+          // Stalk 3 (Right)
+          ctx.beginPath();
+          ctx.moveTo(10, 10);
+          ctx.quadraticCurveTo(18, -2, 12, -16);
+          ctx.stroke();
+
+          // Draw golden wheat heads (little ovals/filled circles at the top of stalks)
+          ctx.fillStyle = "#f39c12"; // dark orange-yellow for depth
+          ctx.beginPath();
+          ctx.arc(-12, -18, 4, 0, Math.PI * 2);
+          ctx.arc(0, -22, 4.5, 0, Math.PI * 2);
+          ctx.arc(12, -16, 4, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.restore();
+
+        // Draw growth percentage text if not fully grown
+        if (s.cropGrowth < 1.0) {
+          ctx.fillStyle = "rgba(255, 255, 255, 0.6)";
+          ctx.font = "8px sans-serif";
+          ctx.textAlign = "center";
+          ctx.fillText(`${Math.floor(s.cropGrowth * 100)}%`, 0, -28);
+        } else {
+          ctx.fillStyle = "#f1c40f";
+          ctx.font = "bold 8px sans-serif";
+          ctx.textAlign = "center";
+          ctx.fillText("READY", 0, -28);
+        }
+        break;
+      }
     }
 
     ctx.restore();
@@ -844,8 +942,11 @@ export class RenderSystem extends System {
     this.ctx.fillText("Press [R] to rotate blueprint", width - toolW, 76);
 
     // 2. Draw Bottom Inventory Grid panel
+    const list = Object.entries(inventory).filter(([_, count]) => count > 0);
+    const itemsPerRow = 4;
+    const rows = Math.max(1, Math.ceil(list.length / itemsPerRow));
     const invW = 540;
-    const invH = 65;
+    const invH = 30 + rows * 20;
     const invX = (width - invW) / 2;
     const invY = height - invH - 75; // above instructions
 
@@ -863,15 +964,21 @@ export class RenderSystem extends System {
     this.ctx.fillText("PLAYER INVENTORY STOCK:", invX + 12, invY + 18);
 
     // Draw inventory columns
-    const list = Object.entries(inventory).filter(([_, count]) => count > 0);
     let colX = invX + 12;
+    let currentY = invY + 38;
     this.ctx.font = "11px monospace";
 
     if (list.length === 0) {
       this.ctx.fillStyle = "#7f8c8d";
-      this.ctx.fillText("Empty inventory (mine wood/stone/veins automatically with drills)", invX + 12, invY + 40);
+      this.ctx.fillText("Empty inventory (mine wood/stone/veins automatically with drills)", invX + 12, invY + 38);
     } else {
+      let idx = 0;
       for (const [name, count] of list) {
+        if (idx > 0 && idx % itemsPerRow === 0) {
+          colX = invX + 12;
+          currentY += 20;
+        }
+
         let symbol = "📦";
         if (name === "wood") symbol = "🪵";
         else if (name === "stone") symbol = "🪨";
@@ -887,13 +994,16 @@ export class RenderSystem extends System {
         else if (name === "road") symbol = "🛣️";
         else if (name === "storage_house") symbol = "🏠";
         else if (name === "worker_house") symbol = "🏡";
+        else if (name === "wheat") symbol = "🌾";
+        else if (name === "food") symbol = "🍞";
 
         this.ctx.fillStyle = "#f1c40f";
-        this.ctx.fillText(`${symbol} ${name.replace("_", " ")}:`, colX, invY + 42);
+        this.ctx.fillText(`${symbol} ${name.replace("_", " ")}:`, colX, currentY);
         this.ctx.fillStyle = "#fff";
-        this.ctx.fillText(count.toString(), colX + this.ctx.measureText(`${symbol} ${name.replace("_", " ")}: `).width, invY + 42);
+        this.ctx.fillText(count.toString(), colX + this.ctx.measureText(`${symbol} ${name.replace("_", " ")}: `).width, currentY);
 
-        colX += 115;
+        colX += 130;
+        idx++;
       }
     }
   }
@@ -991,8 +1101,31 @@ export class RenderSystem extends System {
 
     // Draw held item on their head if carrying resources
     if (w.heldItem) {
-      ctx.translate(0, -18);
+      ctx.save();
+      ctx.translate(0, -24);
       this.drawItemIcon(ctx, 0, 0, w.heldItem);
+      ctx.restore();
+    }
+
+    // Draw Hunger Status Bar / Warning Bubble
+    if (w.isStarving) {
+      // Blinking red warning bubble
+      const pulse = Math.abs(Math.sin(this.time * 6.0));
+      ctx.fillStyle = `rgba(231, 76, 60, ${0.45 + pulse * 0.55})`;
+      ctx.beginPath();
+      ctx.roundRect(-24, -22, 48, 8, 2);
+      ctx.fill();
+      ctx.fillStyle = "#fff";
+      ctx.font = "bold 6.5px sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText("STARVING", 0, -18);
+    } else if (w.hunger < 25) {
+      // Low hunger warning bar
+      ctx.fillStyle = "rgba(0,0,0,0.6)";
+      ctx.fillRect(-10, -18, 20, 3);
+      ctx.fillStyle = "#e67e22"; // orange warning
+      ctx.fillRect(-10, -18, 20 * (w.hunger / 100), 3);
     }
 
     ctx.restore();

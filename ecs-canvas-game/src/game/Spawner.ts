@@ -220,6 +220,15 @@ export function spawnWorker(world: World, x: number, y: number, houseEntityId: s
   return entity;
 }
 
+export function spawnCrop(world: World, x: number, y: number, gridX: number, gridY: number): string {
+  const entity = world.createEntity();
+  world.addComponent(entity, new PositionComponent(x, y));
+  const struct = new StructureComponent("crop", gridX, gridY, 90);
+  struct.cropGrowth = 0;
+  world.addComponent(entity, struct);
+  return entity;
+}
+
 export function spawnItemEntity(world: World, x: number, y: number, type: ItemType): string {
   const entity = world.createEntity();
   world.addComponent(entity, new PositionComponent(x, y));

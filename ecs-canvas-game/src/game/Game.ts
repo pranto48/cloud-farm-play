@@ -516,12 +516,15 @@ export class Game {
 
     if (workerEnt) {
       const wComp = world.getComponent(workerEnt, WorkerComponent)!;
-      status.textContent = `Status: Worker hired (Role: ${wComp.role ? wComp.role.toUpperCase() : "NONE"}, State: ${wComp.state.toUpperCase()})`;
+      const hungerStatus = wComp.isStarving ? "STARVING ⚠️" : `${Math.max(0, Math.floor(wComp.hunger))}%`;
+      status.innerHTML = `<strong>Role:</strong> ${wComp.role ? wComp.role.toUpperCase() : "NONE"}<br/>
+                          <strong>State:</strong> ${wComp.state.toUpperCase().replace("_", " ")}<br/>
+                          <strong>Hunger:</strong> <span style="color: ${wComp.isStarving || wComp.hunger < 25 ? '#e74c3c' : '#2ecc71'}; font-weight: bold;">${hungerStatus}</span>`;
       hireActions.style.display = "none";
       workerSettings.style.display = "block";
       roleSelect.value = wComp.role || "";
     } else {
-      status.textContent = "Status: No worker hired.";
+      status.innerHTML = "Status: No worker hired.";
       hireActions.style.display = "block";
       workerSettings.style.display = "none";
     }

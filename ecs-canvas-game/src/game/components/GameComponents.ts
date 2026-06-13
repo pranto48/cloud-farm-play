@@ -224,7 +224,8 @@ export type ItemType =
   | "copper_wire"
   | "electronic_circuit"
   | "science_pack"
-  | "wheat";
+  | "wheat"
+  | "food";
 
 export class ItemComponent extends Component {
   public type: ItemType;
@@ -248,7 +249,8 @@ export type StructureType =
   | "pole" 
   | "generator"
   | "storage_house"
-  | "worker_house";
+  | "worker_house"
+  | "crop";
 
 export interface Recipe {
   name: string;
@@ -322,6 +324,9 @@ export class StructureComponent extends Component {
   public inserterAngle: number = 0; // Current swing angle
   public inserterCooldown: number = 0;
 
+  // Crop growth progress
+  public cropGrowth: number = 0;
+
   constructor(
     type: StructureType,
     gridX: number,
@@ -374,13 +379,16 @@ export class BoxColliderComponent extends Component {
 }
 
 export class WorkerComponent extends Component {
-  public state: "idle" | "seeking" | "moving" | "working" | "returning";
+  public state: "idle" | "seeking" | "moving" | "working" | "returning" | "moving_to_eat" | "eating";
   public role: "woodcutter" | "miner" | "farmer" | null;
   public houseEntityId: string;
   public path: [number, number][]; // [row, col] grid path
   public pathIndex: number;
   public timer: number;
   public heldItem: ItemType | null;
+  public hunger: number;
+  public isStarving: boolean;
+  public previousState: "idle" | "seeking" | "moving" | "working" | "returning" | null;
 
   constructor(houseEntityId: string) {
     super();
@@ -391,5 +399,8 @@ export class WorkerComponent extends Component {
     this.pathIndex = 0;
     this.timer = 0;
     this.heldItem = null;
+    this.hunger = 100;
+    this.isStarving = false;
+    this.previousState = null;
   }
 }

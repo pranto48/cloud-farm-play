@@ -9,6 +9,7 @@ import {
   StructureComponent,
   BuildTool,
   TileType,
+  WorkerComponent,
 } from "../components/GameComponents";
 import { 
   spawnBelt, 
@@ -223,6 +224,18 @@ export class InputSystem extends System {
           // Clean up internal inventory items if deconstructing chest or furnace
           for (const [itemKey, itemCount] of Object.entries(struct.inventory)) {
             player.inventory[itemKey] = (player.inventory[itemKey] || 0) + itemCount;
+          }
+
+          // Housing capacity constraint: if worker_house, destroy associated worker
+          if (struct.type === "worker_house") {
+            const workers = world.getEntitiesWith([WorkerComponent]);
+            for (const workerEnt of workers) {
+              const wComp = world.getComponent(workerEnt, WorkerComponent)!;
+              if (wComp.houseEntityId === occupiedStructureEntity) {
+                world.destroyEntity(workerEnt);
+                toast.warning("Associated worker dismissed due to cottage demolition!");
+              }
+            }
           }
 
           world.destroyEntity(occupiedStructureEntity);

@@ -51,6 +51,10 @@ export class Game {
   private readonly FIXED_DT = 1 / 60;
   private saveTimer: number = 0;
 
+  // Screen mouse coordinates for tracking mouse relative to the lerped camera
+  private screenMouseX: number = 0;
+  private screenMouseY: number = 0;
+
   constructor(canvasId: string) {
     this.canvas = document.getElementById(canvasId) as HTMLCanvasElement;
     this.ctx = this.canvas.getContext("2d")!;
@@ -143,16 +147,12 @@ export class Game {
 
     // Mouse movement
     window.addEventListener("mousemove", (e) => {
+      this.screenMouseX = e.clientX;
+      this.screenMouseY = e.clientY;
       const input = this.world.getComponent(this.playerEntityId, InputComponent);
-      const pos = this.world.getComponent(this.playerEntityId, PositionComponent);
-      if (input && pos) {
-        // Convert screen coordinates to world coordinates relative to camera centered on player
-        const screenX = e.clientX;
-        const screenY = e.clientY;
-        const camX = pos.x - this.canvas.width / 2;
-        const camY = pos.y - this.canvas.height / 2;
-        input.mouseX = screenX + camX;
-        input.mouseY = screenY + camY;
+      if (input) {
+        input.mouseX = this.screenMouseX + this.renderSystem.camX;
+        input.mouseY = this.screenMouseY + this.renderSystem.camY;
       }
     });
 
@@ -187,6 +187,13 @@ export class Game {
       this.activeTool = player.activeTool;
       this.inputSystem.activeTool = this.activeTool;
       this.renderSystem.activeTool = this.activeTool;
+    }
+
+    // Sync mouse world coordinates based on the current camera position, since the camera moves
+    const input = this.world.getComponent(this.playerEntityId, InputComponent);
+    if (input) {
+      input.mouseX = this.screenMouseX + this.renderSystem.camX;
+      input.mouseY = this.screenMouseY + this.renderSystem.camY;
     }
 
     const elapsed = currentTime - this.lastTime;

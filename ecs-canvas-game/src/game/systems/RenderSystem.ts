@@ -21,6 +21,11 @@ export class RenderSystem extends System {
   private ctx: CanvasRenderingContext2D;
   public activeTool: string = "belt";
 
+  // Camera coordinates for smooth follow
+  public camX: number = 0;
+  public camY: number = 0;
+  private camInitialized: boolean = false;
+
   constructor(
     canvas: HTMLCanvasElement,
     ctx: CanvasRenderingContext2D
@@ -38,8 +43,6 @@ export class RenderSystem extends System {
 
     // 1. Locate player to focus camera
     const players = world.getEntitiesWith([PlayerComponent, PositionComponent]);
-    let camX = 0;
-    let camY = 0;
     let playerEntityId = "";
     let playerInventory: Record<string, number> = {};
     let buildRotation = 90;
@@ -50,11 +53,28 @@ export class RenderSystem extends System {
       const pPos = world.getComponent(playerEntityId, PositionComponent)!;
       const pComp = world.getComponent(playerEntityId, PlayerComponent)!;
       inputComp = world.getComponent(playerEntityId, InputComponent);
-      camX = pPos.x - width / 2;
-      camY = pPos.y - height / 2;
+      
+      const targetCamX = pPos.x - width / 2;
+      const targetCamY = pPos.y - height / 2;
+
+      if (!this.camInitialized) {
+        this.camX = targetCamX;
+        this.camY = targetCamY;
+        this.camInitialized = true;
+      } else {
+        // Smooth camera follow using linear interpolation (lerp)
+        const lerpSpeed = 6.0;
+        const lerpFactor = Math.min(1.0, lerpSpeed * dt);
+        this.camX += (targetCamX - this.camX) * lerpFactor;
+        this.camY += (targetCamY - this.camY) * lerpFactor;
+      }
+
       playerInventory = pComp.inventory;
       buildRotation = pComp.buildRotation;
     }
+
+    // Ensure image smoothing is disabled for crisp retro pixel art
+    this.ctx.imageSmoothingEnabled = false;
 
     // 2. Background slate
     this.ctx.fillStyle = "#1b1e22";
@@ -62,7 +82,8 @@ export class RenderSystem extends System {
 
     // Translate view relative to camera
     this.ctx.save();
-    this.ctx.translate(-camX, -camY);
+    this.ctx.imageSmoothingEnabled = false; // Set it again inside the saved state
+    this.ctx.translate(-this.camX, -this.camY);
 
     // 3. Render Map
     const maps = world.getEntitiesWith([MapComponent]);
@@ -72,10 +93,10 @@ export class RenderSystem extends System {
       const ts = map.tileSize;
 
       // Visible bounds culling
-      const startCol = Math.max(0, Math.floor(camX / ts));
-      const endCol = Math.min(map.width - 1, Math.ceil((camX + width) / ts));
-      const startRow = Math.max(0, Math.floor(camY / ts));
-      const endRow = Math.min(map.height - 1, Math.ceil((camY + height) / ts));
+      const startCol = Math.max(0, Math.floor(this.camX / ts));
+      const endCol = Math.min(map.width - 1, Math.ceil((this.camX + width) / ts));
+      const startRow = Math.max(0, Math.floor(this.camY / ts));
+      const endRow = Math.min(map.height - 1, Math.ceil((this.camY + height) / ts));
 
       for (let r = startRow; r <= endRow; r++) {
         for (let c = startCol; c <= endCol; c++) {

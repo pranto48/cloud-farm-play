@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { ArrowLeft, Cloud, Maximize2, Save, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth";
@@ -36,21 +36,14 @@ function PlayPage() {
   const { slug } = Route.useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
-
-  // Guard: user must be authenticated — the _app layout should ensure this,
-  // but add a safety net to prevent a runtime crash on production.
-  if (!user) {
-    return <LaunchScreen title="Authenticating…" />;
-  }
-  const userId = user.uid;
+  const userId = user?.uid;
 
   const game = useQuery({ queryKey: ["game", slug], queryFn: () => fetchGameBySlug(slug) });
   const save = useQuery({
     queryKey: ["cloud-save", userId, game.data?.id],
-    queryFn: () => fetchCloudSave(userId, game.data!.id),
-    enabled: !!game.data?.id,
+    queryFn: () => fetchCloudSave(userId!, game.data!.id),
+    enabled: !!game.data?.id && !!userId,
   });
-
 
   const [chosen, setChosen] = useState<GameState | null>(null);
   const [askResume, setAskResume] = useState(false);
@@ -61,18 +54,18 @@ function PlayPage() {
 
   // Decide whether to ask resume vs new
   useEffect(() => {
-    if (!game.data || save.isLoading) return;
+    if (!userId || !game.data || save.isLoading) return;
     if (chosen) return;
     if (save.data) {
       setAskResume(true);
     } else {
       setChosen(newGame());
     }
-  }, [game.data, save.data, save.isLoading, chosen]);
+  }, [game.data, save.data, save.isLoading, chosen, userId]);
 
   // Play session lifecycle
   useEffect(() => {
-    if (!game.data || !chosen) return;
+    if (!userId || !game.data || !chosen) return;
     let sessionId: string | null = null;
     let startedAt: string | null = null;
     (async () => {
@@ -89,8 +82,8 @@ function PlayPage() {
     };
   }, [game.data, chosen, userId]);
 
-  async function doSave(state: GameState, opts?: { silent?: boolean }) {
-    if (!game.data) return;
+  const doSave = useCallback(async (state: GameState, opts?: { silent?: boolean }) => {
+    if (!userId || !game.data) return;
     setStatus("saving");
     try {
       await upsertCloudSave({
@@ -107,7 +100,7 @@ function PlayPage() {
       setStatus("error");
       toast.error(e instanceof Error ? e.message : "Save failed");
     }
-  }
+  }, [userId, game.data]);
 
   // Auto-save loop
   useEffect(() => {
@@ -119,8 +112,7 @@ function PlayPage() {
       if (s) doSave(s, { silent: true });
     }, 60_000);
     return () => clearInterval(id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chosen, game.data?.id]);
+  }, [chosen, doSave]);
 
   function handleStateChange(s: GameState) {
     stateRef.current = s;
@@ -134,7 +126,7 @@ function PlayPage() {
   }
 
   async function loadFromCloud() {
-    if (!game.data) return;
+    if (!userId || !game.data) return;
     const fresh = await fetchCloudSave(userId, game.data.id);
     if (fresh?.save_data) {
       setChosen(migrateState(fresh.save_data));
@@ -149,6 +141,12 @@ function PlayPage() {
     if (!el) return;
     if (document.fullscreenElement) document.exitFullscreen();
     else el.requestFullscreen?.();
+  }
+
+  // Guard: user must be authenticated — the _app layout should ensure this,
+  // but add a safety net to prevent a runtime crash on production.
+  if (!user) {
+    return <LaunchScreen title="Authenticating…" />;
   }
 
   if (game.isLoading || save.isLoading) {

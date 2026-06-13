@@ -128,12 +128,14 @@ export interface FarmWorker {
   y: number;
   subX: number;
   subY: number;
-  task: "idle" | "water" | "harvest" | "clear";
+  task: "idle" | "water" | "harvest" | "clear" | "auto";
   energy: number; // 0 - 100
   hasEatenToday: boolean;
   walkTimer: number;
   actionTimer: number;
   statusText: string;
+  workStartHour?: number;
+  workEndHour?: number;
 }
 
 export interface GameState {
@@ -831,8 +833,20 @@ export function updateEntities(state: GameState, dt: number): void {
     worker.subX += (worker.x - worker.subX) * 0.08;
     worker.subY += (worker.y - worker.subY) * 0.08;
 
-    const isShiftTime = state.time >= 8 * 60 && state.time < 17 * 60;
-    const isSleepTime = state.time >= 22 * 60 || state.time < 6 * 60;
+    const startHour = worker.workStartHour ?? 8;
+    const endHour = worker.workEndHour ?? 17;
+    const startMin = startHour * 60;
+    const endMin = endHour * 60;
+
+    let isShiftTime = false;
+    if (startMin < endMin) {
+      isShiftTime = state.time >= startMin && state.time < endMin;
+    } else { // Overnight shift
+      isShiftTime = state.time >= startMin || state.time < endMin;
+    }
+    
+    // They sleep between 10 PM and 6 AM, but only if they are not currently working
+    const isSleepTime = (state.time >= 22 * 60 || state.time < 6 * 60) && !isShiftTime;
     const isOnStrike = worker.energy <= 0;
 
     if (worker.actionTimer > 0) {
@@ -872,9 +886,43 @@ export function updateEntities(state: GameState, dt: number): void {
       return;
     }
 
-    worker.statusText = `Shift: Task is ${worker.task.toUpperCase()}`;
+    // Auto task evaluation
+    let activeTask: "idle" | "water" | "harvest" | "clear" = worker.task === "auto" ? "idle" : worker.task;
+    
+    if (worker.task === "auto") {
+      const zoneRadius = 4;
+      let foundWater = false;
+      let foundHarvest = false;
+      let foundClear = false;
 
-    if (worker.task === "idle") {
+      for (let dy = -zoneRadius; dy <= zoneRadius; dy++) {
+        for (let dx = -zoneRadius; dx <= zoneRadius; dx++) {
+          const tx = worker.cabinX + dx;
+          const ty = worker.cabinY + dy;
+          if (tx >= 0 && ty >= 0 && tx < COLS && ty < ROWS) {
+            const t = grid[ty][tx];
+            if (t.kind === "soil" || (t.cropId && !t.watered && t.kind !== "watered")) {
+              foundWater = true;
+            }
+            if (t.cropId && t.age >= (CROPS[t.cropId]?.growDays || 3)) {
+              foundHarvest = true;
+            }
+            if (t.kind === "debris_weed" || t.kind === "debris_branch" || t.kind === "debris_stone") {
+              foundClear = true;
+            }
+          }
+        }
+      }
+
+      // Priority order: Water first, then Harvest, then Clear
+      if (foundWater) activeTask = "water";
+      else if (foundHarvest) activeTask = "harvest";
+      else if (foundClear) activeTask = "clear";
+    }
+
+    worker.statusText = `Shift: Task is ${worker.task.toUpperCase()}${worker.task === "auto" ? ` (${activeTask.toUpperCase()})` : ""}`;
+
+    if (activeTask === "idle") {
       worker.walkTimer -= dt;
       if (worker.walkTimer <= 0) {
         worker.walkTimer = Math.random() * 3 + 2;
@@ -901,19 +949,19 @@ export function updateEntities(state: GameState, dt: number): void {
         const ty = worker.cabinY + dy;
         if (tx >= 0 && ty >= 0 && tx < COLS && ty < ROWS) {
           const t = grid[ty][tx];
-          if (worker.task === "water") {
+          if (activeTask === "water") {
             if (t.kind === "soil" || (t.cropId && !t.watered && t.kind !== "watered")) {
               targetX = tx;
               targetY = ty;
               break;
             }
-          } else if (worker.task === "harvest") {
+          } else if (activeTask === "harvest") {
             if (t.cropId && t.age >= (CROPS[t.cropId]?.growDays || 3)) {
               targetX = tx;
               targetY = ty;
               break;
             }
-          } else if (worker.task === "clear") {
+          } else if (activeTask === "clear") {
             if (t.kind === "debris_weed" || t.kind === "debris_branch" || t.kind === "debris_stone") {
               targetX = tx;
               targetY = ty;
@@ -976,14 +1024,14 @@ export function updateEntities(state: GameState, dt: number): void {
         if (worker.actionTimer <= 0) {
           const t = grid[targetY]?.[targetX];
           if (t) {
-            if (worker.task === "water") {
+            if (activeTask === "water") {
               if (t.kind === "soil" || (t.cropId && !t.watered)) {
                 t.watered = true;
                 if (t.kind === "soil") t.kind = "watered";
                 worker.energy = Math.max(0, worker.energy - 0.2);
                 gameAudio.playWater();
               }
-            } else if (worker.task === "harvest") {
+            } else if (activeTask === "harvest") {
               if (t.cropId && t.age >= (CROPS[t.cropId]?.growDays || 3)) {
                 const cropId = t.cropId;
                 const gathered = createItem(cropId, 1);
@@ -1015,7 +1063,7 @@ export function updateEntities(state: GameState, dt: number): void {
                 worker.energy = Math.max(0, worker.energy - 0.5);
                 gameAudio.playChop();
               }
-            } else if (worker.task === "clear") {
+            } else if (activeTask === "clear") {
               if (t.kind === "debris_weed") {
                 t.kind = "grass";
                 const cabinTile = grid[worker.cabinY]?.[worker.cabinX];

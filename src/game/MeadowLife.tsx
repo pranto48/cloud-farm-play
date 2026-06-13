@@ -156,6 +156,62 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
   // Spacebar trigger for Reel minigame
   const [isSpacePressed, setIsSpacePressed] = useState(false);
 
+  const handleCanvasContextMenu = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    e.preventDefault();
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const rect = canvas.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const clickY = e.clientY - rect.top;
+
+    const scaleX = canvasSize.width / rect.width;
+    const scaleY = canvasSize.height / rect.height;
+    const canvasX = clickX * scaleX;
+    const canvasY = clickY * scaleY;
+
+    // Calculate camera coords identical to render/draw
+    const p = state.player;
+    const pSubX = p.subX !== undefined ? p.subX : p.x;
+    const pSubY = p.subY !== undefined ? p.subY : p.y;
+    
+    const gridCols = state.inMine ? 24 : COLS;
+    const gridRows = state.inMine ? 24 : ROWS;
+    
+    const cameraX = Math.max(
+      0,
+      Math.min(gridCols * TILE - canvasSize.width, pSubX * TILE + 16 - canvasSize.width / 2)
+    );
+    const cameraY = Math.max(
+      0,
+      Math.min(gridRows * TILE - canvasSize.height, pSubY * TILE + 16 - canvasSize.height / 2)
+    );
+
+    const worldX = canvasX + cameraX;
+    const worldY = canvasY + cameraY;
+
+    const tileX = Math.floor(worldX / TILE);
+    const tileY = Math.floor(worldY / TILE);
+
+    // Check if right clicked on/near a worker or their cabin
+    if (state.workers) {
+      const clickedWorker = state.workers.find((w) => {
+        const workerX = Math.floor(w.subX);
+        const workerY = Math.floor(w.subY);
+        
+        const onWorker = (Math.abs(w.x - tileX) <= 1 && Math.abs(w.y - tileY) <= 1) || 
+                         (Math.abs(workerX - tileX) <= 1 && Math.abs(workerY - tileY) <= 1);
+        const onCabin = Math.abs(w.cabinX - tileX) <= 1 && Math.abs(w.cabinY - tileY) <= 1;
+
+        return onWorker || onCabin;
+      });
+
+      if (clickedWorker) {
+        setSelectedWorkerId(clickedWorker.id);
+      }
+    }
+  };
+
   // Synchronize state changes to parent (save handler)
   useEffect(() => {
     onStateChange(state);
@@ -1463,6 +1519,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
             ref={canvasRef}
             width={canvasSize.width}
             height={canvasSize.height}
+            onContextMenu={handleCanvasContextMenu}
             style={{ width: "100%", height: "100%", display: "block", imageRendering: "pixelated" }}
           />
 
@@ -2315,85 +2372,191 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
         )}
       </Dialog>
 
-      {/* F. WORKER GUIDELINES DIALOG OVERLAY */}
+      {/* G. WORKER SETTINGS DIALOG */}
       <Dialog open={selectedWorkerId !== null} onOpenChange={() => setSelectedWorkerId(null)}>
-        <DialogContent className="max-w-md bg-[#2d1e18] border-[#5d4037] text-stone-100 font-mono">
-          <DialogHeader>
-            <DialogTitle className="text-lg font-bold flex items-center gap-2 text-amber-400 border-b border-[#5d4037] pb-2">
-              <span>📋 Worker Guideline & Assignment</span>
-            </DialogTitle>
-          </DialogHeader>
-
-          {(() => {
+        <DialogContent className="max-w-md bg-stone-900 border-stone-850 text-stone-100 font-mono">
+          {selectedWorkerId && (() => {
             const activeWorker = state.workers?.find((w) => w.id === selectedWorkerId);
             if (!activeWorker) return null;
+
+            const startHour = activeWorker.workStartHour ?? 8;
+            const endHour = activeWorker.workEndHour ?? 17;
+
             return (
-              <div className="space-y-4 py-3 text-xs">
-                <div className="bg-[#3e2723] p-3 rounded-lg border border-[#5d4037] space-y-1">
-                  <div><span className="text-amber-400">Name:</span> {activeWorker.name}</div>
-                  <div><span className="text-amber-400">Shift Schedule:</span> 8:00 AM - 5:00 PM</div>
-                  <div>
-                    <span className="text-amber-400">Energy Level:</span> {Math.floor(activeWorker.energy)} / 100
+              <div className="space-y-4 font-mono">
+                <DialogHeader>
+                  <DialogTitle className="text-base font-bold flex items-center gap-2 text-amber-400 border-b border-stone-800 pb-2">
+                    <Compass className="h-5 w-5 text-amber-500" />
+                    <span>Worker Settings: {activeWorker.name}</span>
+                  </DialogTitle>
+                  <DialogDescription className="text-stone-400 text-xs">
+                    Configure priority tasks, custom shift schedules, or terminate employment.
+                  </DialogDescription>
+                </DialogHeader>
+
+                {/* Status Indicator */}
+                <div className="p-3 bg-[#2d1e18] border border-stone-850 rounded-lg space-y-1.5 shadow-inner">
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="font-bold text-amber-400">Status:</span>
+                    <span className="text-stone-200">{activeWorker.statusText}</span>
                   </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-amber-400">Daily Food Eaten:</span>{" "}
-                    {activeWorker.hasEatenToday ? (
-                      <span className="text-emerald-400 font-bold">Yes ✓</span>
-                    ) : (
-                      <span className="text-red-400 font-bold">No ✗</span>
-                    )}
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="font-bold text-amber-400">Energy:</span>
+                    <span className="text-stone-200 font-bold">{Math.round(activeWorker.energy)}/100</span>
                   </div>
-                  <div><span className="text-amber-400">Status:</span> {activeWorker.statusText}</div>
+                  <div className="h-2 w-full bg-stone-950 rounded-full overflow-hidden border border-stone-850">
+                    <div
+                      className={`h-full transition-all duration-500 ${
+                        activeWorker.energy <= 20 ? "bg-red-500 animate-pulse" : "bg-emerald-500"
+                      }`}
+                      style={{ width: `${activeWorker.energy}%` }}
+                    />
+                  </div>
                 </div>
 
+                {/* Task Selection Grid */}
                 <div className="space-y-2">
-                  <label className="block text-amber-500 font-bold">Assign Work Guideline:</label>
+                  <h4 className="text-xs font-bold text-amber-500 uppercase tracking-wider">Assign Task</h4>
                   <div className="grid grid-cols-2 gap-2">
-                    {(["idle", "water", "harvest", "clear"] as const).map((task) => (
-                      <button
-                        key={task}
-                        className={`p-2.5 rounded border capitalize font-bold transition-all text-center ${
-                          activeWorker.task === task
-                            ? "bg-amber-600 border-amber-400 text-stone-100"
-                            : "bg-[#3e2723] border-[#5d4037] text-stone-300 hover:bg-[#5d4037]"
-                        }`}
-                        onClick={() => {
+                    {[
+                      { id: "auto", label: "🤖 Auto Work", desc: "Water > Harvest > Clear" },
+                      { id: "water", label: "💧 Water Soil", desc: "Water dry crops & soil" },
+                      { id: "harvest", label: "🌾 Harvest", desc: "Harvest mature crops" },
+                      { id: "clear", label: "🪓 Clear Debris", desc: "Weed, wood, stone" },
+                      { id: "idle", label: "💤 Idle / Rest", desc: "Relax and wander" },
+                    ].map((opt) => {
+                      const isActive = activeWorker.task === opt.id;
+                      return (
+                        <button
+                          key={opt.id}
+                          className={`p-2 rounded border text-left transition-all text-xs ${
+                            isActive
+                              ? "bg-amber-600 border-amber-400 text-stone-100 font-extrabold shadow-[0_0_8px_rgba(243,156,18,0.3)]"
+                              : "bg-stone-950/40 border-stone-850 text-stone-300 hover:bg-[#3e2723]/30"
+                          }`}
+                          onClick={() => {
+                            setState((prev) => {
+                              const next = structuredClone(prev);
+                              const w = next.workers?.find((x) => x.id === activeWorker.id);
+                              if (w) {
+                                w.task = opt.id as "idle" | "water" | "harvest" | "clear" | "auto";
+                                toast.success(`Assigned ${activeWorker.name} to ${opt.label}`);
+                              }
+                              return next;
+                            });
+                          }}
+                        >
+                          <div className="font-bold">{opt.label}</div>
+                          <div className="text-[9px] text-stone-500 mt-0.5 font-normal leading-tight">{opt.desc}</div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Shift Hours Settings */}
+                <div className="space-y-2">
+                  <h4 className="text-xs font-bold text-amber-500 uppercase tracking-wider">Work Shift Time</h4>
+                  <div className="grid grid-cols-2 gap-3 p-3 bg-stone-950/30 border border-stone-850 rounded-lg">
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-[10px] text-stone-400 font-semibold">Shift Start Hour</label>
+                      <select
+                        value={startHour}
+                        onChange={(e) => {
+                          const val = parseInt(e.target.value);
                           setState((prev) => {
                             const next = structuredClone(prev);
-                            const worker = next.workers?.find((w) => w.id === selectedWorkerId);
-                            if (worker) {
-                              worker.task = task;
-                              toast.success(`Assigned ${worker.name} to ${task.toUpperCase()}`);
-                            }
+                            const w = next.workers?.find((x) => x.id === activeWorker.id);
+                            if (w) w.workStartHour = val;
                             return next;
                           });
                         }}
+                        className="bg-stone-900 border border-stone-800 rounded p-1.5 text-stone-200 text-xs focus:outline-none focus:border-amber-500 cursor-pointer font-mono"
                       >
-                        {task === "idle" ? "Idle / Rest" : task === "water" ? "Water Soil" : task === "harvest" ? "Harvest Crops" : "Clear Debris"}
-                      </button>
-                    ))}
+                        {Array.from({ length: 24 }).map((_, h) => (
+                          <option key={h} value={h}>
+                            {h === 0 ? "12 AM" : h === 12 ? "12 PM" : h > 12 ? `${h - 12} PM` : `${h} AM`}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-[10px] text-stone-400 font-semibold">Shift End Hour</label>
+                      <select
+                        value={endHour}
+                        onChange={(e) => {
+                          const val = parseInt(e.target.value);
+                          setState((prev) => {
+                            const next = structuredClone(prev);
+                            const w = next.workers?.find((x) => x.id === activeWorker.id);
+                            if (w) w.workEndHour = val;
+                            return next;
+                          });
+                        }}
+                        className="bg-stone-900 border border-stone-800 rounded p-1.5 text-stone-200 text-xs focus:outline-none focus:border-amber-500 cursor-pointer font-mono"
+                      >
+                        {Array.from({ length: 24 }).map((_, h) => (
+                          <option key={h} value={h}>
+                            {h === 0 ? "12 AM" : h === 12 ? "12 PM" : h > 12 ? `${h - 12} PM` : `${h} AM`}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
                   </div>
                 </div>
 
-                <div className="text-[10px] text-stone-400 border-t border-[#5d4037] pt-2 leading-relaxed">
-                  <span className="text-amber-300 font-extrabold">Guidelines Note:</span> Hired workers need 1 crop or meal in their Cabin Feed Box daily. If energy drops to 0, they will strike. They work in a 9x9 zone centered on their cabin.
+                {/* Guidelines note */}
+                <div className="text-[10px] text-stone-400 border-t border-stone-800 pt-2 leading-relaxed">
+                  <span className="text-amber-300 font-extrabold">Guidelines:</span> Hired workers need 1 crop/meal in their Cabin Feed Box daily. If energy drops to 0, they will strike. They work in a 9x9 zone around their cabin.
                 </div>
 
-                <div className="flex justify-end gap-2 pt-2">
-                  <Button
-                    variant="outline"
-                    className="text-xs bg-[#5d4037]/20 border-[#5d4037] hover:bg-[#5d4037]/40 text-stone-100"
-                    onClick={() => {
-                      setSelectedWorkerId(null);
-                      setChestOpenTile({ x: activeWorker.cabinX, y: activeWorker.cabinY });
-                    }}
-                  >
-                    Open Cabin Chest
-                  </Button>
-                  <Button className="text-xs" onClick={() => setSelectedWorkerId(null)}>
+                <DialogFooter className="flex flex-col sm:flex-row gap-2 pt-2 border-t border-stone-800 mt-2 justify-between">
+                  <div className="flex gap-2 w-full sm:w-auto">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="text-xs bg-[#5d4037]/20 border-stone-850 hover:bg-[#5d4037]/45 text-stone-100 font-mono"
+                      onClick={() => {
+                        setSelectedWorkerId(null);
+                        setChestOpenTile({ x: activeWorker.cabinX, y: activeWorker.cabinY });
+                      }}
+                    >
+                      Feed Box
+                    </Button>
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      className="text-xs bg-red-950/40 border border-red-900 hover:bg-red-900 text-red-200 font-mono"
+                      onClick={() => {
+                        if (confirm(`Are you sure you want to sell ${activeWorker.name} and remove their cabin? This refunds 500g.`)) {
+                          setState((prev) => {
+                            const next = structuredClone(prev);
+                            next.coins += 500;
+                            next.workers = (next.workers || []).filter((w) => w.id !== activeWorker.id);
+                            
+                            const tile = next.tiles[activeWorker.cabinY]?.[activeWorker.cabinX];
+                            if (tile) {
+                              tile.kind = "grass";
+                              tile.placedItemId = undefined;
+                              tile.chestInventory = undefined;
+                            }
+                            
+                            toast.success(`Sold ${activeWorker.name}'s cabin. +500g refunded!`);
+                            gameAudio.playCoin();
+                            return next;
+                          });
+                          setSelectedWorkerId(null);
+                        }
+                      }}
+                    >
+                      Sell (+500g)
+                    </Button>
+                  </div>
+                  <Button size="sm" onClick={() => setSelectedWorkerId(null)}>
                     Close
                   </Button>
-                </div>
+                </DialogFooter>
               </div>
             );
           })()}

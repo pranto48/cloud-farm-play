@@ -407,3 +407,27 @@ export class WorkerComponent extends Component {
     this.previousState = null;
   }
 }
+
+export class AnimationComponent extends Component {
+  public currentFrame: number = 0;
+  public totalFrames: number = 1;
+  public frameWidth: number = 32;
+  public frameHeight: number = 32;
+  public animationSpeed: number = 10; // Frames per second
+  public timer: number = 0; // Accumulates dt
+  public currentTrack: "idle" | "walk" | "work" = "idle";
+  public direction: "down" | "up" | "left" | "right" = "down";
+
+  constructor(
+    totalFrames: number = 1,
+    frameWidth: number = 32,
+    frameHeight: number = 32,
+    animationSpeed: number = 10
+  ) {
+    super();
+    this.totalFrames = totalFrames;
+    this.frameWidth = frameWidth;
+    this.frameHeight = frameHeight;
+    this.animationSpeed = animationSpeed;
+  }
+}

@@ -16,6 +16,7 @@ import {
   BuildTool,
   BoxColliderComponent,
   WorkerComponent,
+  AnimationComponent,
 } from "./components/GameComponents";
 
 // Systems
@@ -507,6 +508,7 @@ export class Game {
       InputComponent,
       BoxColliderComponent,
       WorkerComponent,
+      AnimationComponent,
     };
 
     for (const serializedEnt of saveData.entities) {

@@ -57,7 +57,7 @@ export class InputComponent extends Component {
   }
 }
 
-export type BuildTool = "belt" | "inserter" | "drill" | "furnace" | "assembler" | "chest" | "pole" | "generator" | "road" | "storage_house" | "worker_house";
+export type BuildTool = "belt" | "inserter" | "drill" | "furnace" | "assembler" | "chest" | "pole" | "generator" | "road" | "storage_house" | "worker_house" | "advanced_drill" | "advanced_furnace" | "fast_road";
 
 export class PlayerComponent extends Component {
   public inventory: Record<string, number> = {};
@@ -76,7 +76,7 @@ export class PlayerComponent extends Component {
   }
 }
 
-export type TileType = "grass" | "water" | "stone" | "forest" | "iron" | "copper" | "coal" | "road";
+export type TileType = "grass" | "water" | "stone" | "forest" | "iron" | "copper" | "coal" | "road" | "fast_road";
 
 export class MapComponent extends Component {
   public width: number;
@@ -104,6 +104,7 @@ export class MapComponent extends Component {
   }
 
   public getTileWeight(type: TileType): number {
+    if (type === "fast_road") return 0.25;
     if (type === "road") return 0.5;
     if (type === "grass") return 1.0;
     if (type === "water" || type === "forest" || type === "stone") return Infinity;
@@ -250,7 +251,9 @@ export type StructureType =
   | "generator"
   | "storage_house"
   | "worker_house"
-  | "crop";
+  | "crop"
+  | "advanced_drill"
+  | "advanced_furnace";
 
 export interface Recipe {
   name: string;

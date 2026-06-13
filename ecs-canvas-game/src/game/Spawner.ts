@@ -155,10 +155,27 @@ export function spawnDrill(world: World, x: number, y: number, gridX: number, gr
   return entity;
 }
 
+export function spawnAdvancedDrill(world: World, x: number, y: number, gridX: number, gridY: number, rotation: 0 | 90 | 180 | 270): string {
+  const entity = world.createEntity();
+  world.addComponent(entity, new PositionComponent(x, y));
+  const struct = new StructureComponent("advanced_drill", gridX, gridY, rotation);
+  struct.workDuration = 2.0; // advanced drill mines in 2s (twice as fast!)
+  world.addComponent(entity, struct);
+  return entity;
+}
+
 export function spawnFurnace(world: World, x: number, y: number, gridX: number, gridY: number, rotation: 0 | 90 | 180 | 270): string {
   const entity = world.createEntity();
   world.addComponent(entity, new PositionComponent(x, y));
   const struct = new StructureComponent("furnace", gridX, gridY, rotation);
+  world.addComponent(entity, struct);
+  return entity;
+}
+
+export function spawnAdvancedFurnace(world: World, x: number, y: number, gridX: number, gridY: number, rotation: 0 | 90 | 180 | 270): string {
+  const entity = world.createEntity();
+  world.addComponent(entity, new PositionComponent(x, y));
+  const struct = new StructureComponent("advanced_furnace", gridX, gridY, rotation);
   world.addComponent(entity, struct);
   return entity;
 }

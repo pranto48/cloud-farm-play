@@ -14,9 +14,11 @@
       <div id="toolbar-tabs">
         <button class="tab-btn active" id="tab-factory">Factory Tools</button>
         <button class="tab-btn" id="tab-builder">Town Builder</button>
+        <button class="tab-btn" id="tab-tech">Research Techs</button>
       </div>
 
       <div id="toolbar-content-row">
+        <!-- Group 1: Factory Tools -->
         <div id="tools-factory-group" class="tools-group active">
           <button class="tool-btn active" id="btn-belt" title="Conveyor Belt (Left Click/Drag to Place)">
             <span class="tool-icon">🔀</span>
@@ -30,9 +32,17 @@
             <span class="tool-icon">⛏️</span>
             <span class="tool-label">Drill</span>
           </button>
+          <button class="tool-btn" id="btn-advanced_drill" style="display: none;" title="Advanced Drill (Mines resources twice as fast, requires power)">
+            <span class="tool-icon">⚡⛏️</span>
+            <span class="tool-label">Adv Drill</span>
+          </button>
           <button class="tool-btn" id="btn-furnace" title="Smelting Furnace (Smelts Ore using Coal)">
             <span class="tool-icon">🔥</span>
             <span class="tool-label">Furnace</span>
+          </button>
+          <button class="tool-btn" id="btn-advanced_furnace" style="display: none;" title="Electric Furnace (Smelts twice as fast, requires power, needs no coal fuel)">
+            <span class="tool-icon">⚡🔥</span>
+            <span class="tool-label">E-Furnace</span>
           </button>
           <button class="tool-btn" id="btn-assembler" title="Assembly Machine (Crafts items automatically)">
             <span class="tool-icon">⚙️</span>
@@ -52,10 +62,15 @@
           </button>
         </div>
 
+        <!-- Group 2: Town Builder -->
         <div id="tools-builder-group" class="tools-group">
           <button class="tool-btn" id="btn-road" title="Dirt Road (Place on empty Grass to speed up movement. Cost: 0.5)">
             <span class="tool-icon">🛣️</span>
             <span class="tool-label">Road</span>
+          </button>
+          <button class="tool-btn" id="btn-fast_road" style="display: none;" title="High Speed Road (Allows workers and players to walk 4x faster. Cost: 0.25)">
+            <span class="tool-icon">⚡🛣️</span>
+            <span class="tool-label">Fast Road</span>
           </button>
           <button class="tool-btn" id="btn-storage_house" title="Storage House (Red barn for material storage)">
             <span class="tool-icon">🏠</span>
@@ -64,6 +79,14 @@
           <button class="tool-btn" id="btn-worker_house" title="Worker House (Blue cottage for farm workers)">
             <span class="tool-icon">🏡</span>
             <span class="tool-label">Worker House</span>
+          </button>
+        </div>
+
+        <!-- Group 3: Technology Tree Trigger -->
+        <div id="tools-tech-group" class="tools-group">
+          <button class="tool-btn" id="btn-open-tech-tree" title="Open Research & Technology Tree Node graph">
+            <span class="tool-icon">🧬</span>
+            <span class="tool-label">Open Tech Tree</span>
           </button>
         </div>
 
@@ -102,6 +125,57 @@
         </div>
 
         <button id="btn-close-dialog" class="dialog-btn secondary">Close Menu</button>
+      </div>
+    </div>
+
+    <!-- Technology Tree Modal dialog overlay -->
+    <div id="tech-tree-dialog" class="dialog-overlay" style="display: none;">
+      <div class="dialog-content tech-dialog">
+        <h3>🧬 Technology Tree & Research</h3>
+        <p class="dialog-desc">Spend resources from the global Storage Houses to unlock advanced automation blueprints.</p>
+        
+        <div class="tech-nodes-container">
+          <!-- Tech Node 1: Advanced Mining -->
+          <div class="tech-node-card" id="tech-card-advanced_mining">
+            <div class="tech-node-header">
+              <span class="tech-node-icon">⛏️</span>
+              <span class="tech-node-title">Advanced Mining</span>
+            </div>
+            <p class="tech-node-desc">Unlocks the Advanced Drill (mines 2x faster, requires electricity).</p>
+            <div class="tech-node-requirements">
+              <strong>Cost:</strong> <span class="res-cost" id="tech-req-mining-wood">🪵 0 / 500 Wood</span>, <span class="res-cost" id="tech-req-mining-stone">🪨 0 / 200 Stone</span>
+            </div>
+            <button class="dialog-btn success tech-research-btn" id="btn-research-mining">Research</button>
+          </div>
+
+          <!-- Tech Node 2: High-Speed Logistics -->
+          <div class="tech-node-card" id="tech-card-high_speed_logistics">
+            <div class="tech-node-header">
+              <span class="tech-node-icon">🛣️</span>
+              <span class="tech-node-title">High-Speed Logistics</span>
+            </div>
+            <p class="tech-node-desc">Unlocks the High Speed Road (allows workers/player to move 4x faster).</p>
+            <div class="tech-node-requirements">
+              <strong>Cost:</strong> <span class="res-cost" id="tech-req-logistics-wood">🪵 0 / 300 Wood</span>, <span class="res-cost" id="tech-req-logistics-iron">🪙 0 / 100 Iron Plate</span>
+            </div>
+            <button class="dialog-btn success tech-research-btn" id="btn-research-logistics">Research</button>
+          </div>
+
+          <!-- Tech Node 3: Industrial Smelting -->
+          <div class="tech-node-card" id="tech-card-industrial_smelting">
+            <div class="tech-node-header">
+              <span class="tech-node-icon">⚡</span>
+              <span class="tech-node-title">Industrial Smelting</span>
+            </div>
+            <p class="tech-node-desc">Unlocks the Electric Furnace (smelts 2x faster, requires power, needs no coal fuel).</p>
+            <div class="tech-node-requirements">
+              <strong>Cost:</strong> <span class="res-cost" id="tech-req-smelting-stone">🪨 0 / 400 Stone</span>, <span class="res-cost" id="tech-req-smelting-coal">⚫ 0 / 150 Coal</span>
+            </div>
+            <button class="dialog-btn success tech-research-btn" id="btn-research-smelting">Research</button>
+          </div>
+        </div>
+
+        <button id="btn-close-tech" class="dialog-btn secondary">Close Tree</button>
       </div>
     </div>
 

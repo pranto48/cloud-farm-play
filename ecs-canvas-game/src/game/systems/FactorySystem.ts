@@ -97,10 +97,10 @@ export class FactorySystem extends System {
       }
     }
 
-    // Power consumers (Drills & Assemblers) in range of electrified poles
+    // Power consumers (Drills, Advanced Drills, Assemblers, & Electric Furnaces) in range of electrified poles
     for (const ent of structures) {
       const s = world.getComponent(ent, StructureComponent)!;
-      if (s.type === "drill" || s.type === "assembler") {
+      if (s.type === "drill" || s.type === "advanced_drill" || s.type === "assembler" || s.type === "advanced_furnace") {
         let powered = false;
         const pos = world.getComponent(ent, PositionComponent)!;
         for (const poleEnt of electrifiedPoles) {
@@ -379,7 +379,7 @@ export class FactorySystem extends System {
     // ==========================================
     for (const ent of structures) {
       const s = world.getComponent(ent, StructureComponent)!;
-      if (s.type === "drill" && s.isPowered) {
+      if ((s.type === "drill" || s.type === "advanced_drill") && s.isPowered) {
         const type = mapComp.tiles[s.gridY]?.[s.gridX];
         let minedItem: ItemType | null = null;
 
@@ -480,6 +480,49 @@ export class FactorySystem extends System {
             s.progress = s.timer / recipe.time;
 
             if (s.timer >= recipe.time) {
+              s.timer = 0;
+              s.progress = 0;
+
+              // Smelt outputs
+              if (chosenRecipe === "iron_plate") {
+                s.inventory["iron_ore"]--;
+                s.inventory["iron_plate"] = (s.inventory["iron_plate"] || 0) + 1;
+              } else {
+                s.inventory["copper_ore"]--;
+                s.inventory["copper_plate"] = (s.inventory["copper_plate"] || 0) + 1;
+              }
+            }
+          } else {
+            s.timer = 0;
+            s.progress = 0;
+          }
+        } else {
+          s.timer = 0;
+          s.progress = 0;
+        }
+      } else if (s.type === "advanced_furnace") {
+        // Advanced Electric Furnace
+        if (s.isPowered) {
+          // Emit glowing electric/spark particles
+          if (Math.random() < 0.15) {
+            const pos = world.getComponent(ent, PositionComponent)!;
+            spawnParticle(world, pos.x + (Math.random() * 8 - 4), pos.y + 2, "#34e7e4", 2);
+          }
+
+          let chosenRecipe = "";
+          if (s.inventory["iron_ore"] && s.inventory["iron_ore"] > 0) {
+            chosenRecipe = "iron_plate";
+          } else if (s.inventory["copper_ore"] && s.inventory["copper_ore"] > 0) {
+            chosenRecipe = "copper_plate";
+          }
+
+          if (chosenRecipe) {
+            const recipe = RECIPES[chosenRecipe];
+            const smeltTime = recipe.time / 2.0; // 2x faster!
+            s.timer += dt;
+            s.progress = s.timer / smeltTime;
+
+            if (s.timer >= smeltTime) {
               s.timer = 0;
               s.progress = 0;
 

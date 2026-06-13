@@ -353,4 +353,118 @@ html, body {
   background: rgba(255, 255, 255, 0.08);
 }
 
+/* Technology Tree styles */
+.dialog-content.tech-dialog {
+  width: 780px;
+  max-width: 90vw;
+  background: rgba(18, 25, 29, 0.95);
+  border: 1.5px solid rgba(52, 231, 228, 0.3);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8), 0 0 30px rgba(52, 231, 228, 0.1);
+}
+
+.tech-nodes-container {
+  display: flex;
+  gap: 16px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin: 16px 0;
+  overflow-y: auto;
+  max-height: 55vh;
+  padding: 8px;
+}
+
+.tech-node-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1.5px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 18px;
+  width: 210px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  text-align: left;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+}
+
+.tech-node-card.locked {
+  opacity: 0.5;
+  background: rgba(0, 0, 0, 0.2);
+  border-color: rgba(255, 255, 255, 0.03);
+}
+
+.tech-node-card.available {
+  border-color: rgba(241, 196, 15, 0.4);
+  box-shadow: 0 4px 15px rgba(241, 196, 15, 0.05);
+}
+
+.tech-node-card.unlocked {
+  border-color: rgba(46, 204, 113, 0.5);
+  background: rgba(46, 204, 113, 0.03);
+  box-shadow: 0 4px 20px rgba(46, 204, 113, 0.1);
+}
+
+.tech-node-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.tech-node-icon {
+  font-size: 24px;
+}
+
+.tech-node-title {
+  font-size: 14px;
+  font-weight: 800;
+  color: #fff;
+}
+
+.tech-node-card.unlocked .tech-node-title {
+  color: #2ecc71;
+}
+
+.tech-node-desc {
+  font-size: 11px;
+  line-height: 1.4;
+  color: #a4b0be;
+  margin: 0;
+  height: 48px;
+}
+
+.tech-node-requirements {
+  font-size: 11px;
+  color: #bdc3c7;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  padding-top: 8px;
+}
+
+.res-cost {
+  display: inline-block;
+  margin-right: 6px;
+  font-weight: 700;
+}
+
+.res-cost.met {
+  color: #2ecc71;
+}
+
+.res-cost.unmet {
+  color: #e74c3c;
+}
+
+.tech-research-btn {
+  width: 100%;
+  padding: 8px 12px;
+  font-size: 11px;
+  margin-top: auto;
+}
+
+.tech-node-card.unlocked .tech-research-btn {
+  background: rgba(46, 204, 113, 0.1);
+  border-color: rgba(46, 204, 113, 0.2);
+  color: #2ecc71;
+  pointer-events: none;
+}
+
 

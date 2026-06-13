@@ -164,10 +164,31 @@ export class RenderSystem extends System {
               this.ctx.fillRect(tx + 24, ty + 20, 5, 2);
               this.ctx.fillRect(tx + 48, ty + 10, 2, 4);
             }
+          } else if (type === "fast_road") {
+            // High speed metal paved road (dark slate block with glowing speed arrows)
+            this.ctx.fillStyle = "#2c3e50";
+            this.ctx.fillRect(tx, ty, ts, ts);
+            this.ctx.strokeStyle = "#34495e";
+            this.ctx.lineWidth = 2;
+            this.ctx.strokeRect(tx + 2, ty + 2, ts - 4, ts - 4);
+
+            // Glowing speed chevron arrows
+            this.ctx.strokeStyle = "rgba(52, 231, 228, 0.65)";
+            this.ctx.lineWidth = 2.5;
+            this.ctx.beginPath();
+            // Arrow 1
+            this.ctx.moveTo(tx + 22, ty + ts / 2 - 5);
+            this.ctx.lineTo(tx + 28, ty + ts / 2);
+            this.ctx.lineTo(tx + 22, ty + ts / 2 + 5);
+            // Arrow 2
+            this.ctx.moveTo(tx + 36, ty + ts / 2 - 5);
+            this.ctx.lineTo(tx + 42, ty + ts / 2);
+            this.ctx.lineTo(tx + 36, ty + ts / 2 + 5);
+            this.ctx.stroke();
           }
 
           // Pathfinding weights overlay when using builder tools
-          const isBuilderTool = this.activeTool === "road" || this.activeTool === "storage_house" || this.activeTool === "worker_house";
+          const isBuilderTool = this.activeTool === "road" || this.activeTool === "fast_road" || this.activeTool === "storage_house" || this.activeTool === "worker_house";
           if (isBuilderTool) {
             const weight = map.weights[r]?.[c];
             if (weight !== undefined && weight !== Infinity) {
@@ -297,7 +318,7 @@ export class RenderSystem extends System {
         const wComp = world.getComponent(entId, WorkerComponent)!;
         this.drawWorker(this.ctx, px, py, wComp);
 
-        const isBuilderTool = this.activeTool === "road" || this.activeTool === "storage_house" || this.activeTool === "worker_house";
+        const isBuilderTool = this.activeTool === "road" || this.activeTool === "fast_road" || this.activeTool === "storage_house" || this.activeTool === "worker_house";
         if (isBuilderTool && wComp.path && wComp.path.length > 0) {
           const mapComp = world.getComponent(maps[0], MapComponent)!;
           this.drawWorkerPath(this.ctx, wComp, mapComp.tileSize);
@@ -517,6 +538,55 @@ export class RenderSystem extends System {
         ctx.fillText("DRILL", 0, 32);
         break;
       }
+      case "advanced_drill": {
+        // Heavy gold/steel casing
+        ctx.fillStyle = "#d4ac0d"; // gold casing
+        ctx.beginPath();
+        ctx.roundRect(-24, -24, 48, 48, 6);
+        ctx.fill();
+        
+        ctx.strokeStyle = "#9a7d0a";
+        ctx.lineWidth = 2;
+        ctx.strokeRect(-24, -24, 48, 48);
+
+        // Electric warning bulb showing power state (cyan when powered)
+        ctx.fillStyle = s.isPowered ? "#34e7e4" : "#e74c3c";
+        ctx.beginPath();
+        ctx.arc(-16, -16, 4.5, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Drilling core gear head spinning (2x faster!)
+        ctx.save();
+        const spinSpeed = s.isPowered ? this.time * 18 : 0;
+        ctx.rotate(spinSpeed);
+        ctx.fillStyle = "#2c3e50";
+        ctx.fillRect(-14, -5, 28, 10);
+        ctx.fillRect(-5, -14, 10, 28);
+        ctx.fillStyle = "#34e7e4"; // glowing drill tip
+        ctx.beginPath();
+        ctx.arc(0, 0, 6, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+
+        // Direction indicator arrow
+        ctx.save();
+        ctx.rotate((s.rotation * Math.PI) / 180);
+        ctx.fillStyle = "rgba(52, 231, 228, 0.7)";
+        ctx.beginPath();
+        ctx.moveTo(20, 0);
+        ctx.lineTo(12, -6);
+        ctx.lineTo(12, 6);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+
+        // Tag text
+        ctx.fillStyle = "rgba(255,255,255,0.85)";
+        ctx.font = "bold 8px sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText("ADV DRILL", 0, 32);
+        break;
+      }
 
       case "furnace": {
         // Stone brick kiln shape
@@ -564,6 +634,59 @@ export class RenderSystem extends System {
         ctx.font = "bold 8px sans-serif";
         ctx.textAlign = "center";
         ctx.fillText("FURNACE", 0, 32);
+        break;
+      }
+      case "advanced_furnace": {
+        // High-tech Electric Furnace (Steel-blue dual chimney furnace with glowing blue fire core)
+        ctx.fillStyle = "#45aaf2"; // Electric steel blue casing
+        ctx.beginPath();
+        ctx.roundRect(-22, -22, 44, 44, 6);
+        ctx.fill();
+        ctx.strokeStyle = "#4b7bec";
+        ctx.lineWidth = 2.5;
+        ctx.strokeRect(-22, -22, 44, 44);
+
+        // Dual chimneys
+        ctx.fillStyle = "#2d98da";
+        ctx.fillRect(-14, -28, 6, 8);
+        ctx.fillRect(8, -28, 6, 8);
+
+        // Electric power state bulb
+        ctx.fillStyle = s.isPowered ? "#34e7e4" : "#e74c3c";
+        ctx.beginPath();
+        ctx.arc(-16, -16, 3.5, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Energy Core opening
+        ctx.fillStyle = "#1e272c";
+        ctx.fillRect(-12, 2, 24, 14);
+
+        // Electric plasma smelting glow
+        if (s.isPowered && s.progress > 0) {
+          const glowSize = 4 + Math.sin(this.time * 22) * 2;
+          const plasmaGradient = ctx.createRadialGradient(0, 9, 1, 0, 9, glowSize + 3);
+          plasmaGradient.addColorStop(0, "#fff");
+          plasmaGradient.addColorStop(0.3, "#00d2d3"); // cyan glow
+          plasmaGradient.addColorStop(0.8, "#54a0ff"); // blue glow
+          plasmaGradient.addColorStop(1, "rgba(84,160,255,0)");
+          ctx.fillStyle = plasmaGradient;
+          ctx.beginPath();
+          ctx.arc(0, 9, glowSize + 3, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        // Process progress bar
+        if (s.progress > 0) {
+          ctx.fillStyle = "rgba(0,0,0,0.5)";
+          ctx.fillRect(-16, -32, 32, 3);
+          ctx.fillStyle = "#34e7e4";
+          ctx.fillRect(-16, -32, 32 * s.progress, 3);
+        }
+
+        ctx.fillStyle = "rgba(255,255,255,0.85)";
+        ctx.font = "bold 8px sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText("E-FURNACE", 0, 32);
         break;
       }
 

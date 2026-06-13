@@ -21,7 +21,9 @@ import {
   spawnPowerPole, 
   spawnGenerator,
   spawnStorageHouse,
-  spawnWorkerHouse
+  spawnWorkerHouse,
+  spawnAdvancedDrill,
+  spawnAdvancedFurnace
 } from "../Spawner";
 import { toast } from "../utils/Toast";
 
@@ -78,16 +80,19 @@ export class InputSystem extends System {
       this.keyDebounce["r"] = false;
     }
 
-    // 3. Hotbar Selection via keys 1-9, 0, -
+    // 3. Hotbar Selection via keys 1-9, 0, -, =, [, ]
     const tools: BuildTool[] = [
       "belt", "inserter", "drill", "furnace", "assembler", "chest", "pole", "generator",
-      "road", "storage_house", "worker_house"
+      "road", "storage_house", "worker_house", "advanced_drill", "advanced_furnace", "fast_road"
     ];
-    for (let i = 1; i <= 11; i++) {
+    for (let i = 1; i <= 14; i++) {
       let keyStr = "";
       if (i <= 9) keyStr = i.toString();
       else if (i === 10) keyStr = "0";
       else if (i === 11) keyStr = "-";
+      else if (i === 12) keyStr = "=";
+      else if (i === 13) keyStr = "[";
+      else if (i === 14) keyStr = "]";
 
       if (input.keys[keyStr]) {
         const selected = tools[i - 1];
@@ -191,6 +196,16 @@ export class InputSystem extends System {
                 case "worker_house":
                   spawnedEntity = spawnWorkerHouse(world, spawnX, spawnY, col, row);
                   break;
+                case "advanced_drill":
+                  spawnedEntity = spawnAdvancedDrill(world, spawnX, spawnY, col, row, player.buildRotation);
+                  break;
+                case "advanced_furnace":
+                  spawnedEntity = spawnAdvancedFurnace(world, spawnX, spawnY, col, row, player.buildRotation);
+                  break;
+                case "fast_road":
+                  mapComp.updateTile(row, col, "fast_road");
+                  spawnedEntity = "fast_road_placed";
+                  break;
               }
 
               if (spawnedEntity) {
@@ -241,11 +256,16 @@ export class InputSystem extends System {
           world.destroyEntity(occupiedStructureEntity);
           toast.info(`Deconstructed ${struct.type.toUpperCase().replace("_", " ")}`);
           input.mouseRightClicked = false; // Reset trigger
-        } else if (mapComp.tiles[row][col] === "road") {
-          // Revert road to grass and refund road
+        } else if (mapComp.tiles[row][col] === "road" || mapComp.tiles[row][col] === "fast_road") {
+          const isFast = mapComp.tiles[row][col] === "fast_road";
           mapComp.updateTile(row, col, "grass");
-          player.inventory["road"] = (player.inventory["road"] || 0) + 1;
-          toast.info("Deconstructed ROAD");
+          if (isFast) {
+            player.inventory["iron_plate"] = (player.inventory["iron_plate"] || 0) + 2; // refund 2 iron plates
+            toast.info("Deconstructed FAST ROAD");
+          } else {
+            player.inventory["road"] = (player.inventory["road"] || 0) + 1;
+            toast.info("Deconstructed ROAD");
+          }
           input.mouseRightClicked = false;
         }
       }
@@ -256,7 +276,7 @@ export class InputSystem extends System {
     if (isOccupied) return false;
 
     // Road, storage house, and worker house can ONLY be placed on empty grass tiles
-    if (tool === "road" || tool === "storage_house" || tool === "worker_house") {
+    if (tool === "road" || tool === "fast_road" || tool === "storage_house" || tool === "worker_house") {
       return tileType === "grass";
     }
 
@@ -267,7 +287,7 @@ export class InputSystem extends System {
 
     // Buildings cannot be placed on trees (forest), except drills which harvest them
     if (tileType === "forest") {
-      return tool === "drill";
+      return tool === "drill" || tool === "advanced_drill";
     }
 
     return true;
@@ -296,6 +316,9 @@ export class InputSystem extends System {
       case "road": return "road";
       case "storage_house": return "storage_house";
       case "worker_house": return "worker_house";
+      case "advanced_drill": return "iron_plate";
+      case "advanced_furnace": return "iron_plate";
+      case "fast_road": return "iron_plate";
       default: return null;
     }
   }
@@ -313,6 +336,9 @@ export class InputSystem extends System {
       case "road": return 1;
       case "storage_house": return 1;
       case "worker_house": return 1;
+      case "advanced_drill": return 12;
+      case "advanced_furnace": return 15;
+      case "fast_road": return 2;
       default: return 0;
     }
   }

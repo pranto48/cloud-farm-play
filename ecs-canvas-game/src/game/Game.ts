@@ -120,6 +120,8 @@ export class Game {
       playerComp.inventory["road"] = 50;
       playerComp.inventory["storage_house"] = 5;
       playerComp.inventory["worker_house"] = 5;
+      
+      this.updateUnlockedButtonsVisibility({});
     }
   }
 
@@ -221,30 +223,46 @@ export class Game {
   private setupToolbar(): void {
     const tools: BuildTool[] = [
       "belt", "inserter", "drill", "furnace", "assembler", "chest", "pole", "generator",
-      "road", "storage_house", "worker_house"
+      "road", "storage_house", "worker_house", "advanced_drill", "advanced_furnace", "fast_road"
     ];
     const btnReset = document.getElementById("btn-reset");
 
     // Tab switching handlers
     const tabFactory = document.getElementById("tab-factory");
     const tabBuilder = document.getElementById("tab-builder");
+    const tabTech = document.getElementById("tab-tech");
     const groupFactory = document.getElementById("tools-factory-group");
     const groupBuilder = document.getElementById("tools-builder-group");
+    const groupTech = document.getElementById("tools-tech-group");
 
-    if (tabFactory && tabBuilder && groupFactory && groupBuilder) {
+    if (tabFactory && tabBuilder && tabTech && groupFactory && groupBuilder && groupTech) {
       tabFactory.addEventListener("click", () => {
         tabFactory.classList.add("active");
         tabBuilder.classList.remove("active");
+        tabTech.classList.remove("active");
         groupFactory.classList.add("active");
         groupBuilder.classList.remove("active");
+        groupTech.classList.remove("active");
         this.canvas.focus();
       });
 
       tabBuilder.addEventListener("click", () => {
         tabBuilder.classList.add("active");
         tabFactory.classList.remove("active");
+        tabTech.classList.remove("active");
         groupBuilder.classList.add("active");
         groupFactory.classList.remove("active");
+        groupTech.classList.remove("active");
+        this.canvas.focus();
+      });
+
+      tabTech.addEventListener("click", () => {
+        tabTech.classList.add("active");
+        tabFactory.classList.remove("active");
+        tabBuilder.classList.remove("active");
+        groupTech.classList.add("active");
+        groupFactory.classList.remove("active");
+        groupBuilder.classList.remove("active");
         this.canvas.focus();
       });
     }
@@ -277,27 +295,33 @@ export class Game {
   private updateToolbarActiveClasses(activeTool: BuildTool): void {
     const tools: BuildTool[] = [
       "belt", "inserter", "drill", "furnace", "assembler", "chest", "pole", "generator",
-      "road", "storage_house", "worker_house"
+      "road", "storage_house", "worker_house", "advanced_drill", "advanced_furnace", "fast_road"
     ];
     
     // Auto sync tab display if active tool is changed externally (e.g. via hotkeys)
     const tabFactory = document.getElementById("tab-factory");
     const tabBuilder = document.getElementById("tab-builder");
+    const tabTech = document.getElementById("tab-tech");
     const groupFactory = document.getElementById("tools-factory-group");
     const groupBuilder = document.getElementById("tools-builder-group");
+    const groupTech = document.getElementById("tools-tech-group");
     
     if (tabFactory && tabBuilder && groupFactory && groupBuilder) {
-      const isBuilderTool = activeTool === "road" || activeTool === "storage_house" || activeTool === "worker_house";
+      const isBuilderTool = activeTool === "road" || activeTool === "fast_road" || activeTool === "storage_house" || activeTool === "worker_house";
       if (isBuilderTool) {
         tabBuilder.classList.add("active");
         tabFactory.classList.remove("active");
+        if (tabTech) tabTech.classList.remove("active");
         groupBuilder.classList.add("active");
         groupFactory.classList.remove("active");
+        if (groupTech) groupTech.classList.remove("active");
       } else {
         tabFactory.classList.add("active");
         tabBuilder.classList.remove("active");
+        if (tabTech) tabTech.classList.remove("active");
         groupFactory.classList.add("active");
         groupBuilder.classList.remove("active");
+        if (groupTech) groupTech.classList.remove("active");
       }
     }
 
@@ -400,6 +424,15 @@ export class Game {
       }
 
       this.updateToolbarActiveClasses(this.activeTool);
+      
+      // Sync unlocked buttons visibility
+      const playerEnt = this.world.getEntitiesWith([PlayerComponent])[0];
+      if (playerEnt) {
+        const playerComp = this.world.getComponent(playerEnt, PlayerComponent)!;
+        if (!playerComp.unlockedTechs) playerComp.unlockedTechs = {};
+        this.updateUnlockedButtonsVisibility(playerComp.unlockedTechs);
+      }
+      
       console.log(`[Save/Load] Successfully loaded game state. Recreated ${saveData.entities.length} entities.`);
       return true;
     } catch (e) {
@@ -503,6 +536,40 @@ export class Game {
       if (dialog) dialog.style.display = "flex";
       this.refreshWorkerDialog(houseEntityId, worldRef);
     };
+
+    // Tech tree dialog open/close/research listeners
+    const btnOpenTech = document.getElementById("btn-open-tech-tree");
+    const techDialog = document.getElementById("tech-tree-dialog");
+    const btnCloseTech = document.getElementById("btn-close-tech");
+
+    if (btnOpenTech && techDialog) {
+      btnOpenTech.addEventListener("click", () => {
+        techDialog.style.display = "flex";
+        this.refreshTechTreeUI();
+        this.canvas.focus();
+      });
+    }
+
+    if (btnCloseTech && techDialog) {
+      btnCloseTech.addEventListener("click", () => {
+        techDialog.style.display = "none";
+        this.canvas.focus();
+      });
+    }
+
+    const btnMining = document.getElementById("btn-research-mining");
+    const btnLogistics = document.getElementById("btn-research-logistics");
+    const btnSmelting = document.getElementById("btn-research-smelting");
+
+    if (btnMining) {
+      btnMining.addEventListener("click", () => this.researchTechnology("advanced_mining"));
+    }
+    if (btnLogistics) {
+      btnLogistics.addEventListener("click", () => this.researchTechnology("high_speed_logistics"));
+    }
+    if (btnSmelting) {
+      btnSmelting.addEventListener("click", () => this.researchTechnology("industrial_smelting"));
+    }
   }
 
   private refreshWorkerDialog(houseEntityId: string, world: World): void {
@@ -528,5 +595,177 @@ export class Game {
       hireActions.style.display = "block";
       workerSettings.style.display = "none";
     }
+  }
+
+  private updateUnlockedButtonsVisibility(unlockedTechs: Record<string, boolean>): void {
+    const btnAdvDrill = document.getElementById("btn-advanced_drill");
+    const btnAdvFurnace = document.getElementById("btn-advanced_furnace");
+    const btnFastRoad = document.getElementById("btn-fast_road");
+
+    if (btnAdvDrill) {
+      btnAdvDrill.style.display = unlockedTechs["advanced_mining"] ? "flex" : "none";
+    }
+    if (btnAdvFurnace) {
+      btnAdvFurnace.style.display = unlockedTechs["industrial_smelting"] ? "flex" : "none";
+    }
+    if (btnFastRoad) {
+      btnFastRoad.style.display = unlockedTechs["high_speed_logistics"] ? "flex" : "none";
+    }
+  }
+
+  private refreshTechTreeUI(): void {
+    const playerEnt = this.world.getEntitiesWith([PlayerComponent])[0];
+    if (!playerEnt) return;
+    const player = this.world.getComponent(playerEnt, PlayerComponent)!;
+    if (!player.unlockedTechs) player.unlockedTechs = {};
+
+    // Get costs/stock from storage houses
+    const structures = this.world.getEntitiesWith([StructureComponent]);
+    const storageHouses = structures.filter(s => this.world.getComponent(s, StructureComponent)!.type === "storage_house");
+
+    const globalStock: Record<string, number> = { wood: 0, stone: 0, iron_plate: 0, coal: 0 };
+    for (const sh of storageHouses) {
+      const struct = this.world.getComponent(sh, StructureComponent)!;
+      for (const [item, qty] of Object.entries(struct.inventory)) {
+        globalStock[item] = (globalStock[item] || 0) + qty;
+      }
+    }
+
+    const techConfigs = [
+      {
+        id: "advanced_mining",
+        cardId: "tech-card-advanced_mining",
+        btnId: "btn-research-mining",
+        costs: [
+          { item: "wood", required: 500, labelId: "tech-req-mining-wood", symbol: "🪵", name: "Wood" },
+          { item: "stone", required: 200, labelId: "tech-req-mining-stone", symbol: "🪨", name: "Stone" }
+        ]
+      },
+      {
+        id: "high_speed_logistics",
+        cardId: "tech-card-high_speed_logistics",
+        btnId: "btn-research-logistics",
+        costs: [
+          { item: "wood", required: 300, labelId: "tech-req-logistics-wood", symbol: "🪵", name: "Wood" },
+          { item: "iron_plate", required: 100, labelId: "tech-req-logistics-iron", symbol: "🪙", name: "Iron Plate" }
+        ]
+      },
+      {
+        id: "industrial_smelting",
+        cardId: "tech-card-industrial_smelting",
+        btnId: "btn-research-smelting",
+        costs: [
+          { item: "stone", required: 400, labelId: "tech-req-smelting-stone", symbol: "🪨", name: "Stone" },
+          { item: "coal", required: 150, labelId: "tech-req-smelting-coal", symbol: "⚫", name: "Coal" }
+        ]
+      }
+    ];
+
+    for (const config of techConfigs) {
+      const isUnlocked = player.unlockedTechs[config.id] === true;
+      const card = document.getElementById(config.cardId);
+      const btn = document.getElementById(config.btnId) as HTMLButtonElement;
+
+      let hasMaterials = true;
+
+      for (const cost of config.costs) {
+        const stock = globalStock[cost.item] || 0;
+        const label = document.getElementById(cost.labelId);
+        if (label) {
+          label.textContent = `${cost.symbol} ${stock} / ${cost.required} ${cost.name}`;
+          if (stock >= cost.required) {
+            label.className = "res-cost met";
+          } else {
+            label.className = "res-cost unmet";
+            hasMaterials = false;
+          }
+        }
+      }
+
+      if (card && btn) {
+        if (isUnlocked) {
+          card.className = "tech-node-card unlocked";
+          btn.textContent = "Researched ✓";
+          btn.disabled = true;
+        } else {
+          btn.disabled = false;
+          if (hasMaterials) {
+            card.className = "tech-node-card available";
+            btn.textContent = "Research";
+          } else {
+            card.className = "tech-node-card locked";
+            btn.textContent = "Research";
+          }
+        }
+      }
+    }
+  }
+
+  private researchTechnology(techId: string): void {
+    const playerEnt = this.world.getEntitiesWith([PlayerComponent])[0];
+    if (!playerEnt) return;
+    const player = this.world.getComponent(playerEnt, PlayerComponent)!;
+    if (!player.unlockedTechs) player.unlockedTechs = {};
+
+    if (player.unlockedTechs[techId]) {
+      toast.info("Technology already researched!");
+      return;
+    }
+
+    let reqs: Record<string, number> = {};
+    if (techId === "advanced_mining") {
+      reqs = { wood: 500, stone: 200 };
+    } else if (techId === "high_speed_logistics") {
+      reqs = { wood: 300, iron_plate: 100 };
+    } else if (techId === "industrial_smelting") {
+      reqs = { stone: 400, coal: 150 };
+    }
+
+    const structures = this.world.getEntitiesWith([StructureComponent]);
+    const storageHouses = structures.filter(s => this.world.getComponent(s, StructureComponent)!.type === "storage_house");
+
+    const globalStock: Record<string, number> = {};
+    for (const sh of storageHouses) {
+      const struct = this.world.getComponent(sh, StructureComponent)!;
+      for (const [item, qty] of Object.entries(struct.inventory)) {
+        globalStock[item] = (globalStock[item] || 0) + qty;
+      }
+    }
+
+    let hasEnough = true;
+    for (const [item, reqQty] of Object.entries(reqs)) {
+      if ((globalStock[item] || 0) < reqQty) {
+        hasEnough = false;
+        break;
+      }
+    }
+
+    if (!hasEnough) {
+      toast.error("Insufficient resources in global Storage Houses!");
+      return;
+    }
+
+    // Deduct resources
+    for (const [item, reqQty] of Object.entries(reqs)) {
+      let remainingToDeduct = reqQty;
+      for (const sh of storageHouses) {
+        const struct = this.world.getComponent(sh, StructureComponent)!;
+        const count = struct.inventory[item] || 0;
+        if (count > 0) {
+          const deduct = Math.min(remainingToDeduct, count);
+          struct.inventory[item] -= deduct;
+          remainingToDeduct -= deduct;
+          if (remainingToDeduct <= 0) break;
+        }
+      }
+      player.inventory[item] = Math.max(0, (player.inventory[item] || 0) - reqQty);
+    }
+
+    player.unlockedTechs[techId] = true;
+    toast.success(`Researched ${techId.toUpperCase().replace(/_/g, " ")}!`);
+
+    this.updateUnlockedButtonsVisibility(player.unlockedTechs);
+    this.refreshTechTreeUI();
+    this.saveGame();
   }
 }

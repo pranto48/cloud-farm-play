@@ -80,10 +80,10 @@ export class RenderSystem extends System {
     this.ctx.fillStyle = "#1b1e22";
     this.ctx.fillRect(0, 0, width, height);
 
-    // Translate view relative to camera
+    // Translate view relative to camera (round to integer pixels to prevent sub-pixel rendering blur)
     this.ctx.save();
     this.ctx.imageSmoothingEnabled = false; // Set it again inside the saved state
-    this.ctx.translate(-this.camX, -this.camY);
+    this.ctx.translate(-Math.round(this.camX), -Math.round(this.camY));
 
     // 3. Render Map
     const maps = world.getEntitiesWith([MapComponent]);

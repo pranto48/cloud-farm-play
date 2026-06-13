@@ -5,70 +5,236 @@ import {
   VelocityComponent,
   InputComponent,
   PlayerComponent,
+  MapComponent,
+  StructureComponent,
+  BuildTool,
 } from "../components/GameComponents";
-import { spawnPlayerSpell } from "../Spawner";
+import { 
+  spawnBelt, 
+  spawnInserter, 
+  spawnDrill, 
+  spawnFurnace, 
+  spawnAssembler, 
+  spawnChest, 
+  spawnPowerPole, 
+  spawnGenerator 
+} from "../Spawner";
+import { toast } from "sonner";
 
 export class InputSystem extends System {
   readonly requiredComponents = [PlayerComponent, InputComponent, PositionComponent, VelocityComponent];
-  public activeTool: "spell" | "road" = "spell";
+  public activeTool: BuildTool = "belt";
+
+  // Prevent multiple structures being spawned on a single click (debounce)
+  private placementDebounceTimer: number = 0;
+  private keyDebounce: Record<string, boolean> = {};
 
   update(world: World, dt: number): void {
     const entities = world.getEntitiesWith(this.requiredComponents);
-    for (const entity of entities) {
-      const player = world.getComponent(entity, PlayerComponent)!;
-      const input = world.getComponent(entity, InputComponent)!;
-      const pos = world.getComponent(entity, PositionComponent)!;
-      const vel = world.getComponent(entity, VelocityComponent)!;
+    if (entities.length === 0) return;
 
-      if (player.hp <= 0) {
-        vel.vx = 0;
-        vel.vy = 0;
-        continue;
+    const playerEntityId = entities[0];
+    const player = world.getComponent(playerEntityId, PlayerComponent)!;
+    const input = world.getComponent(playerEntityId, InputComponent)!;
+    const pos = world.getComponent(playerEntityId, PositionComponent)!;
+    const vel = world.getComponent(playerEntityId, VelocityComponent)!;
+
+    if (this.placementDebounceTimer > 0) {
+      this.placementDebounceTimer -= dt;
+    }
+
+    // 1. WASD 8-Directional Movement
+    let dx = 0;
+    let dy = 0;
+
+    if (input.keys["w"] || input.keys["W"] || input.keys["arrowup"]) dy -= 1;
+    if (input.keys["s"] || input.keys["S"] || input.keys["arrowdown"]) dy += 1;
+    if (input.keys["a"] || input.keys["A"] || input.keys["arrowleft"]) dx -= 1;
+    if (input.keys["d"] || input.keys["D"] || input.keys["arrowright"]) dx += 1;
+
+    const playerSpeed = 180;
+    if (dx !== 0 && dy !== 0) {
+      const length = Math.sqrt(dx * dx + dy * dy);
+      dx /= length;
+      dy /= length;
+    }
+
+    vel.vx = dx * playerSpeed;
+    vel.vy = dy * playerSpeed;
+
+    // 2. Rotate Placement with R key (one-shot detection)
+    if (input.keys["r"] || input.keys["R"]) {
+      if (!this.keyDebounce["r"]) {
+        this.keyDebounce["r"] = true;
+        // Cycle rotation clockwise: 0 -> 90 -> 180 -> 270 -> 0
+        player.buildRotation = ((player.buildRotation + 90) % 360) as 0 | 90 | 180 | 270;
+        toast.info(`Rotated placement preview: ${this.getRotationName(player.buildRotation)}`);
       }
+    } else {
+      this.keyDebounce["r"] = false;
+    }
 
-      // Handle keyboard movement keys
-      let dx = 0;
-      let dy = 0;
-
-      if (input.keys["w"] || input.keys["arrowup"] || input.keys["W"]) dy -= 1;
-      if (input.keys["s"] || input.keys["arrowdown"] || input.keys["S"]) dy += 1;
-      if (input.keys["a"] || input.keys["arrowleft"] || input.keys["A"]) dx -= 1;
-      if (input.keys["d"] || input.keys["arrowright"] || input.keys["D"]) dx += 1;
-
-      // Normalize diagonal speeds
-      const playerSpeed = 160;
-      if (dx !== 0 && dy !== 0) {
-        const length = Math.sqrt(dx * dx + dy * dy);
-        dx /= length;
-        dy /= length;
-      }
-
-      vel.vx = dx * playerSpeed;
-      vel.vy = dy * playerSpeed;
-
-      // Handle spell casting cooldowns
-      if (player.fireRateTimer > 0) {
-        player.fireRateTimer -= dt;
-      }
-
-      // Shoot spells when clicked or Space pressed (only in spell mode)
-      if (this.activeTool === "spell" && (input.mouseClicked || input.keys[" "]) && player.fireRateTimer <= 0) {
-        player.fireRateTimer = 0.25; // Casting interval in seconds
-
-        let targetX = pos.x;
-        let targetY = pos.y - 100; // default straight up
-
-        if (input.mouseClicked) {
-          targetX = input.mouseX;
-          targetY = input.mouseY;
-        } else if (dx !== 0 || dy !== 0) {
-          targetX = pos.x + dx * 100;
-          targetY = pos.y + dy * 100;
+    // 3. Hotbar Selection via keys 1-8
+    const tools: BuildTool[] = ["belt", "inserter", "drill", "furnace", "assembler", "chest", "pole", "generator"];
+    for (let i = 1; i <= 8; i++) {
+      if (input.keys[i.toString()]) {
+        const selected = tools[i - 1];
+        if (selected && player.activeTool !== selected) {
+          player.activeTool = selected;
+          this.activeTool = selected;
+          toast.success(`Selected tool: ${selected.toUpperCase()}`);
         }
-
-        const angle = Math.atan2(targetY - pos.y, targetX - pos.x);
-        spawnPlayerSpell(world, pos.x, pos.y, angle);
       }
+    }
+
+    // 4. Place / Deconstruct structure on mouse action
+    const maps = world.getEntitiesWith([MapComponent]);
+    if (maps.length === 0) return;
+    const mapEntity = maps[0];
+    const mapComp = world.getComponent(mapEntity, MapComponent)!;
+    const ts = mapComp.tileSize;
+
+    const col = Math.floor(input.mouseX / ts);
+    const row = Math.floor(input.mouseY / ts);
+
+    // Grid bounds check
+    if (col >= 0 && col < mapComp.width && row >= 0 && row < mapComp.height) {
+      const tileType = mapComp.tiles[row][col];
+      const isWalkableTile = tileType !== "water" && tileType !== "stone";
+
+      // 4a. Left Click: Build Structure
+      if (input.mouseClicked && this.placementDebounceTimer <= 0) {
+        // Query to check if grid slot is already occupied
+        const structures = world.getEntitiesWith([StructureComponent]);
+        const isOccupied = structures.some(ent => {
+          const struct = world.getComponent(ent, StructureComponent)!;
+          return struct.gridX === col && struct.gridY === row;
+        });
+
+        if (!isOccupied && isWalkableTile) {
+          const tool = player.activeTool;
+          const count = player.inventory[tool] || 0;
+
+          if (count > 0 || tool === "belt") { // conveyor belt is free or requires 1 plate (we can allow unlimited belts for fun testing, or cost 1 plate)
+            const costItem = this.getCostItem(tool);
+            const costCount = this.getCostCount(tool);
+            const hasMaterials = !costItem || (player.inventory[costItem] >= costCount);
+
+            if (hasMaterials) {
+              // Deduct resources
+              if (costItem) {
+                player.inventory[costItem] -= costCount;
+              }
+              
+              // Place building
+              const spawnX = col * ts + ts / 2;
+              const spawnY = row * ts + ts / 2;
+              let spawnedEntity = "";
+
+              switch (tool) {
+                case "belt":
+                  spawnedEntity = spawnBelt(world, spawnX, spawnY, col, row, player.buildRotation);
+                  break;
+                case "inserter":
+                  spawnedEntity = spawnInserter(world, spawnX, spawnY, col, row, player.buildRotation);
+                  break;
+                case "drill":
+                  spawnedEntity = spawnDrill(world, spawnX, spawnY, col, row, player.buildRotation);
+                  break;
+                case "furnace":
+                  spawnedEntity = spawnFurnace(world, spawnX, spawnY, col, row, player.buildRotation);
+                  break;
+                case "assembler":
+                  spawnedEntity = spawnAssembler(world, spawnX, spawnY, col, row, player.buildRotation);
+                  break;
+                case "chest":
+                  spawnedEntity = spawnChest(world, spawnX, spawnY, col, row, player.buildRotation);
+                  break;
+                case "pole":
+                  spawnedEntity = spawnPowerPole(world, spawnX, spawnY, col, row);
+                  break;
+                case "generator":
+                  spawnedEntity = spawnGenerator(world, spawnX, spawnY, col, row, player.buildRotation);
+                  break;
+              }
+
+              if (spawnedEntity) {
+                this.placementDebounceTimer = 0.15; // 150ms debounce
+              }
+            } else {
+              toast.error(`Not enough materials to build ${tool}! Requires ${costCount}x ${costItem?.replace("_", " ")}`);
+              this.placementDebounceTimer = 0.5; // lock warning toasts
+            }
+          }
+        }
+      }
+
+      // 4b. Right Click: Deconstruct Structure
+      if (input.mouseRightClicked) {
+        const structures = world.getEntitiesWith([StructureComponent]);
+        const occupiedStructureEntity = structures.find(ent => {
+          const struct = world.getComponent(ent, StructureComponent)!;
+          return struct.gridX === col && struct.gridY === row;
+        });
+
+        if (occupiedStructureEntity) {
+          const struct = world.getComponent(occupiedStructureEntity, StructureComponent)!;
+          const refundItem = this.getCostItem(struct.type);
+          const refundCount = this.getCostCount(struct.type);
+
+          // Refund construction cost
+          if (refundItem) {
+            player.inventory[refundItem] = (player.inventory[refundItem] || 0) + refundCount;
+          }
+
+          // Clean up internal inventory items if deconstructing chest or furnace
+          for (const [itemKey, itemCount] of Object.entries(struct.inventory)) {
+            player.inventory[itemKey] = (player.inventory[itemKey] || 0) + itemCount;
+          }
+
+          world.destroyEntity(occupiedStructureEntity);
+          toast.info(`Deconstructed ${struct.type.toUpperCase()}`);
+          input.mouseRightClicked = false; // Reset trigger
+        }
+      }
+    }
+  }
+
+  private getRotationName(rot: number): string {
+    switch (rot) {
+      case 0: return "NORTH (Up)";
+      case 90: return "EAST (Right)";
+      case 180: return "SOUTH (Down)";
+      case 270: return "WEST (Left)";
+      default: return "EAST";
+    }
+  }
+
+  private getCostItem(tool: string): string | null {
+    switch (tool) {
+      case "belt": return "iron_plate";
+      case "inserter": return "gear";
+      case "drill": return "iron_plate";
+      case "furnace": return "stone";
+      case "assembler": return "electronic_circuit";
+      case "chest": return "wood";
+      case "pole": return "copper_wire";
+      case "generator": return "gear";
+      default: return null;
+    }
+  }
+
+  private getCostCount(tool: string): number {
+    switch (tool) {
+      case "belt": return 1;
+      case "inserter": return 2;
+      case "drill": return 10;
+      case "furnace": return 5;
+      case "assembler": return 8;
+      case "chest": return 6;
+      case "pole": return 5;
+      case "generator": return 12;
+      default: return 0;
     }
   }
 }

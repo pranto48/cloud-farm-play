@@ -50,112 +50,167 @@ export class InputComponent extends Component {
   public mouseX: number = 0;
   public mouseY: number = 0;
   public mouseClicked: boolean = false;
+  public mouseRightClicked: boolean = false;
   
   constructor() {
     super();
   }
 }
 
+export type BuildTool = "belt" | "inserter" | "drill" | "furnace" | "assembler" | "chest" | "pole" | "generator";
+
 export class PlayerComponent extends Component {
-  public hp: number;
-  public maxHp: number;
-  public score: number;
-  public level: number;
-  public xp: number;
-  public maxXp: number;
-  public fireRateTimer: number;
-  public damageFlashTimer: number;
-  public levelUpFlashTimer: number;
-
-  constructor(
-    hp: number = 100,
-    maxHp: number = 100,
-    score: number = 0,
-    level: number = 1,
-    xp: number = 0,
-    maxXp: number = 100,
-    fireRateTimer: number = 0,
-    damageFlashTimer: number = 0,
-    levelUpFlashTimer: number = 0
-  ) {
+  public inventory: Record<string, number> = {};
+  public activeTool: BuildTool = "belt";
+  public buildRotation: 0 | 90 | 180 | 270 = 90; // Default facing Right
+  public researchPoints: number = 0;
+  public unlockedTechs: Record<string, boolean> = {};
+  
+  constructor() {
     super();
-    this.hp = hp;
-    this.maxHp = maxHp;
-    this.score = score;
-    this.level = level;
-    this.xp = xp;
-    this.maxXp = maxXp;
-    this.fireRateTimer = fireRateTimer;
-    this.damageFlashTimer = damageFlashTimer;
-    this.levelUpFlashTimer = levelUpFlashTimer;
+    // Start player with some basic items for construction
+    this.inventory["iron_plate"] = 25;
+    this.inventory["gear"] = 15;
+    this.inventory["copper_wire"] = 20;
+    this.inventory["coal"] = 10;
   }
 }
 
-export class MonsterComponent extends Component {
-  public hp: number;
-  public maxHp: number;
-  public speed: number;
-  public damage: number;
-  public damageCooldown: number;
+export type TileType = "grass" | "water" | "stone" | "forest" | "iron" | "copper" | "coal" | "road";
 
-  constructor(
-    hp: number = 15,
-    maxHp: number = 15,
-    speed: number = 55,
-    damage: number = 10,
-    damageCooldown: number = 0
-  ) {
+export class MapComponent extends Component {
+  public width: number;
+  public height: number;
+  public tileSize: number;
+  public tiles: TileType[][];
+
+  constructor(tiles: TileType[][], width: number = 100, height: number = 100, tileSize: number = 64) {
     super();
-    this.hp = hp;
-    this.maxHp = maxHp;
-    this.speed = speed;
-    this.damage = damage;
-    this.damageCooldown = damageCooldown;
+    this.tiles = tiles;
+    this.width = width;
+    this.height = height;
+    this.tileSize = tileSize;
   }
 }
 
-export class ProjectileComponent extends Component {
-  public damage: number;
-  public speed: number;
-  public lifeSpan: number;
+export type ItemType = 
+  | "wood"
+  | "stone"
+  | "iron_ore"
+  | "copper_ore"
+  | "coal"
+  | "iron_plate"
+  | "copper_plate"
+  | "gear"
+  | "copper_wire"
+  | "electronic_circuit"
+  | "science_pack";
 
-  constructor(
-    damage: number = 5,
-    speed: number = 300,
-    lifeSpan: number = 1.2
-  ) {
+export class ItemComponent extends Component {
+  public type: ItemType;
+  public isHeld: boolean = false;
+  public currentBeltId: string | null = null;
+  public progressOnBelt: number = 0; // 0 to 1 progress on current belt tile
+
+  constructor(type: ItemType) {
     super();
-    this.damage = damage;
-    this.speed = speed;
-    this.lifeSpan = lifeSpan;
-  }
-}
-
-export class ColliderComponent extends Component {
-  public radius: number;
-  public type: "player" | "monster" | "projectile" | "gem";
-
-  constructor(
-    radius: number = 12,
-    type: "player" | "monster" | "projectile" | "gem"
-  ) {
-    super();
-    this.radius = radius;
     this.type = type;
   }
 }
 
-export class GemComponent extends Component {
-  public value: number;
-  public isCollected: boolean;
+export type StructureType = 
+  | "belt" 
+  | "inserter" 
+  | "drill" 
+  | "furnace" 
+  | "assembler" 
+  | "chest" 
+  | "pole" 
+  | "generator";
+
+export interface Recipe {
+  name: string;
+  inputs: Record<string, number>;
+  outputs: Record<string, number>;
+  time: number;
+}
+
+export const RECIPES: Record<string, Recipe> = {
+  iron_plate: {
+    name: "Smelt Iron Plate",
+    inputs: { iron_ore: 1, coal: 0.2 }, // 0.2 coal per ore smelted
+    outputs: { iron_plate: 1 },
+    time: 3.0
+  },
+  copper_plate: {
+    name: "Smelt Copper Plate",
+    inputs: { copper_ore: 1, coal: 0.2 },
+    outputs: { copper_plate: 1 },
+    time: 3.0
+  },
+  gear: {
+    name: "Assemble Iron Gear",
+    inputs: { iron_plate: 2 },
+    outputs: { gear: 1 },
+    time: 1.5
+  },
+  copper_wire: {
+    name: "Assemble Copper Wire",
+    inputs: { copper_plate: 1 },
+    outputs: { copper_wire: 2 },
+    time: 1.0
+  },
+  electronic_circuit: {
+    name: "Assemble Electronic Circuit",
+    inputs: { iron_plate: 1, copper_wire: 3 },
+    outputs: { electronic_circuit: 1 },
+    time: 2.0
+  },
+  science_pack: {
+    name: "Assemble Science Pack",
+    inputs: { gear: 1, electronic_circuit: 1 },
+    outputs: { science_pack: 1 },
+    time: 5.0
+  }
+};
+
+export class StructureComponent extends Component {
+  public type: StructureType;
+  public rotation: 0 | 90 | 180 | 270; // 0=Up, 90=Right, 180=Down, 270=Left
+  public gridX: number; // Row/Col indices
+  public gridY: number;
+  
+  // Storage chest or internal machine inventories
+  public inventory: Record<string, number> = {};
+  
+  // Machinery processing states
+  public activeRecipe: string | null = null;
+  public progress: number = 0; // 0 to 1
+  public timer: number = 0; // Seconds elapsed
+  public fuel: number = 0; // Burning fuel value in seconds
+  public maxFuel: number = 0;
+  
+  // Power poles / energy systems
+  public energy: number = 0;
+  public maxEnergy: number = 100;
+  public isPowered: boolean = false;
+  
+  // Inserter tracking
+  public inserterHeldItemType: ItemType | null = null;
+  public inserterAngle: number = 0; // Current swing angle
+  public inserterCooldown: number = 0;
 
   constructor(
-    value: number = 10,
-    isCollected: boolean = false
+    type: StructureType,
+    gridX: number,
+    gridY: number,
+    rotation: 0 | 90 | 180 | 270 = 90
   ) {
     super();
-    this.value = value;
-    this.isCollected = isCollected;
+    this.type = type;
+    this.gridX = gridX;
+    this.gridY = gridY;
+    this.rotation = rotation;
   }
 }
 
@@ -184,100 +239,3 @@ export class ParticleComponent extends Component {
     this.decay = decay;
   }
 }
-
-export type TileType = "grass" | "water" | "stone" | "forest" | "road";
-
-export class MapComponent extends Component {
-  public width: number;
-  public height: number;
-  public tileSize: number;
-  public tiles: TileType[][];
-
-  constructor(tiles: TileType[][], width: number = 100, height: number = 100, tileSize: number = 64) {
-    super();
-    this.tiles = tiles;
-    this.width = width;
-    this.height = height;
-    this.tileSize = tileSize;
-  }
-}
-
-export class BoxColliderComponent extends Component {
-  public width: number;
-  public height: number;
-
-  constructor(width: number = 24, height: number = 24) {
-    super();
-    this.width = width;
-    this.height = height;
-  }
-}
-
-export type WorkerState = "Idle" | "Seeking Path" | "Moving" | "Working" | "Seeking Storage" | "Starving";
-export type WorkerRole = "Woodcutter" | "Miner" | "Farmer";
-
-export class WorkerComponent extends Component {
-  public state: WorkerState;
-  public role: WorkerRole;
-  public path: { r: number; c: number }[];
-  public currentWaypointIndex: number;
-  public targetTile: { r: number; c: number } | null;
-  public workTimer: number;
-  public workDuration: number;
-  public speed: number;
-  public searchCooldown: number;
-  public isCarryingFood: boolean;
-  public savedRoleState: WorkerState;
-
-  constructor(
-    role: WorkerRole = "Woodcutter",
-    state: WorkerState = "Idle",
-    speed: number = 95,
-    workDuration: number = 3.5
-  ) {
-    super();
-    this.role = role;
-    this.state = state;
-    this.path = [];
-    this.currentWaypointIndex = 0;
-    this.targetTile = null;
-    this.workTimer = 0;
-    this.workDuration = workDuration;
-    this.speed = speed;
-    this.searchCooldown = 0;
-    this.isCarryingFood = false;
-    this.savedRoleState = "Idle";
-  }
-}
-
-export class StorageComponent extends Component {
-  public foodCount: number;
-
-  constructor(foodCount: number = 5) {
-    super();
-    this.foodCount = foodCount;
-  }
-}
-
-export class HungerComponent extends Component {
-  public hungerTimer: number;
-  public isHungry: boolean;
-
-  constructor() {
-    super();
-    this.hungerTimer = 0;
-    this.isHungry = false;
-  }
-}
-
-export class CropComponent extends Component {
-  public growthTimer: number;
-  public isFullyGrown: boolean;
-
-  constructor(growthTimer: number = 60.0) {
-    super();
-    this.growthTimer = growthTimer;
-    this.isFullyGrown = false;
-  }
-}
-

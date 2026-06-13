@@ -2,14 +2,6 @@ import {
   spawnPlayer,
   spawnMap,
   spawnParticle,
-  spawnBelt,
-  spawnInserter,
-  spawnDrill,
-  spawnFurnace,
-  spawnAssembler,
-  spawnChest,
-  spawnPowerPole,
-  spawnGenerator,
 } from "./Spawner";
 import {
   InputComponent,
@@ -21,6 +13,7 @@ import {
   VelocityComponent,
   ParticleComponent,
   BuildTool,
+  BoxColliderComponent,
 } from "./components/GameComponents";
 
 // Systems

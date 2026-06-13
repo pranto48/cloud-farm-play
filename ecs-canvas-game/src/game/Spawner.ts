@@ -3,10 +3,8 @@ import { ImprovedNoise } from "./utils/Noise";
 import {
   PositionComponent,
   VelocityComponent,
-  RenderComponent,
   InputComponent,
   PlayerComponent,
-  ColliderComponent,
   ParticleComponent,
   MapComponent,
   BoxColliderComponent,

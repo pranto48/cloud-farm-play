@@ -19,7 +19,7 @@ import {
   spawnPowerPole, 
   spawnGenerator 
 } from "../Spawner";
-import { toast } from "sonner";
+import { toast } from "../utils/Toast";
 
 export class InputSystem extends System {
   readonly requiredComponents = [PlayerComponent, InputComponent, PositionComponent, VelocityComponent];

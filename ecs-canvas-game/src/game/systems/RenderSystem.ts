@@ -2,7 +2,6 @@ import { System } from "../ecs/System";
 import { World } from "../ecs/World";
 import {
   PositionComponent,
-  RenderComponent,
   PlayerComponent,
   ParticleComponent,
   MapComponent,

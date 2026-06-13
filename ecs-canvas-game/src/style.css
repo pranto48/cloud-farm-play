@@ -86,4 +86,61 @@ html, body {
   box-shadow: 0 4px 16px rgba(231, 76, 60, 0.35);
 }
 
+#toast-container {
+  position: absolute;
+  top: 24px;
+  right: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 1000;
+}
+
+.toast-message {
+  padding: 12px 20px;
+  border-radius: 10px;
+  color: #fff;
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1.5px solid rgba(255, 255, 255, 0.1);
+  transform: translateX(120%);
+  animation: slide-in 0.3s forwards cubic-bezier(0.18, 0.89, 0.32, 1.28);
+}
+
+.toast-message.success {
+  background: rgba(46, 204, 113, 0.85);
+  border-left: 5px solid #2ecc71;
+}
+
+.toast-message.info {
+  background: rgba(52, 152, 219, 0.85);
+  border-left: 5px solid #3498db;
+}
+
+.toast-message.error {
+  background: rgba(231, 76, 60, 0.85);
+  border-left: 5px solid #e74c3c;
+}
+
+.toast-message.fade-out {
+  animation: fade-out 0.5s forwards ease-in;
+}
+
+@keyframes slide-in {
+  to {
+    transform: translateX(0);
+  }
+}
+
+@keyframes fade-out {
+  to {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+}
+
 

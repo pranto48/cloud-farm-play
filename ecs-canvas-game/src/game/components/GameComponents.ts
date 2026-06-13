@@ -239,3 +239,14 @@ export class ParticleComponent extends Component {
     this.decay = decay;
   }
 }
+
+export class BoxColliderComponent extends Component {
+  public width: number;
+  public height: number;
+
+  constructor(width: number = 0, height: number = 0) {
+    super();
+    this.width = width;
+    this.height = height;
+  }
+}

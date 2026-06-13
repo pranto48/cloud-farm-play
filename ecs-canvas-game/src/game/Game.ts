@@ -27,6 +27,7 @@ import { MovementSystem } from "./systems/MovementSystem";
 import { ParticleSystem } from "./systems/ParticleSystem";
 import { RenderSystem } from "./systems/RenderSystem";
 import { WorkerSystem } from "./systems/WorkerSystem";
+import { toast } from "./utils/Toast";
 
 export class Game {
   private canvas: HTMLCanvasElement;
@@ -441,7 +442,10 @@ export class Game {
           const housePos = world.getComponent(houseId, PositionComponent)!;
           spawnWorker(world, housePos.x, housePos.y, houseId);
 
+          toast.success("Worker hired successfully!");
           this.refreshWorkerDialog(houseId, world);
+        } else {
+          toast.error("Insufficient resources! Requires 10 Wood and 10 Iron Plates.");
         }
       });
     }
@@ -464,6 +468,7 @@ export class Game {
           }
 
           world.destroyEntity(workerEnt);
+          toast.info("Worker dismissed. Refunded 5 Wood & 5 Iron Plates.");
           this.refreshWorkerDialog(houseId, world);
         }
       });
@@ -485,6 +490,7 @@ export class Game {
           wComp.path = [];
           wComp.pathIndex = 0;
 
+          toast.info(`Assigned role: ${wComp.role ? wComp.role.toUpperCase() : "NONE"}`);
           this.refreshWorkerDialog(houseId, world);
         }
       });

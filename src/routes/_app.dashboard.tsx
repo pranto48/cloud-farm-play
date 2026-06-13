@@ -15,7 +15,7 @@ export const Route = createFileRoute("/_app/dashboard")({
 
 function Dashboard() {
   const { user } = useAuth();
-  const userId = user!.id;
+  const userId = user!.uid;
 
   const games = useQuery({ queryKey: ["my-games", userId], queryFn: () => fetchMyGames(userId) });
   const stats = useQuery({ queryKey: ["play-stats", userId], queryFn: () => fetchPlayStats(userId) });

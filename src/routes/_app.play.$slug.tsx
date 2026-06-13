@@ -42,7 +42,7 @@ function PlayPage() {
   if (!user) {
     return <LaunchScreen title="Authenticating…" />;
   }
-  const userId = user.id;
+  const userId = user.uid;
 
   const game = useQuery({ queryKey: ["game", slug], queryFn: () => fetchGameBySlug(slug) });
   const save = useQuery({

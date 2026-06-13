@@ -18,7 +18,7 @@ type Save = { id: string; slot_name: string; updated_at: string; game_id: string
 
 function SavesPage() {
   const { user } = useAuth();
-  const userId = user!.id;
+  const userId = user!.uid;
   const qc = useQueryClient();
   const { data, isLoading } = useQuery({ queryKey: ["all-saves", userId], queryFn: () => fetchAllCloudSaves(userId) as unknown as Promise<Save[]> });
   const del = useMutation({

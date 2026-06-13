@@ -18,7 +18,7 @@ export const Route = createFileRoute("/_app/games/$slug")({
 function GameDetails() {
   const { slug } = Route.useParams();
   const { user } = useAuth();
-  const userId = user!.id;
+  const userId = user!.uid;
   const qc = useQueryClient();
   const game = useQuery({ queryKey: ["game", slug], queryFn: () => fetchGameBySlug(slug) });
   const save = useQuery({

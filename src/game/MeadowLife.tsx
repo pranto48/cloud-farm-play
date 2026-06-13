@@ -224,13 +224,106 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
         return next;
       });
 
+      // Ambient particle spawning (on visible screen only)
+      const currentGrid = stateRef.current.inMine ? stateRef.current.mineGrid : stateRef.current.tiles;
+      if (currentGrid && currentGrid.length > 0) {
+        const p = stateRef.current.player;
+        const pSubX = p.subX !== undefined ? p.subX : p.x;
+        const pSubY = p.subY !== undefined ? p.subY : p.y;
+        
+        const cameraX = Math.max(
+          0,
+          Math.min(
+            (stateRef.current.inMine ? 24 : COLS) * TILE - canvasSize.width,
+            pSubX * TILE + 16 - canvasSize.width / 2
+          )
+        );
+        const cameraY = Math.max(
+          0,
+          Math.min(
+            (stateRef.current.inMine ? 24 : ROWS) * TILE - canvasSize.height,
+            pSubY * TILE + 16 - canvasSize.height / 2
+          )
+        );
+        const startCol = Math.max(0, Math.floor(cameraX / TILE));
+        const endCol = Math.min(stateRef.current.inMine ? 24 : COLS, Math.ceil((cameraX + canvasSize.width) / TILE));
+        const startRow = Math.max(0, Math.floor(cameraY / TILE));
+        const endRow = Math.min(stateRef.current.inMine ? 24 : ROWS, Math.ceil((cameraY + canvasSize.height) / TILE));
 
-      // Update particles
+        for (let y = startRow; y < endRow; y++) {
+          for (let x = startCol; x < endCol; x++) {
+            const t = currentGrid[y][x];
+            
+            // 1. Ambient tree leaves
+            if (t.kind === "tree" && Math.random() < 0.004) {
+              particlesRef.current.push({
+                x: x * TILE + 16 + (Math.random() * 20 - 10),
+                y: y * TILE + 4 + (Math.random() * 8 - 4),
+                vx: -15 - Math.random() * 20, // drift left (wind)
+                vy: 20 + Math.random() * 15,  // fall down
+                color: Math.random() < 0.2 ? "#e67e22" : Math.random() < 0.1 ? "#f1c40f" : "#2ecc71", // orange/yellow/green
+                age: 0,
+                maxAge: 1.8 + Math.random() * 1,
+                type: "leaf"
+              });
+            }
+
+            // 2. Active sprinkler water spray
+            if (t.kind === "placed_item" && (t.placedItemId === "sprinkler_basic" || t.placedItemId === "sprinkler_quality")) {
+              const isQuality = t.placedItemId === "sprinkler_quality";
+              if (Math.random() < 0.12) {
+                const directions = isQuality ? 8 : 4;
+                const angleOffset = (Date.now() / 180) % (Math.PI * 2);
+                for (let d = 0; d < directions; d++) {
+                  const angle = angleOffset + (d * (Math.PI * 2)) / directions;
+                  const speed = 40 + Math.random() * 25;
+                  particlesRef.current.push({
+                    x: x * TILE + 16,
+                    y: y * TILE + 8,
+                    vx: Math.cos(angle) * speed,
+                    vy: Math.sin(angle) * speed - 15, // slight upward arc
+                    color: "rgba(52, 152, 219, 0.75)",
+                    age: 0,
+                    maxAge: 0.35 + Math.random() * 0.15,
+                    type: "water"
+                  });
+                }
+              }
+            }
+          }
+        }
+
+        // 3. Falling Rain weather particles
+        if (stateRef.current.weather === "rainy" && Math.random() < 0.45) {
+          for (let i = 0; i < 4; i++) {
+            particlesRef.current.push({
+              x: cameraX + Math.random() * canvasSize.width,
+              y: cameraY - 10,
+              vx: -35 - Math.random() * 15,
+              vy: 320 + Math.random() * 80,
+              color: "rgba(174, 214, 241, 0.45)",
+              age: 0,
+              maxAge: 1.2,
+              type: "water"
+            });
+          }
+        }
+      }
+
+      // Update particles with custom behavior
       particlesRef.current = particlesRef.current
         .map((p) => {
           p.x += p.vx * dt;
           p.y += p.vy * dt;
-          p.vy += 200 * dt; // gravity
+          if (p.type === "leaf") {
+            // Swaying leaf movement
+            p.vx += Math.sin(p.age * 6) * 15 * dt;
+            p.vy = 25 + Math.sin(p.age * 3) * 5; // slow drift
+          } else if (p.type === "water" && p.vy > 100) {
+            // Rain drops fall fast without gravity acceleration
+          } else {
+            p.vy += 200 * dt; // gravity
+          }
           p.age += dt;
           return p;
         })
@@ -312,6 +405,20 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
           ctx.fillStyle = p.color;
           ctx.font = "8px monospace";
           ctx.fillText("❤️", p.x - 3, p.y);
+        } else if (p.type === "leaf") {
+          ctx.save();
+          ctx.translate(p.x, p.y);
+          ctx.rotate(p.age * 5 + (p.x * 0.1)); // rotate as it falls
+          ctx.fillStyle = p.color;
+          ctx.beginPath();
+          ctx.ellipse(0, 0, 3, 1.5, 0, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+        } else if (p.type === "water") {
+          ctx.fillStyle = p.color;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, 1.2, 0, Math.PI * 2); // soft round droplet
+          ctx.fill();
         } else {
           ctx.fillStyle = p.color;
           ctx.fillRect(p.x - 2, p.y - 2, 4, 4);
@@ -577,6 +684,27 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
           if (x >= 0 && y >= 0 && x < gridCols && y < gridRows && isWalkable(grid[y][x])) {
             next.player.x = x;
             next.player.y = y;
+
+            // Trigger rustle sway and spawn particles when player walks through crops or weeds
+            const stepTile = grid[y][x];
+            if (stepTile.cropId || stepTile.kind === "debris_weed") {
+              stepTile.lastRustleTime = Date.now();
+              const pColor = stepTile.kind === "debris_weed" ? "#2ecc71" : (CROPS[stepTile.cropId!]?.accent || "#2ecc71");
+              const px = x * TILE + 16;
+              const py = y * TILE + 24;
+              for (let i = 0; i < 3; i++) {
+                particlesRef.current.push({
+                  x: px + (Math.random() * 12 - 6),
+                  y: py - (Math.random() * 8),
+                  vx: (Math.random() * 2 - 1) * 25,
+                  vy: -Math.random() * 30 - 15,
+                  color: pColor,
+                  age: 0,
+                  maxAge: 0.35 + Math.random() * 0.15,
+                  type: "leaf"
+                });
+              }
+            }
 
             if (next.inMine && grid[y][x].kind === "mine_ladder" && x === 3 && y === 3) {
               next.inMine = false;

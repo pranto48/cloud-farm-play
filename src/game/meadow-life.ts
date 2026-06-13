@@ -42,6 +42,8 @@ export interface Tile {
   placedItemId?: string;
   chestInventory?: (Item | null)[];
   hitPoints?: number;
+  lastHitTime?: number;
+  lastRustleTime?: number;
 }
 
 export type Tool = "hoe" | "watering_can" | "scythe" | "pickaxe" | "axe" | "sword" | "fishing_rod" | "milk_pail";
@@ -1442,10 +1444,11 @@ export function interact(state: GameState, chargeLevel: number = 1): { message: 
         result.message = "No energy!";
         return result;
       }
-      const pickaxeLvl = state.upgrades.pickaxe || 1;
-      const pickDmg = pickaxeLvl === 1 ? 1 : pickaxeLvl === 2 ? 2 : pickaxeLvl === 3 ? 3 : 5;
+      const pickLvl = state.upgrades.pickaxe || 1;
+      const pickDmg = pickLvl === 1 ? 1 : pickLvl === 2 ? 2 : pickLvl === 3 ? 3 : 5;
 
       if (tile.kind === "debris_stone") {
+        tile.lastHitTime = Date.now();
         if (tile.hitPoints === undefined) tile.hitPoints = 3;
         tile.hitPoints -= pickDmg;
         state.energy -= toolEnergyCost;
@@ -1494,6 +1497,7 @@ export function interact(state: GameState, chargeLevel: number = 1): { message: 
           });
         }
       } else if (tile.kind === "ore_copper" || tile.kind === "ore_iron" || tile.kind === "ore_gold") {
+        tile.lastHitTime = Date.now();
         const oreMap = {
           ore_copper: { item: "copper_ore", xp: 8, color: "#d35400" },
           ore_iron: { item: "iron_ore", xp: 15, color: "#95a5a6" },
@@ -1567,6 +1571,7 @@ export function interact(state: GameState, chargeLevel: number = 1): { message: 
       const axeDmg = axeLvl === 1 ? 1 : axeLvl === 2 ? 2 : axeLvl === 3 ? 3 : 5;
 
       if (tile.kind === "tree") {
+        tile.lastHitTime = Date.now();
         if (tile.hitPoints === undefined) tile.hitPoints = 5;
         tile.hitPoints -= axeDmg;
         state.energy -= toolEnergyCost;
@@ -1597,6 +1602,7 @@ export function interact(state: GameState, chargeLevel: number = 1): { message: 
           });
         }
       } else if (tile.kind === "debris_branch") {
+        tile.lastHitTime = Date.now();
         if (tile.hitPoints === undefined) tile.hitPoints = 2;
         tile.hitPoints -= axeDmg;
         state.energy -= toolEnergyCost;
@@ -1624,7 +1630,6 @@ export function interact(state: GameState, chargeLevel: number = 1): { message: 
         }
       }
       break;
-  }
 
   // 4. Plant Seeds
   if (heldItem && heldItem.type === "seed" && tile.kind === "soil") {
@@ -2082,24 +2087,62 @@ export function draw(
           ctx.fillRect(px + 16, py + 16, 4, 4);
         }
       } else if (t.kind === "water") {
-        // Wave Crest Ripple calculations
-        const wave = Math.sin(Date.now() / 250 + x * 0.4) * 2;
-        ctx.fillStyle = "#3498db";
+        // Shimmering base water
+        ctx.fillStyle = "#2980b9"; // darker blue depth
         ctx.fillRect(px, py, TILE, TILE);
-        ctx.fillStyle = "#5dade2";
-        ctx.fillRect(px + 4, py + 8 + wave, 6, 2);
-        ctx.fillRect(px + 18, py + 20 - wave, 8, 2);
 
-        // Stepping water lily pads
+        const shimmer = Math.sin(Date.now() / 800 + (x * 3 + y * 7) * 0.2) * 0.12 + 0.88;
+        ctx.fillStyle = `rgba(52, 152, 219, ${shimmer})`; // animated base shimmer
+        ctx.fillRect(px, py, TILE, TILE);
+
+        // Wave Crest Ripple calculations
+        const wave = Math.sin(Date.now() / 250 + x * 0.4 + y * 0.2) * 1.8;
+        ctx.fillStyle = "#aed6f1";
+        ctx.fillRect(px + 4, py + 8 + wave, 6, 1.5);
+        ctx.fillRect(px + 18, py + 20 - wave, 8, 1.5);
+
+        // Stepping water lily pads with bobbing and rotation
         if ((x * 13 + y * 9) % 23 === 0) {
+          const lilyBob = Math.sin(Date.now() / 700 + (x * 13 + y * 9)) * 1.2;
+          const lilyAngle = Math.sin(Date.now() / 1400 + x) * 0.06;
+          ctx.save();
+          ctx.translate(px + 16, py + 16 + lilyBob);
+          ctx.rotate(lilyAngle);
+
+          // Pad
           ctx.fillStyle = "#27ae60";
           ctx.beginPath();
-          ctx.arc(px + 16, py + 16, 5, 0, Math.PI * 1.75);
+          ctx.arc(0, 0, 5.5, 0, Math.PI * 1.75);
           ctx.fill();
+
+          // Pink Lily Flower bloom
+          if ((x * 13 + y * 9) % 46 === 0) {
+            ctx.fillStyle = "#f48fb1"; // pink flower petal
+            ctx.beginPath();
+            ctx.arc(-1.5, -1.5, 2, 0, Math.PI * 2);
+            ctx.arc(1.5, 1.5, 2, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = "#ffffff"; // flower center
+            ctx.beginPath();
+            ctx.arc(0, 0, 1.2, 0, Math.PI * 2);
+            ctx.fill();
+          }
+          ctx.restore();
         }
       } else if (t.kind === "soil" || t.kind === "watered") {
         ctx.fillStyle = t.kind === "watered" ? "#4a3120" : "#8a5a3b";
         ctx.fillRect(px + 1, py + 1, TILE - 2, TILE - 2);
+
+        // Watered soil glistening effect
+        if (t.kind === "watered" || t.watered) {
+          const glisten = Math.sin(Date.now() / 350 + (x * 17 + y * 23));
+          if (glisten > 0.82) {
+            ctx.fillStyle = "rgba(174, 214, 241, 0.75)";
+            const gx = px + 4 + ((x * 11 + y * 7) % 22);
+            const gy = py + 4 + ((x * 5 + y * 13) % 22);
+            ctx.fillRect(gx, gy, 1.5, 1.5);
+          }
+        }
       } else if (t.kind === "house") {
         // Detailed Stardew wood cabin drawing
         ctx.fillStyle = "#935116"; // rustic siding
@@ -2127,63 +2170,95 @@ export function draw(
         ctx.fillStyle = (x + y) % 2 === 0 ? "#7ec77a" : "#74bf72";
         ctx.fillRect(px, py, TILE, TILE);
 
-        // Wind sway calculation
-        const sway = Math.sin(Date.now() / 600 + x * 0.5) * 2.5;
+        // Decaying hit shake calculation
+        let hitShake = 0;
+        if (t.lastHitTime) {
+          const elapsed = Date.now() - t.lastHitTime;
+          if (elapsed < 400) {
+            hitShake = Math.sin(elapsed * 0.05) * 3 * (1 - elapsed / 400);
+          }
+        }
 
-        // Trunk
+        // Gentle wind sway (applied as a canvas rotation/shear around the base of the trunk)
+        const windSwayAngle = Math.sin(Date.now() / 900 + x * 0.4) * 0.04; // small rotation
+
+        ctx.save();
+        ctx.translate(px + 16 + hitShake, py + 32); // origin at trunk base
+        ctx.rotate(windSwayAngle);
+
+        // Trunk (drawn relative to translated base at (0, 0))
         ctx.fillStyle = "#8a5a3b"; // brown trunk
-        ctx.fillRect(px + 13, py + 12, 6, 20);
+        ctx.fillRect(-3, -20, 6, 20); // centered horizontally
 
-        // Branches/Leaves (Swaying)
+        // Branches/Leaves (Swaying with the trunk, plus minor internal sway)
+        const leafSwayX = Math.sin(Date.now() / 400 + y) * 0.8;
         ctx.fillStyle = "#27ae60"; // dark green base
         ctx.beginPath();
-        ctx.arc(px + 16 + sway, py + 6, 12, 0, Math.PI * 2);
+        ctx.arc(0 + leafSwayX, -26, 12, 0, Math.PI * 2);
         ctx.fill();
 
         ctx.fillStyle = "#2ecc71"; // light green highlights
         ctx.beginPath();
-        ctx.arc(px + 12 + sway, py + 2, 8, 0, Math.PI * 2);
-        ctx.arc(px + 20 + sway, py + 4, 7, 0, Math.PI * 2);
+        ctx.arc(-4 + leafSwayX, -30, 8, 0, Math.PI * 2);
+        ctx.arc(4 + leafSwayX, -28, 7, 0, Math.PI * 2);
         ctx.fill();
 
         // If it's a fruit tree, draw some red apples!
         if ((x * 7 + y * 13) % 5 === 0) {
           ctx.fillStyle = "#e74c3c"; // red apples
           ctx.beginPath();
-          ctx.arc(px + 12 + sway, py + 6, 2.5, 0, Math.PI * 2);
-          ctx.arc(px + 18 + sway, py + 0, 2.5, 0, Math.PI * 2);
-          ctx.arc(px + 15 + sway, py + 10, 2.5, 0, Math.PI * 2);
+          ctx.arc(-4 + leafSwayX, -26, 2.5, 0, Math.PI * 2);
+          ctx.arc(2 + leafSwayX, -32, 2.5, 0, Math.PI * 2);
+          ctx.arc(-1 + leafSwayX, -22, 2.5, 0, Math.PI * 2);
           ctx.fill();
+        }
+
+        ctx.restore();
+      }
+
+      // Draw weeds/branches/stones debris with hit shake
+      let debrisShake = 0;
+      if (t.lastHitTime) {
+        const elapsed = Date.now() - t.lastHitTime;
+        if (elapsed < 400) {
+          debrisShake = Math.sin(elapsed * 0.05) * 3 * (1 - elapsed / 400);
         }
       }
 
-      // Draw weeds/branches/stones debris
       if (t.kind === "debris_weed") {
+        // Rustle shaking on weeds
+        let weedShake = debrisShake;
+        if (t.lastRustleTime) {
+          const elapsed = Date.now() - t.lastRustleTime;
+          if (elapsed < 400) {
+            weedShake += Math.sin(elapsed * 0.05) * 2.5 * (1 - elapsed / 400);
+          }
+        }
         ctx.fillStyle = "#27ae60";
-        ctx.fillRect(px + 8, py + 16, 16, 12);
+        ctx.fillRect(px + 8 + weedShake, py + 16, 16, 12);
         ctx.fillStyle = "#2ecc71";
-        ctx.fillRect(px + 12, py + 8, 8, 10);
+        ctx.fillRect(px + 12 + weedShake, py + 8, 8, 10);
       } else if (t.kind === "debris_branch") {
         ctx.fillStyle = "#8a5a3b";
-        ctx.fillRect(px + 6, py + 18, 20, 5);
-        ctx.fillRect(px + 18, py + 12, 5, 8);
+        ctx.fillRect(px + 6 + debrisShake, py + 18, 20, 5);
+        ctx.fillRect(px + 18 + debrisShake, py + 12, 5, 8);
       } else if (t.kind === "debris_stone" || t.kind === "ore_copper" || t.kind === "ore_iron" || t.kind === "ore_gold") {
         ctx.fillStyle = t.kind === "debris_stone" ? "#839192" : "#566573";
         ctx.beginPath();
-        ctx.moveTo(px + 6, py + 26);
-        ctx.lineTo(px + 16, py + 6);
-        ctx.lineTo(px + 26, py + 26);
+        ctx.moveTo(px + 6 + debrisShake, py + 26);
+        ctx.lineTo(px + 16 + debrisShake, py + 6);
+        ctx.lineTo(px + 26 + debrisShake, py + 26);
         ctx.fill();
 
         if (t.kind === "ore_copper") {
           ctx.fillStyle = "#e67e22";
-          ctx.fillRect(px + 14, py + 14, 4, 4);
+          ctx.fillRect(px + 14 + debrisShake, py + 14, 4, 4);
         } else if (t.kind === "ore_iron") {
           ctx.fillStyle = "#bdc3c7";
-          ctx.fillRect(px + 14, py + 14, 4, 4);
+          ctx.fillRect(px + 14 + debrisShake, py + 14, 4, 4);
         } else if (t.kind === "ore_gold") {
           ctx.fillStyle = "#f1c40f";
-          ctx.fillRect(px + 13, py + 12, 5, 5);
+          ctx.fillRect(px + 13 + debrisShake, py + 12, 5, 5);
         }
       }
 
@@ -2286,23 +2361,49 @@ export function draw(
         const cropPx = px + TILE / 2;
         const cropPy = py + TILE - 6;
 
+        // Calculate rustle swaying
+        let cropSway = 0;
+        if (t.lastRustleTime) {
+          const elapsed = Date.now() - t.lastRustleTime;
+          if (elapsed < 400) {
+            cropSway = Math.sin(elapsed * 0.05) * 3 * (1 - elapsed / 400);
+          }
+        }
+        // Add gentle ambient wind sway
+        const windSway = Math.sin(Date.now() / 450 + x * 0.5) * 1.2;
+        const totalSway = cropSway + windSway;
+
+        ctx.save();
+        ctx.translate(cropPx, cropPy);
+
         if (currentAge === 0) {
           ctx.fillStyle = "#d2b48c";
-          ctx.fillRect(cropPx - 2, cropPy - 2, 4, 3);
+          ctx.fillRect(-2, -2, 4, 3);
         } else if (!isMature) {
           const progress = currentAge / days;
           const size = Math.floor(progress * 12) + 4;
           ctx.fillStyle = def.stem;
-          ctx.fillRect(cropPx - 3, cropPy - size, 6, size);
-          ctx.fillRect(cropPx - 6, cropPy - size + 2, 3, 3);
-          ctx.fillRect(cropPx + 3, cropPy - size + 2, 3, 3);
+          ctx.fillRect(-3 + totalSway, -size, 6, size);
+          ctx.fillRect(-6 + totalSway, -size + 2, 3, 3);
+          ctx.fillRect(3 + totalSway, -size + 2, 3, 3);
         } else {
           ctx.fillStyle = def.stem;
-          ctx.fillRect(cropPx - 4, cropPy - 14, 8, 14);
+          ctx.fillRect(-4 + totalSway, -14, 8, 14);
           ctx.fillStyle = def.accent;
           ctx.beginPath();
-          ctx.arc(cropPx, cropPy - 14, 6, 0, Math.PI * 2);
+          ctx.arc(0 + totalSway, -14, 6, 0, Math.PI * 2);
           ctx.fill();
+        }
+
+        ctx.restore();
+
+        // Glistening effect on watered crops
+        if (t.watered || state.weather === "rainy") {
+          const cropGlisten = Math.sin(Date.now() / 400 + (x * 13 + y * 7));
+          if (cropGlisten > 0.85) {
+            ctx.fillStyle = "#ffffff";
+            ctx.fillRect(cropPx - 3 + totalSway, cropPy - 10, 1.5, 1.5);
+          }
         }
       }
     }

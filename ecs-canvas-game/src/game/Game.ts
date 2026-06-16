@@ -28,6 +28,7 @@ import { MovementSystem } from "./systems/MovementSystem";
 import { ParticleSystem } from "./systems/ParticleSystem";
 import { RenderSystem } from "./systems/RenderSystem";
 import { WorkerSystem } from "./systems/WorkerSystem";
+import { AnimationSystem } from "./systems/AnimationSystem";
 import { toast } from "./utils/Toast";
 import { ensureAuthenticated, saveToCloud, loadFromCloud, compressToBinaryString, decompressFromBinaryString } from "./FirebaseSync";
 
@@ -150,6 +151,7 @@ export class Game {
     this.world.addSystem(this.movementSystem);
     this.world.addSystem(this.particleSystem);
     this.world.addSystem(new WorkerSystem());
+    this.world.addSystem(new AnimationSystem());
 
     this.saveTimer = 0;
   }

@@ -11,6 +11,7 @@ import {
   StructureComponent,
   ItemComponent,
   WorkerComponent,
+  AnimationComponent,
 } from "./components/GameComponents";
 import type { TileType, ItemType, StructureType } from "./components/GameComponents";
 
@@ -20,9 +21,8 @@ export function spawnPlayer(world: World, x: number, y: number): string {
   world.addComponent(entity, new VelocityComponent(0, 0));
   world.addComponent(entity, new InputComponent());
   world.addComponent(entity, new PlayerComponent());
-  
-  // AABB collider for tile collisions (24x24 px bounds)
   world.addComponent(entity, new BoxColliderComponent(24, 24));
+  world.addComponent(entity, new AnimationComponent(1, 32, 32, 10));
   return entity;
 }
 
@@ -256,6 +256,7 @@ export function spawnWorker(world: World, x: number, y: number, houseEntityId: s
   wComp.accessoryColor = accessoryColors[Math.floor(Math.random() * accessoryColors.length)];
 
   world.addComponent(entity, wComp);
+  world.addComponent(entity, new AnimationComponent(1, 32, 32, 10));
   return entity;
 }
 

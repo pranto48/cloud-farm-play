@@ -884,7 +884,11 @@ export class RenderSystem extends System {
 
     const checkType = (nr: number, nc: number) => {
       if (nr < 0 || nr >= map.height || nc < 0 || nc >= map.width) return false;
-      return map.tiles[nr][nc] === type;
+      const t = map.tiles[nr][nc];
+      if (type === "water" || type === "river") {
+        return t === "water" || t === "river";
+      }
+      return t === type;
     };
 
     const width = rad * 2;
@@ -1086,7 +1090,7 @@ export class RenderSystem extends System {
               this.ctx.arc(fx, fy, 1.2, 0, Math.PI * 2);
               this.ctx.fill();
             }
-          } else if (type === "water") {
+          } else if (type === "water" || type === "river") {
             // Draw sandy shore underneath
             this.drawOrganicBlob(this.ctx, r, c, map, ts, "water", "#e5cbb3", 0.70);
             // Draw shallow water edge
@@ -1094,24 +1098,44 @@ export class RenderSystem extends System {
             // Draw deep water body
             this.drawOrganicBlob(this.ctx, r, c, map, ts, "water", "#3b6e8c", 0.62);
 
-            // Scrolling texture waves current animation
-            const scrollSpeed = 16; // px per second
-            const scrollOffset = (this.time * scrollSpeed) % ts;
+            // 3-frame looping animation offset by grid coordinates for natural variety
+            const tileOffset = (r * 3 + c * 5) % 3;
+            const currentFrame = (Math.floor(this.time * 4.5) + tileOffset) % 3; // 4.5 FPS animation speed
+
             const cx = tx + ts / 2;
             const cy = ty + ts / 2;
 
-            this.ctx.fillStyle = "#5d97bc";
-            for (let ox = -ts/2 - 16; ox < ts/2 + 16; ox += 24) {
-              const wx = Math.round(cx + ((ox + scrollOffset) % (ts + 32)) - (ts / 2 + 16));
-              if (wx >= tx + 4 && wx <= tx + ts - 16) {
-                this.ctx.fillRect(wx, Math.round(cy - 8), 12, 2);
-                
-                const wx2 = Math.round(cx + (((ox + ts/2 + scrollOffset) % (ts + 32)) - (ts / 2 + 16)));
-                if (wx2 >= tx + 8 && wx2 <= tx + ts - 12) {
-                  this.ctx.fillRect(wx2, Math.round(cy + 10), 10, 2);
-                }
-              }
+            const drawRipple = (x: number, y: number, length: number) => {
+              this.ctx.beginPath();
+              this.ctx.moveTo(x - length / 2, y);
+              this.ctx.quadraticCurveTo(x, y - 2, x + length / 2, y);
+              this.ctx.stroke();
+            };
+
+            this.ctx.save();
+            this.ctx.lineWidth = 1.5;
+            this.ctx.lineCap = "round";
+
+            if (currentFrame === 0) {
+              this.ctx.strokeStyle = "rgba(93, 151, 188, 0.6)"; // light blue ripple
+              drawRipple(cx - 8, cy - 12, 16);
+              drawRipple(cx + 10, cy + 8, 12);
+              this.ctx.strokeStyle = "rgba(255, 255, 255, 0.2)"; // foam highlight
+              drawRipple(cx - 12, cy + 2, 14);
+            } else if (currentFrame === 1) {
+              this.ctx.strokeStyle = "rgba(93, 151, 188, 0.6)";
+              drawRipple(cx - 2, cy - 11, 14);
+              drawRipple(cx + 16, cy + 7, 10);
+              this.ctx.strokeStyle = "rgba(255, 255, 255, 0.2)";
+              drawRipple(cx - 6, cy + 3, 16);
+            } else { // currentFrame === 2
+              this.ctx.strokeStyle = "rgba(93, 151, 188, 0.6)";
+              drawRipple(cx + 4, cy - 13, 12);
+              drawRipple(cx + 22, cy + 9, 8);
+              this.ctx.strokeStyle = "rgba(255, 255, 255, 0.2)";
+              drawRipple(cx, cy + 1, 12);
             }
+            this.ctx.restore();
           } else if (type === "stone") {
             // Draw drop shadow
             this.drawOrganicBlob(this.ctx, r, c, map, ts, "stone", "rgba(0, 0, 0, 0.2)", 0.66, 0, 4);
@@ -1599,28 +1623,62 @@ export class RenderSystem extends System {
 
     switch (s.type) {
       case "belt": {
-        // Draw Conveyor belt background (steel rollers panel)
-        ctx.fillStyle = "#34495e";
-        ctx.fillRect(-ts/2 + 2, -ts/2 + 2, ts - 4, ts - 4);
-        ctx.strokeStyle = "#2c3e50";
-        ctx.lineWidth = 2.5;
-        ctx.strokeRect(-ts/2 + 2, -ts/2 + 2, ts - 4, ts - 4);
-
-        // Animated scrolling conveyor lines
-        ctx.strokeStyle = "rgba(255, 255, 255, 0.22)";
-        ctx.lineWidth = 3;
+        // Draw Conveyor belt background casing (metallic panels on borders, dark rubber belt in center)
+        const half = ts / 2;
+        
+        // Draw dark base/casing
+        ctx.fillStyle = "#2c3e50";
+        ctx.fillRect(-half + 1, -half + 1, ts - 2, ts - 2);
+        
         ctx.save();
-        ctx.rotate((s.rotation * Math.PI) / 180);
+        // Rotate so that the flow direction is always along the positive X axis (left to right)
+        ctx.rotate(((s.rotation - 90) * Math.PI) / 180);
         
-        const scrollSpeed = 64; // px per sec
-        const offset = (this.time * scrollSpeed) % 24;
+        // Draw inner belt track (dark charcoal color)
+        ctx.fillStyle = "#1e272e";
+        ctx.fillRect(-half, -half + 5, ts, ts - 10);
         
-        for (let lx = -ts/2 + offset - 24; lx < ts/2 + 24; lx += 24) {
+        // Draw side metal rails (silver/grey rails with shading)
+        const railGradient = ctx.createLinearGradient(0, -half, 0, -half + 5);
+        railGradient.addColorStop(0, "#747d8c");
+        railGradient.addColorStop(1, "#2f3542");
+        ctx.fillStyle = railGradient;
+        ctx.fillRect(-half, -half, ts, 5); // top rail
+        
+        const railGradientBottom = ctx.createLinearGradient(0, half - 5, 0, half);
+        railGradientBottom.addColorStop(0, "#2f3542");
+        railGradientBottom.addColorStop(1, "#747d8c");
+        ctx.fillStyle = railGradientBottom;
+        ctx.fillRect(-half, half - 5, ts, 5); // bottom rail
+        
+        // Draw scrolling conveyor ridges and direction arrows
+        const scrollSpeed = 64; // px per second
+        const interval = 16; // spacing between ridges
+        const offset = (this.time * scrollSpeed) % interval;
+        
+        ctx.strokeStyle = "#2c3e50";
+        ctx.lineWidth = 1.5;
+        
+        // Draw yellow indicator arrows
+        ctx.fillStyle = "rgba(230, 126, 34, 0.7)"; // warm amber/orange arrow
+        
+        for (let lx = -half - interval + offset; lx < half + interval; lx += interval) {
+          // Draw roller ridge/line across the belt
           ctx.beginPath();
-          ctx.moveTo(lx, -ts/4);
-          ctx.lineTo(lx + 8, 0);
-          ctx.lineTo(lx, ts/4);
+          ctx.moveTo(lx, -half + 5);
+          ctx.lineTo(lx, half - 5);
           ctx.stroke();
+          
+          // Draw small arrow on every tread segment to make it look super premium
+          // Only draw if within bounds
+          if (lx > -half && lx < half - 10) {
+            ctx.beginPath();
+            ctx.moveTo(lx + 8, 0);
+            ctx.lineTo(lx + 2, -4);
+            ctx.lineTo(lx + 2, 4);
+            ctx.closePath();
+            ctx.fill();
+          }
         }
         ctx.restore();
         break;

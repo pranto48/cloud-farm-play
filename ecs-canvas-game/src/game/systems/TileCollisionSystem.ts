@@ -73,7 +73,7 @@ export class TileCollisionSystem extends System {
         }
 
         const tileType = map.tiles[r][c];
-        if (tileType === "water" || tileType === "stone") {
+        if (tileType === "water" || tileType === "river" || tileType === "stone") {
           // Check overlap
           const tLeft = c * ts;
           const tRight = (c + 1) * ts;
@@ -138,7 +138,7 @@ export class TileCollisionSystem extends System {
         }
 
         const tileType = map.tiles[r][c];
-        if (tileType === "water" || tileType === "stone") {
+        if (tileType === "water" || tileType === "river" || tileType === "stone") {
           // Check overlap
           const tLeft = c * ts;
           const tRight = (c + 1) * ts;

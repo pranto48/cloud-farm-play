@@ -77,7 +77,7 @@ export class InputSystem extends System {
           const mapComp = world.getComponent(maps[0], MapComponent)!;
           if (targetRow >= 0 && targetRow < mapComp.height && targetCol >= 0 && targetCol < mapComp.width) {
             const tileType = mapComp.tiles[targetRow][targetCol];
-            const isWalkable = tileType !== "water" && tileType !== "stone";
+            const isWalkable = tileType !== "water" && tileType !== "river" && tileType !== "stone";
             if (isWalkable) {
               const targetX = targetCol * 64 + 32;
               const targetY = targetRow * 64 + 32;
@@ -321,8 +321,8 @@ export class InputSystem extends System {
       return tileType === "grass";
     }
 
-    // General buildings cannot be placed on water or stone
-    if (tileType === "water" || tileType === "stone") {
+    // General buildings cannot be placed on water, river, or stone
+    if (tileType === "water" || tileType === "river" || tileType === "stone") {
       return false;
     }
 

@@ -64,9 +64,15 @@ export function spawnMap(world: World): { entity: string; playerX: number; playe
       const oreVal2 = noiseOre.noise(c * 0.15, r * 0.15, 20.0);
       const oreVal3 = noiseOre.noise(c * 0.15, r * 0.15, 30.0);
 
+      // Winding river noise overlay
+      const riverVal = noiseBase.noise(c * 0.025, r * 0.025, 45.0);
+      const isRiver = Math.abs(riverVal) < 0.035;
+
       let type: TileType = "grass";
 
-      if (val < -0.25) {
+      if (isRiver) {
+        type = "river";
+      } else if (val < -0.25) {
         type = "water";
       } else if (val < -0.15) {
         // Sand/shoreline, walkable

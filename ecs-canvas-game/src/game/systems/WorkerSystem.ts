@@ -307,7 +307,7 @@ export class WorkerSystem extends System {
 
               for (let r = 0; r < map.height; r++) {
                 for (let c = 0; c < map.width; c++) {
-                  if (map.tiles[r][c] === "water") {
+                  if (map.tiles[r][c] === "water" || map.tiles[r][c] === "river") {
                     const dist = Math.abs(r - row) + Math.abs(c - col);
                     if (dist < minDist) {
                       minDist = dist;
@@ -494,7 +494,7 @@ export class WorkerSystem extends System {
               for (const [dr, dc] of dirs) {
                 const nr = finalRow + dr;
                 const nc = finalCol + dc;
-                if (map.tiles[nr]?.[nc] === "water") {
+                if (map.tiles[nr]?.[nc] === "water" || map.tiles[nr]?.[nc] === "river") {
                   caught = true;
                   break;
                 }

@@ -4,11 +4,15 @@ import { findPath as aStarFindPath } from "../utils/AStar";
 export class PositionComponent extends Component {
   public x: number;
   public y: number;
+  public renderX: number;
+  public renderY: number;
 
   constructor(x: number = 0, y: number = 0) {
     super();
     this.x = x;
     this.y = y;
+    this.renderX = x;
+    this.renderY = y;
   }
 }
 
@@ -66,6 +70,13 @@ export class PlayerComponent extends Component {
   public buildRotation: 0 | 90 | 180 | 270 = 90; // Default facing Right
   public researchPoints: number = 0;
   public unlockedTechs: Record<string, boolean> = {};
+
+  // Customization fields
+  public hairStyle: string = "spiky";
+  public hairColor: string = "#f1c40f";
+  public clothingStyle: string = "overalls";
+  public clothingColor: string = "#8a5a3b";
+  public shirtColor: string = "#c0392b";
   
   constructor() {
     super();
@@ -310,6 +321,13 @@ export class WorkerComponent extends Component {
   public energy: number;
   public sleepTimer: number;
   public previousState: "idle" | "seeking" | "working" | "returning" | null;
+
+  // Customization fields
+  public hairStyle: string = "short";
+  public hairColor: string = "#34495e";
+  public clothingStyle: string = "shirt";
+  public clothingColor: string = "#e67e22";
+  public shirtColor: string = "#2c3e50";
 
   constructor(houseEntityId: string) {
     super();

@@ -233,7 +233,23 @@ export function spawnWorker(world: World, x: number, y: number, houseEntityId: s
   const entity = world.createEntity();
   world.addComponent(entity, new PositionComponent(x, y));
   world.addComponent(entity, new VelocityComponent(0, 0));
-  world.addComponent(entity, new WorkerComponent(houseEntityId));
+
+  const wComp = new WorkerComponent(houseEntityId);
+  
+  // Randomize worker appearance
+  const hairStyles = ["short", "spiky", "bob", "curly", "braids", "none"];
+  const hairColors = ["#f1c40f", "#8a5a3b", "#2c3e50", "#c0392b", "#9b59b6", "#7f8c8d"];
+  const clothingStyles = ["shirt", "jacket", "overalls", "tunic"];
+  const clothingColors = ["#e67e22", "#3498db", "#2ecc71", "#9b59b6", "#c0392b", "#1abc9c"];
+  const shirtColors = ["#2c3e50", "#ecf0f1", "#f39c12", "#27ae60", "#c0392b"];
+
+  wComp.hairStyle = hairStyles[Math.floor(Math.random() * hairStyles.length)];
+  wComp.hairColor = hairColors[Math.floor(Math.random() * hairColors.length)];
+  wComp.clothingStyle = clothingStyles[Math.floor(Math.random() * clothingStyles.length)];
+  wComp.clothingColor = clothingColors[Math.floor(Math.random() * clothingColors.length)];
+  wComp.shirtColor = shirtColors[Math.floor(Math.random() * shirtColors.length)];
+
+  world.addComponent(entity, wComp);
   return entity;
 }
 

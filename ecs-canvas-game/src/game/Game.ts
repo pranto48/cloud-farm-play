@@ -300,6 +300,13 @@ export class Game {
         unlockedTechs: player ? player.unlockedTechs : {},
         activeTool: player ? player.activeTool : "belt",
         globalStock,
+        playerCustomization: player ? {
+          hairStyle: player.hairStyle,
+          hairColor: player.hairColor,
+          clothingStyle: player.clothingStyle,
+          clothingColor: player.clothingColor,
+          shirtColor: player.shirtColor
+        } : null
       });
     }
   }

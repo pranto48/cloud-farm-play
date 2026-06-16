@@ -14,15 +14,23 @@ interface GameData {
   unlockedTechs: Record<string, boolean>;
   activeTool: BuildTool;
   globalStock: Record<string, number>;
+  playerCustomization?: {
+    hairStyle: string;
+    hairColor: string;
+    clothingStyle: string;
+    clothingColor: string;
+    shirtColor: string;
+  } | null;
 }
 
 export function ToolBuilderOverlay() {
-  const [activeTab, setActiveTab] = useState<"factory" | "town" | "research">("factory");
+  const [activeTab, setActiveTab] = useState<"factory" | "town" | "research" | "customizer">("factory");
   const [gameData, setGameData] = useState<GameData>({
     playerInventory: {},
     unlockedTechs: {},
     activeTool: "belt",
     globalStock: {},
+    playerCustomization: null,
   });
 
   // Modal Dialogs
@@ -131,6 +139,24 @@ export function ToolBuilderOverlay() {
     }
   };
 
+  // Player Customization logic
+  const updatePlayerCustomization = (field: string, value: string) => {
+    const world = (window as any).gameWorld;
+    if (!world) return;
+    const playerEnt = world.getEntitiesWith([PlayerComponent])[0];
+    if (playerEnt) {
+      const player = world.getComponent(playerEnt, PlayerComponent);
+      player[field] = value;
+      setGameData(prev => ({
+        ...prev,
+        playerCustomization: prev.playerCustomization ? {
+          ...prev.playerCustomization,
+          [field]: value
+        } : null
+      }));
+    }
+  };
+
   const workerInfo = getCottageWorker();
 
   // Tech Tree requirements helper
@@ -171,6 +197,12 @@ export function ToolBuilderOverlay() {
             }}
           >
             Research Techs
+          </button>
+          <button
+            className={`tab-btn ${activeTab === "customizer" ? "active" : ""}`}
+            onClick={() => setActiveTab("customizer")}
+          >
+            Customize Farmer
           </button>
         </div>
 
@@ -255,6 +287,87 @@ export function ToolBuilderOverlay() {
               </button>
             </div>
           )}
+          {activeTab === "customizer" && (
+            <div className="tools-group active" style={{ gap: "8px", flexFlow: "row nowrap", overflowX: "auto", maxWidth: "calc(100% - 150px)" }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: "2px", minWidth: "100px" }}>
+                <span style={{ fontSize: "11px", opacity: 0.8, color: "#fff" }}>Hair Style:</span>
+                <select
+                  value={gameData.playerCustomization?.hairStyle || "spiky"}
+                  onChange={(e) => updatePlayerCustomization("hairStyle", e.target.value)}
+                  style={{ background: "#2c3e50", color: "#fff", border: "1px solid #34495e", padding: "4px", fontSize: "12px", borderRadius: "4px", cursor: "pointer" }}
+                >
+                  <option value="spiky">Spiky</option>
+                  <option value="short">Short</option>
+                  <option value="bob">Bob</option>
+                  <option value="curly">Curly</option>
+                  <option value="braids">Braids</option>
+                  <option value="none">Bald</option>
+                </select>
+              </div>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: "2px", minWidth: "100px" }}>
+                <span style={{ fontSize: "11px", opacity: 0.8, color: "#fff" }}>Hair Color:</span>
+                <select
+                  value={gameData.playerCustomization?.hairColor || "#f1c40f"}
+                  onChange={(e) => updatePlayerCustomization("hairColor", e.target.value)}
+                  style={{ background: "#2c3e50", color: "#fff", border: "1px solid #34495e", padding: "4px", fontSize: "12px", borderRadius: "4px", cursor: "pointer" }}
+                >
+                  <option value="#f1c40f">Blond</option>
+                  <option value="#8a5a3b">Brown</option>
+                  <option value="#2c3e50">Black</option>
+                  <option value="#c0392b">Red</option>
+                  <option value="#9b59b6">Purple</option>
+                  <option value="#7f8c8d">Grey</option>
+                </select>
+              </div>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: "2px", minWidth: "100px" }}>
+                <span style={{ fontSize: "11px", opacity: 0.8, color: "#fff" }}>Outfit Style:</span>
+                <select
+                  value={gameData.playerCustomization?.clothingStyle || "overalls"}
+                  onChange={(e) => updatePlayerCustomization("clothingStyle", e.target.value)}
+                  style={{ background: "#2c3e50", color: "#fff", border: "1px solid #34495e", padding: "4px", fontSize: "12px", borderRadius: "4px", cursor: "pointer" }}
+                >
+                  <option value="overalls">Overalls</option>
+                  <option value="shirt">Shirt</option>
+                  <option value="jacket">Jacket</option>
+                  <option value="tunic">Tunic</option>
+                </select>
+              </div>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: "2px", minWidth: "100px" }}>
+                <span style={{ fontSize: "11px", opacity: 0.8, color: "#fff" }}>Outfit Color:</span>
+                <select
+                  value={gameData.playerCustomization?.clothingColor || "#8a5a3b"}
+                  onChange={(e) => updatePlayerCustomization("clothingColor", e.target.value)}
+                  style={{ background: "#2c3e50", color: "#fff", border: "1px solid #34495e", padding: "4px", fontSize: "12px", borderRadius: "4px", cursor: "pointer" }}
+                >
+                  <option value="#8a5a3b">Brown</option>
+                  <option value="#3498db">Blue</option>
+                  <option value="#2ecc71">Green</option>
+                  <option value="#e74c3c">Red</option>
+                  <option value="#e67e22">Orange</option>
+                  <option value="#9b59b6">Purple</option>
+                </select>
+              </div>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: "2px", minWidth: "100px" }}>
+                <span style={{ fontSize: "11px", opacity: 0.8, color: "#fff" }}>Inner Shirt:</span>
+                <select
+                  value={gameData.playerCustomization?.shirtColor || "#c0392b"}
+                  onChange={(e) => updatePlayerCustomization("shirtColor", e.target.value)}
+                  style={{ background: "#2c3e50", color: "#fff", border: "1px solid #34495e", padding: "4px", fontSize: "12px", borderRadius: "4px", cursor: "pointer" }}
+                >
+                  <option value="#c0392b">Red</option>
+                  <option value="#3498db">Blue</option>
+                  <option value="#2ecc71">Green</option>
+                  <option value="#f1c40f">Yellow</option>
+                  <option value="#2c3e50">Dark Grey</option>
+                  <option value="#ecf0f1">White</option>
+                </select>
+              </div>
+            </div>
+          )}
 
           <div id="toolbar-divider" />
 
@@ -328,6 +441,90 @@ export function ToolBuilderOverlay() {
                     <option value="miner">⛏️ Miner (Extracts Iron/Copper/Coal/Stone)</option>
                     <option value="fisher">🎣 Fisher (Harvests adjacent Water tiles)</option>
                   </select>
+                </div>
+
+                <div className="customizer-section" style={{ borderTop: "1px solid #34495e", paddingTop: "10px", marginTop: "10px", marginBottom: "15px" }}>
+                  <h4 style={{ margin: "0 0 10px 0", fontSize: "14px", color: "#fff" }}>🎨 Custom Appearance</h4>
+                  
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+                    <div className="form-group" style={{ marginBottom: "5px" }}>
+                      <label className="form-label" style={{ display: "block", marginBottom: "3px", fontSize: "11px", opacity: 0.8, color: "#fff" }}>Hair Style:</label>
+                      <select
+                        className="dialog-select"
+                        value={workerInfo.comp.hairStyle || "short"}
+                        onChange={(e) => {
+                          workerInfo.comp.hairStyle = e.target.value;
+                          setActiveCottage({ ...activeCottage });
+                        }}
+                        style={{ width: "100%", padding: "4px", background: "#2c3e50", color: "#fff", border: "1px solid #34495e", fontSize: "12px", borderRadius: "4px", cursor: "pointer" }}
+                      >
+                        <option value="short">Short</option>
+                        <option value="spiky">Spiky</option>
+                        <option value="bob">Bob</option>
+                        <option value="curly">Curly</option>
+                        <option value="braids">Braids</option>
+                        <option value="none">Bald</option>
+                      </select>
+                    </div>
+
+                    <div className="form-group" style={{ marginBottom: "5px" }}>
+                      <label className="form-label" style={{ display: "block", marginBottom: "3px", fontSize: "11px", opacity: 0.8, color: "#fff" }}>Hair Color:</label>
+                      <select
+                        className="dialog-select"
+                        value={workerInfo.comp.hairColor || "#34495e"}
+                        onChange={(e) => {
+                          workerInfo.comp.hairColor = e.target.value;
+                          setActiveCottage({ ...activeCottage });
+                        }}
+                        style={{ width: "100%", padding: "4px", background: "#2c3e50", color: "#fff", border: "1px solid #34495e", fontSize: "12px", borderRadius: "4px", cursor: "pointer" }}
+                      >
+                        <option value="#f1c40f">Blond</option>
+                        <option value="#8a5a3b">Brown</option>
+                        <option value="#2c3e50">Black</option>
+                        <option value="#c0392b">Red</option>
+                        <option value="#9b59b6">Purple</option>
+                        <option value="#7f8c8d">Grey</option>
+                      </select>
+                    </div>
+
+                    <div className="form-group" style={{ marginBottom: "5px" }}>
+                      <label className="form-label" style={{ display: "block", marginBottom: "3px", fontSize: "11px", opacity: 0.8, color: "#fff" }}>Outfit Style:</label>
+                      <select
+                        className="dialog-select"
+                        value={workerInfo.comp.clothingStyle || "shirt"}
+                        onChange={(e) => {
+                          workerInfo.comp.clothingStyle = e.target.value;
+                          setActiveCottage({ ...activeCottage });
+                        }}
+                        style={{ width: "100%", padding: "4px", background: "#2c3e50", color: "#fff", border: "1px solid #34495e", fontSize: "12px", borderRadius: "4px", cursor: "pointer" }}
+                      >
+                        <option value="shirt">Shirt</option>
+                        <option value="jacket">Jacket</option>
+                        <option value="overalls">Overalls</option>
+                        <option value="tunic">Tunic</option>
+                      </select>
+                    </div>
+
+                    <div className="form-group" style={{ marginBottom: "5px" }}>
+                      <label className="form-label" style={{ display: "block", marginBottom: "3px", fontSize: "11px", opacity: 0.8, color: "#fff" }}>Outfit Color:</label>
+                      <select
+                        className="dialog-select"
+                        value={workerInfo.comp.clothingColor || "#e67e22"}
+                        onChange={(e) => {
+                          workerInfo.comp.clothingColor = e.target.value;
+                          setActiveCottage({ ...activeCottage });
+                        }}
+                        style={{ width: "100%", padding: "4px", background: "#2c3e50", color: "#fff", border: "1px solid #34495e", fontSize: "12px", borderRadius: "4px", cursor: "pointer" }}
+                      >
+                        <option value="#e67e22">Orange</option>
+                        <option value="#3498db">Blue</option>
+                        <option value="#2ecc71">Green</option>
+                        <option value="#9b59b6">Purple</option>
+                        <option value="#c0392b">Red</option>
+                        <option value="#1abc9c">Teal</option>
+                      </select>
+                    </div>
+                  </div>
                 </div>
 
                 <button className="dialog-btn danger" onClick={() => dismissWorker(workerInfo.id)}>

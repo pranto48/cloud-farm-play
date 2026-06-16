@@ -1,5 +1,6 @@
 import { System } from "../ecs/System";
 import { World } from "../ecs/World";
+import { ImprovedNoise } from "../utils/Noise";
 import {
   PositionComponent,
   PlayerComponent,
@@ -16,6 +17,7 @@ import {
 export class RenderSystem extends System {
   readonly requiredComponents = [PositionComponent];
   private time: number = 0;
+  private noiseBase = new ImprovedNoise();
 
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
@@ -33,6 +35,99 @@ export class RenderSystem extends System {
     super();
     this.canvas = canvas;
     this.ctx = ctx;
+  }
+
+  private getGrassColor(c: number, r: number): string {
+    const val = this.noiseBase.noise(c * 0.07, r * 0.07, 0);
+    const t = Math.max(0, Math.min(1, (val + 0.3) / 0.6));
+    const rCol = Math.round(67 + t * 25);
+    const gCol = Math.round(142 + t * 42);
+    const bCol = Math.round(70 + t * 26);
+    return `rgb(${rCol}, ${gCol}, ${bCol})`;
+  }
+
+  private seedRandom(s: number): number {
+    const x = Math.sin(s) * 10000;
+    return x - Math.floor(x);
+  }
+
+  private drawOrganicBlob(
+    ctx: CanvasRenderingContext2D,
+    r: number,
+    c: number,
+    map: MapComponent,
+    ts: number,
+    type: TileType,
+    color: string,
+    radiusRatio: number,
+    offsetX: number = 0,
+    offsetY: number = 0
+  ): void {
+    const tx = c * ts + offsetX;
+    const ty = r * ts + offsetY;
+    const cx = tx + ts / 2;
+    const cy = ty + ts / 2;
+    const rad = ts * radiusRatio;
+
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(cx, cy, rad, 0, Math.PI * 2);
+    ctx.fill();
+
+    const checkType = (nr: number, nc: number) => {
+      if (nr < 0 || nr >= map.height || nc < 0 || nc >= map.width) return false;
+      return map.tiles[nr][nc] === type;
+    };
+
+    const width = rad * 2;
+    if (checkType(r - 1, c)) {
+      ctx.fillRect(cx - rad, ty, width, ts / 2);
+    }
+    if (checkType(r + 1, c)) {
+      ctx.fillRect(cx - rad, cy, width, ts / 2);
+    }
+    if (checkType(r, c - 1)) {
+      ctx.fillRect(tx, cy - rad, ts / 2, width);
+    }
+    if (checkType(r, c + 1)) {
+      ctx.fillRect(cx, cy - rad, ts / 2, width);
+    }
+  }
+
+  private drawOrganicTree(ctx: CanvasRenderingContext2D, x: number, y: number, scale: number): void {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.scale(scale, scale);
+
+    ctx.fillStyle = "rgba(0, 0, 0, 0.25)";
+    ctx.beginPath();
+    ctx.ellipse(0, 16, 12, 4, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = "#5c3a21";
+    ctx.fillRect(-3, 0, 6, 16);
+
+    ctx.fillStyle = "#1b4d22";
+    ctx.beginPath();
+    ctx.arc(-8, -6, 10, 0, Math.PI * 2);
+    ctx.arc(8, -6, 10, 0, Math.PI * 2);
+    ctx.arc(0, -16, 12, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = "#2d7a3a";
+    ctx.beginPath();
+    ctx.arc(-6, -8, 8, 0, Math.PI * 2);
+    ctx.arc(6, -8, 8, 0, Math.PI * 2);
+    ctx.arc(0, -16, 9, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = "#4c9e4f";
+    ctx.beginPath();
+    ctx.arc(-2, -12, 6, 0, Math.PI * 2);
+    ctx.arc(2, -12, 6, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.restore();
   }
 
   update(world: World, dt: number): void {
@@ -106,106 +201,225 @@ export class RenderSystem extends System {
 
           // Draw Biomes
           if (type === "grass") {
-            this.ctx.fillStyle = (c + r) % 2 === 0 ? "#55b058" : "#4c9e4f"; // Cozy organic greens
+            // Smooth noise-based grass color
+            this.ctx.fillStyle = this.getGrassColor(c, r);
             this.ctx.fillRect(tx, ty, ts, ts);
-            // Grass blades
-            if ((c * 3 + r * 7) % 13 === 0) {
-              this.ctx.fillStyle = "#3d823f";
-              this.ctx.fillRect(tx + 12, ty + 16, 2, 4);
-              this.ctx.fillRect(tx + 44, ty + 36, 2, 4);
+
+            // Draw organic grass tufts
+            const seed = c * 13 + r * 37;
+            if (this.seedRandom(seed) < 0.15) {
+              const ox = ts * 0.2 + this.seedRandom(seed + 1) * ts * 0.6;
+              const oy = ts * 0.2 + this.seedRandom(seed + 2) * ts * 0.6;
+              this.ctx.strokeStyle = "rgba(56, 122, 58, 0.45)";
+              this.ctx.lineWidth = 1.5;
+              this.ctx.beginPath();
+              // Blade 1
+              this.ctx.moveTo(tx + ox, ty + oy);
+              this.ctx.quadraticCurveTo(tx + ox - 3, ty + oy - 6, tx + ox - 5, ty + oy - 8);
+              // Blade 2
+              this.ctx.moveTo(tx + ox, ty + oy);
+              this.ctx.quadraticCurveTo(tx + ox + 1, ty + oy - 8, tx + ox + 3, ty + oy - 10);
+              this.ctx.stroke();
+            }
+
+            // Draw pretty flower patches
+            if (this.seedRandom(seed + 5) < 0.08) {
+              const fx = tx + ts * 0.25 + this.seedRandom(seed + 6) * ts * 0.5;
+              const fy = ty + ts * 0.25 + this.seedRandom(seed + 7) * ts * 0.5;
+              
+              // Draw petals (white/yellow/red)
+              const petalColor = this.seedRandom(seed + 8) < 0.5 ? "#ffffff" : "#f1c40f";
+              this.ctx.fillStyle = petalColor;
+              this.ctx.beginPath();
+              this.ctx.arc(fx - 2, fy, 1.5, 0, Math.PI * 2);
+              this.ctx.arc(fx + 2, fy, 1.5, 0, Math.PI * 2);
+              this.ctx.arc(fx, fy - 2, 1.5, 0, Math.PI * 2);
+              this.ctx.arc(fx, fy + 2, 1.5, 0, Math.PI * 2);
+              this.ctx.fill();
+
+              // Draw orange center
+              this.ctx.fillStyle = "#e67e22";
+              this.ctx.beginPath();
+              this.ctx.arc(fx, fy, 1.2, 0, Math.PI * 2);
+              this.ctx.fill();
             }
           } else if (type === "water") {
-            this.ctx.fillStyle = "#3b6e8c";
-            this.ctx.fillRect(tx, ty, ts, ts);
-            // Wave shimmers
+            // Draw sandy shore underneath
+            this.drawOrganicBlob(this.ctx, r, c, map, ts, "water", "#e5cbb3", 0.70);
+            // Draw shallow water edge
+            this.drawOrganicBlob(this.ctx, r, c, map, ts, "water", "#4c81a3", 0.66);
+            // Draw deep water body
+            this.drawOrganicBlob(this.ctx, r, c, map, ts, "water", "#3b6e8c", 0.62);
+
+            // Wave shimmers in center
             const wave = Math.sin(this.time * 2.0 + c * 0.5) * 3;
-            this.ctx.fillStyle = "#4c81a3";
-            this.ctx.fillRect(tx + 16, ty + 24 + wave, 12, 1.5);
-            this.ctx.fillRect(tx + 32, ty + 48 - wave, 16, 1.5);
+            const cx = tx + ts / 2;
+            const cy = ty + ts / 2;
+            this.ctx.fillStyle = "#5d97bc";
+            this.ctx.fillRect(cx - 16, cy - 8 + wave, 12, 1.5);
+            this.ctx.fillRect(cx + 4, cy + 12 - wave, 16, 1.5);
           } else if (type === "stone") {
-            this.ctx.fillStyle = "#7f8c8d";
-            this.ctx.fillRect(tx, ty, ts, ts);
-            // Cobble lines
-            this.ctx.fillStyle = "#6d797a";
-            this.ctx.fillRect(tx + 4, ty + 4, ts - 8, ts - 8);
-            this.ctx.fillStyle = "#454d4f";
-            this.ctx.fillRect(tx + 8, ty + 30, 48, 3);
-          } else if (type === "forest") {
-            this.ctx.fillStyle = "#4c9e4f";
-            this.ctx.fillRect(tx, ty, ts, ts);
-            // Green pine cone tree shape
-            this.ctx.fillStyle = "#1e5e22";
+            // Draw drop shadow
+            this.drawOrganicBlob(this.ctx, r, c, map, ts, "stone", "rgba(0, 0, 0, 0.2)", 0.66, 0, 4);
+            // Draw dark outline
+            this.drawOrganicBlob(this.ctx, r, c, map, ts, "stone", "#4d5656", 0.64);
+            // Draw stone body
+            this.drawOrganicBlob(this.ctx, r, c, map, ts, "stone", "#788282", 0.58);
+
+            // Cracked stone details
+            const cx = tx + ts / 2;
+            const cy = ty + ts / 2;
+            this.ctx.strokeStyle = "#586161";
+            this.ctx.lineWidth = 1.5;
             this.ctx.beginPath();
-            this.ctx.moveTo(tx + ts / 2, ty + 6);
-            this.ctx.lineTo(tx + 10, ty + 48);
-            this.ctx.lineTo(tx + ts - 10, ty + 48);
-            this.ctx.closePath();
-            this.ctx.fill();
-            // Trunk
-            this.ctx.fillStyle = "#4d3013";
-            this.ctx.fillRect(tx + ts / 2 - 3, ty + 48, 6, 8);
-          } else if (type === "iron") {
-            this.ctx.fillStyle = "#6d797a";
+            this.ctx.moveTo(cx - 12, cy - 6);
+            this.ctx.lineTo(cx + 8, cy - 10);
+            this.ctx.lineTo(cx + 14, cy + 4);
+            this.ctx.stroke();
+          } else if (type === "forest") {
+            // Forest grass background
+            this.ctx.fillStyle = this.getGrassColor(c, r);
             this.ctx.fillRect(tx, ty, ts, ts);
-            // Iron nodes
-            this.ctx.fillStyle = "#d5dbdb"; // Shiny white-silver ore veins
-            this.ctx.fillRect(tx + 12, ty + 12, 12, 12);
-            this.ctx.fillRect(tx + 36, ty + 36, 14, 14);
-            this.ctx.fillStyle = "#7f8c8d";
-            this.ctx.fillRect(tx + 16, ty + 32, 10, 10);
-          } else if (type === "copper") {
-            this.ctx.fillStyle = "#6d797a";
-            this.ctx.fillRect(tx, ty, ts, ts);
-            // Copper nodes
-            this.ctx.fillStyle = "#d35400"; // Glowing metallic orange copper veins
-            this.ctx.fillRect(tx + 14, ty + 14, 10, 10);
-            this.ctx.fillRect(tx + 32, ty + 32, 14, 14);
-            this.ctx.fillStyle = "#e67e22";
-            this.ctx.fillRect(tx + 38, ty + 12, 12, 12);
-          } else if (type === "coal") {
-            this.ctx.fillStyle = "#6d797a";
-            this.ctx.fillRect(tx, ty, ts, ts);
-            // Coal nodes
-            this.ctx.fillStyle = "#111111"; // Charcoal black chunks
-            this.ctx.fillRect(tx + 10, ty + 16, 12, 12);
-            this.ctx.fillRect(tx + 34, ty + 32, 14, 14);
-            this.ctx.fillStyle = "#2c3e50";
-            this.ctx.fillRect(tx + 32, ty + 10, 10, 10);
-          } else if (type === "road") {
-            // Dusty dirt gravel road
-            this.ctx.fillStyle = "#d5a980";
-            this.ctx.fillRect(tx, ty, ts, ts);
-            this.ctx.fillStyle = "#b88c60";
-            if ((c * 5 + r * 3) % 4 === 0) {
-              this.ctx.fillRect(tx + 8, ty + 12, 4, 3);
-              this.ctx.fillRect(tx + 40, ty + 36, 3, 3);
+
+            // Dense trees sorted by Y coordinate
+            const seed = c * 53 + r * 29;
+            const numTrees = 2 + Math.floor(this.seedRandom(seed) * 2); // 2 or 3 trees
+            const trees = [];
+            for (let i = 0; i < numTrees; i++) {
+              const ox = ts * 0.15 + this.seedRandom(seed + i * 7) * ts * 0.7;
+              const oy = ts * 0.15 + this.seedRandom(seed + i * 11) * ts * 0.7;
+              trees.push({
+                x: tx + ox,
+                y: ty + oy,
+                scale: 0.85 + this.seedRandom(seed + i * 31) * 0.35,
+              });
             }
-            if ((c * 2 + r * 7) % 5 === 0) {
-              this.ctx.fillStyle = "#e5cbb3";
-              this.ctx.fillRect(tx + 24, ty + 20, 5, 2);
-              this.ctx.fillRect(tx + 48, ty + 10, 2, 4);
+            trees.sort((a, b) => a.y - b.y);
+            for (const tree of trees) {
+              this.drawOrganicTree(this.ctx, tree.x, tree.y, tree.scale);
+            }
+          } else if (type === "iron" || type === "copper" || type === "coal") {
+            // Base background underneath the ore (stone if in mountainous terrain, grass otherwise)
+            const baseVal = this.noiseBase.noise(c * 0.07, r * 0.07, 0);
+            if (baseVal > 0.2) {
+              // Draw stone background blob
+              this.drawOrganicBlob(this.ctx, r, c, map, ts, type, "#788282", 0.65);
+            } else {
+              // Draw grass background
+              this.ctx.fillStyle = this.getGrassColor(c, r);
+              this.ctx.fillRect(tx, ty, ts, ts);
+            }
+
+            // Scatter shiny ore chunk deposits
+            const seed = c * 73 + r * 37;
+            const numChunks = 4 + Math.floor(this.seedRandom(seed) * 3); // 4 to 6 chunks
+
+            let oreColor = "#bdc3c7";
+            let highlightColor = "#ffffff";
+            let shadowColor = "rgba(0,0,0,0.3)";
+
+            if (type === "iron") {
+              oreColor = "#a6b1b9";
+              highlightColor = "#eef2f5";
+            } else if (type === "copper") {
+              oreColor = "#d35400";
+              highlightColor = "#ff7f50";
+            } else if (type === "coal") {
+              oreColor = "#111111";
+              highlightColor = "#34495e";
+            }
+
+            for (let i = 0; i < numChunks; i++) {
+              const ox = ts * 0.2 + this.seedRandom(seed + i * 13) * ts * 0.6;
+              const oy = ts * 0.2 + this.seedRandom(seed + i * 29) * ts * 0.6;
+              const size = 5 + this.seedRandom(seed + i * 47) * 7; // size 5 to 12px
+
+              const px = tx + ox;
+              const py = ty + oy;
+
+              // Draw shadow
+              this.ctx.fillStyle = shadowColor;
+              this.ctx.beginPath();
+              this.ctx.arc(px, py + 1.5, size, 0, Math.PI * 2);
+              this.ctx.fill();
+
+              // Draw chunk
+              this.ctx.fillStyle = oreColor;
+              this.ctx.beginPath();
+              this.ctx.arc(px, py, size, 0, Math.PI * 2);
+              this.ctx.fill();
+
+              // Draw highlights
+              this.ctx.fillStyle = highlightColor;
+              this.ctx.beginPath();
+              this.ctx.arc(px - size * 0.3, py - size * 0.3, size * 0.35, 0, Math.PI * 2);
+              this.ctx.fill();
+            }
+          } else if (type === "road") {
+            // Draw dusty gravel road with rounded organic borders
+            this.drawOrganicBlob(this.ctx, r, c, map, ts, "road", "#b88c60", 0.44); // edge
+            this.drawOrganicBlob(this.ctx, r, c, map, ts, "road", "#d5a980", 0.38); // body
+
+            // Draw pebbles/gravel chunks on the road
+            const seed = c * 83 + r * 19;
+            this.ctx.fillStyle = "#a87c50";
+            for (let i = 0; i < 3; i++) {
+              const ox = ts * 0.3 + this.seedRandom(seed + i * 3) * ts * 0.4;
+              const oy = ts * 0.3 + this.seedRandom(seed + i * 7) * ts * 0.4;
+              this.ctx.fillRect(tx + ox, ty + oy, 2, 2);
             }
           } else if (type === "fast_road") {
-            // High speed metal paved road (dark slate block with glowing speed arrows)
-            this.ctx.fillStyle = "#2c3e50";
-            this.ctx.fillRect(tx, ty, ts, ts);
-            this.ctx.strokeStyle = "#34495e";
-            this.ctx.lineWidth = 2;
-            this.ctx.strokeRect(tx + 2, ty + 2, ts - 4, ts - 4);
+            // High-speed futuristic metal road with glowing cyan chevrons/stripe
+            this.drawOrganicBlob(this.ctx, r, c, map, ts, "fast_road", "#1e272c", 0.48); // outer metal panel
+            this.drawOrganicBlob(this.ctx, r, c, map, ts, "fast_road", "#2c3e50", 0.42); // inner plate
 
-            // Glowing speed chevron arrows
-            this.ctx.strokeStyle = "rgba(52, 231, 228, 0.65)";
-            this.ctx.lineWidth = 2.5;
+            const cx = tx + ts / 2;
+            const cy = ty + ts / 2;
+
+            const checkType = (nr: number, nc: number) => {
+              if (nr < 0 || nr >= map.height || nc < 0 || nc >= map.width) return false;
+              return map.tiles[nr][nc] === "fast_road";
+            };
+
+            // Glowing neon stripe connecting to adjacent fast road tiles
+            this.ctx.save();
+            this.ctx.strokeStyle = "rgba(52, 231, 228, 0.85)";
+            this.ctx.shadowColor = "#34e7e4";
+            this.ctx.shadowBlur = 4;
+            this.ctx.lineWidth = 3;
+            this.ctx.lineCap = "round";
+
+            if (checkType(r - 1, c)) { // Up
+              this.ctx.beginPath();
+              this.ctx.moveTo(cx, cy);
+              this.ctx.lineTo(cx, ty);
+              this.ctx.stroke();
+            }
+            if (checkType(r + 1, c)) { // Down
+              this.ctx.beginPath();
+              this.ctx.moveTo(cx, cy);
+              this.ctx.lineTo(cx, ty + ts);
+              this.ctx.stroke();
+            }
+            if (checkType(r, c - 1)) { // Left
+              this.ctx.beginPath();
+              this.ctx.moveTo(cx, cy);
+              this.ctx.lineTo(tx, cy);
+              this.ctx.stroke();
+            }
+            if (checkType(r, c + 1)) { // Right
+              this.ctx.beginPath();
+              this.ctx.moveTo(cx, cy);
+              this.ctx.lineTo(tx + ts, cy);
+              this.ctx.stroke();
+            }
+
+            // Central glowing node
+            this.ctx.fillStyle = "#34e7e4";
             this.ctx.beginPath();
-            // Arrow 1
-            this.ctx.moveTo(tx + 22, ty + ts / 2 - 5);
-            this.ctx.lineTo(tx + 28, ty + ts / 2);
-            this.ctx.lineTo(tx + 22, ty + ts / 2 + 5);
-            // Arrow 2
-            this.ctx.moveTo(tx + 36, ty + ts / 2 - 5);
-            this.ctx.lineTo(tx + 42, ty + ts / 2);
-            this.ctx.lineTo(tx + 36, ty + ts / 2 + 5);
-            this.ctx.stroke();
+            this.ctx.arc(cx, cy, 3.5, 0, Math.PI * 2);
+            this.ctx.fill();
+            this.ctx.restore();
           }
 
           // Pathfinding weights overlay when using builder tools

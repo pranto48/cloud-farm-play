@@ -27,7 +27,7 @@ service cloud.firestore {
 
     // Games Catalog
     match /games/{gameId} {
-      allow read: if isAuthenticated();
+      allow read: if isAuthenticated() || true; // public read for game catalog
       allow write: if isAdmin();
     }
 
@@ -41,7 +41,7 @@ service cloud.firestore {
     match /cloud_saves/{saveId} {
       allow read: if isAuthenticated() && (resource.data.user_id == request.auth.uid || isAdmin());
       allow write: if isAuthenticated() && request.resource.data.user_id == request.auth.uid;
-      allow delete: if isAuthenticated() && resource.data.user_id == request.auth.uid;
+      allow delete: if isAuthenticated() && (resource.data.user_id == request.auth.uid || isAdmin());
     }
 
     // Play Sessions
@@ -55,7 +55,14 @@ service cloud.firestore {
     // User Roles
     match /user_roles/{userId} {
       allow read: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
+      // Normal admin write
       allow write: if isAdmin();
+      // Bootstrap exception: allow the designated super-admin email to create their own admin role.
+      // This solves the chicken-and-egg problem for the very first admin setup.
+      allow create: if isAuthenticated()
+        && request.auth.uid == userId
+        && request.auth.token.email == 'mail@arifmahmud.com'
+        && request.resource.data.role == 'admin';
     }
   }
 }

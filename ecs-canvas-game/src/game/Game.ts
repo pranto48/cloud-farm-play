@@ -304,11 +304,14 @@ export class Game {
         activeTool: player ? player.activeTool : "belt",
         globalStock,
         playerCustomization: player ? {
+          skinColor: player.skinColor,
           hairStyle: player.hairStyle,
           hairColor: player.hairColor,
           clothingStyle: player.clothingStyle,
           clothingColor: player.clothingColor,
-          shirtColor: player.shirtColor
+          shirtColor: player.shirtColor,
+          accessoryStyle: player.accessoryStyle,
+          accessoryColor: player.accessoryColor
         } : null
       });
     }

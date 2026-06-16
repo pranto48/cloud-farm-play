@@ -15,9 +15,7 @@ import {
   WorkerComponent,
 } from "../components/GameComponents";
 
-} from "../components/GameComponents";
-
-class CharacterTextureLoader {
+export class CharacterTextureLoader {
   private cache = new Map<string, HTMLCanvasElement | HTMLImageElement>();
 
   public getTexture(
@@ -829,6 +827,9 @@ export class RenderSystem extends System {
   private ctx: CanvasRenderingContext2D;
   public activeTool: string = "belt";
 
+  private textureLoader = new CharacterTextureLoader();
+  private lastDirections = new Map<string, "down" | "up" | "left" | "right">();
+
   // Camera coordinates for smooth follow
   public camX: number = 0;
   public camY: number = 0;
@@ -1402,7 +1403,8 @@ export class RenderSystem extends System {
         this.drawStructure(this.ctx, px, py, struct, entId);
       } else if (item.isWorker) {
         const wComp = world.getComponent(entId, WorkerComponent)!;
-        this.drawWorker(this.ctx, px, py, wComp);
+        const velComp = world.getComponent(entId, VelocityComponent)!;
+        this.drawWorker(this.ctx, px, py, wComp, entId, item.pos, velComp);
 
         const isBuilderTool = this.activeTool === "road" || this.activeTool === "fast_road" || this.activeTool === "storage_house" || this.activeTool === "worker_house";
         if (isBuilderTool && wComp.path && wComp.path.length > 0) {
@@ -1410,7 +1412,8 @@ export class RenderSystem extends System {
           this.drawWorkerPath(this.ctx, wComp, mapComp.tileSize);
         }
       } else if (entId === playerEntityId) {
-        this.drawPlayer(this.ctx, px, py, playerComp);
+        const velComp = world.getComponent(entId, VelocityComponent)!;
+        this.drawPlayer(this.ctx, px, py, playerComp, entId, item.pos, velComp);
       }
     }
 
@@ -1420,24 +1423,55 @@ export class RenderSystem extends System {
     this.drawFactoryHUD(width, height, playerInventory);
   }
 
-  private drawPlayer(ctx: CanvasRenderingContext2D, px: number, py: number, p: PlayerComponent | undefined): void {
+  private drawPlayer(
+    ctx: CanvasRenderingContext2D,
+    px: number,
+    py: number,
+    p: PlayerComponent | undefined,
+    entId: string,
+    pos: PositionComponent,
+    vel: VelocityComponent
+  ): void {
+    const skinColor = p?.skinColor || "pale";
     const hairStyle = p?.hairStyle || "spiky";
     const hairColor = p?.hairColor || "#f1c40f";
     const clothingStyle = p?.clothingStyle || "overalls";
     const clothingColor = p?.clothingColor || "#8a5a3b";
     const shirtColor = p?.shirtColor || "#c0392b";
+    const accessoryStyle = p?.accessoryStyle || "straw_hat";
+    const accessoryColor = p?.accessoryColor || "#f1c40f";
+
+    // Determine direction from velocity
+    let direction: "down" | "up" | "left" | "right" = "down";
+    if (vel.vx > 0) direction = "right";
+    else if (vel.vx < 0) direction = "left";
+    else if (vel.vy > 0) direction = "down";
+    else if (vel.vy < 0) direction = "up";
+    else direction = this.lastDirections.get(entId) || "down";
+
+    if (vel.vx !== 0 || vel.vy !== 0) {
+      this.lastDirections.set(entId, direction);
+    }
+
+    const isWalking = pos.moveDuration !== undefined && pos.moveDuration > 0;
+    const isWorking = false;
 
     this.drawLayeredCharacter(
       ctx,
       px,
       py,
+      skinColor,
       hairStyle,
       hairColor,
       clothingStyle,
       clothingColor,
       shirtColor,
+      accessoryStyle,
+      accessoryColor,
       null,
-      true
+      isWalking,
+      isWorking,
+      direction
     );
   }
 
@@ -1445,195 +1479,70 @@ export class RenderSystem extends System {
     ctx: CanvasRenderingContext2D,
     px: number,
     py: number,
+    skinColor: string,
     hairStyle: string,
     hairColor: string,
     clothingStyle: string,
     clothingColor: string,
     shirtColor: string,
+    accessoryStyle: string,
+    accessoryColor: string,
     toolType: string | null,
-    isPlayer: boolean
+    isWalking: boolean,
+    isWorking: boolean,
+    direction: "down" | "up" | "left" | "right"
   ): void {
+    // 1. Ground Shadow (vector)
     ctx.save();
-    ctx.translate(px, py);
-
-    // 1. Shadow
     ctx.fillStyle = "rgba(0,0,0,0.25)";
     ctx.beginPath();
-    ctx.ellipse(0, 12, isPlayer ? 10 : 8, 3.5, 0, 0, Math.PI * 2);
+    ctx.ellipse(px, py + 12, 10, 3.5, 0, 0, Math.PI * 2);
     ctx.fill();
+    ctx.restore();
 
-    // 2. Legs / Shoes
-    ctx.fillStyle = "#2c3e50"; // Dark pants/shoes
-    ctx.fillRect(-6, 8, 12, 4);
-
-    // 3. Body Clothing (Layered)
-    // Inner Shirt first
-    ctx.fillStyle = shirtColor;
-    ctx.fillRect(-5, -3, 10, 6);
-
-    // Outer clothing style
-    ctx.fillStyle = clothingColor;
-    if (clothingStyle === "overalls") {
-      // Straps and overalls chest
-      ctx.fillRect(-6, 3, 12, 6);
-      ctx.fillRect(-5, -1, 3, 4);
-      ctx.fillRect(2, -1, 3, 4);
-    } else if (clothingStyle === "jacket") {
-      // Open jacket sides
-      ctx.fillRect(-6, -2, 12, 11);
-      ctx.fillStyle = shirtColor; // Inner shirt strip visible
-      ctx.fillRect(-2, -2, 4, 11);
-    } else if (clothingStyle === "tunic") {
-      // Extended body
-      ctx.fillRect(-6, -2, 12, 13);
-    } else {
-      // Standard shirt
-      ctx.fillRect(-6, -2, 12, 11);
+    // Determine frame column
+    let frameCol = 0;
+    if (isWalking) {
+      frameCol = 1 + Math.floor((this.time * 8) % 2); // alternates between Walk 1 (1) and Walk 2 (2)
+    } else if (isWorking) {
+      frameCol = 3 + Math.floor((this.time * 6) % 2); // alternates between Work 1 (3) and Work 2 (4)
     }
 
-    // 4. Head / Skin
-    ctx.fillStyle = "#f5d0a9"; // skin tone
-    ctx.beginPath();
-    ctx.arc(0, -7, isPlayer ? 5.5 : 4.5, 0, Math.PI * 2);
-    ctx.fill();
+    // Determine direction row
+    let frameRow = 0; // Down
+    if (direction === "up") frameRow = 1;
+    else if (direction === "left") frameRow = 2;
+    else if (direction === "right") frameRow = 3;
 
-    // 5. Face / Eyes
-    ctx.fillStyle = "#2c3e50";
-    if (isPlayer) {
-      ctx.fillRect(-2.5, -8, 1, 1.5);
-      ctx.fillRect(1.5, -8, 1, 1.5);
-    } else {
-      ctx.fillRect(-2, -8, 1, 1);
-      ctx.fillRect(1, -8, 1, 1);
-    }
+    // Get layers from loader
+    const bodyTex = this.textureLoader.getTexture("body", skinColor, "", "");
+    const outfitTex = this.textureLoader.getTexture("outfit", clothingStyle, clothingColor, shirtColor);
+    const hairTex = this.textureLoader.getTexture("hair", hairStyle, hairColor, "");
+    const accessoryTex = this.textureLoader.getTexture("accessory", accessoryStyle, accessoryColor, "");
+    const toolTex = toolType ? this.textureLoader.getTexture("tool", toolType, "", "") : null;
 
-    // 6. Hair / Hats
-    ctx.fillStyle = hairColor;
-    if (hairStyle === "spiky") {
-      ctx.beginPath();
-      ctx.arc(0, -11, 4.5, Math.PI, 0, false);
-      ctx.fill();
-      // Spikes
-      ctx.beginPath();
-      ctx.moveTo(-5, -11);
-      ctx.lineTo(-4, -15);
-      ctx.lineTo(-2, -11);
-      ctx.lineTo(0, -16);
-      ctx.lineTo(2, -11);
-      ctx.lineTo(4, -15);
-      ctx.lineTo(5, -11);
-      ctx.fill();
-    } else if (hairStyle === "curly") {
-      // Multiple circles
-      ctx.beginPath();
-      ctx.arc(-3, -11, 3, 0, Math.PI * 2);
-      ctx.arc(3, -11, 3, 0, Math.PI * 2);
-      ctx.arc(0, -13, 3.5, 0, Math.PI * 2);
-      ctx.fill();
-    } else if (hairStyle === "bob") {
-      ctx.beginPath();
-      ctx.arc(0, -11, 5, Math.PI, 0, false);
-      ctx.fill();
-      // Side drapes
-      ctx.fillRect(-5.5, -11, 2, 7);
-      ctx.fillRect(3.5, -11, 2, 7);
-    } else if (hairStyle === "braids") {
-      ctx.beginPath();
-      ctx.arc(0, -11, 5, Math.PI, 0, false);
-      ctx.fill();
-      // Braids hanging
-      ctx.fillStyle = hairColor;
-      ctx.fillRect(-5, -8, 1.5, 9);
-      ctx.fillRect(3.5, -8, 1.5, 9);
-      ctx.fillStyle = "#e74c3c"; // red braid ties
-      ctx.fillRect(-5.5, 0, 2.5, 1.5);
-      ctx.fillRect(3, 0, 2.5, 1.5);
-    } else if (hairStyle === "short") {
-      ctx.beginPath();
-      ctx.arc(0, -11, 5, Math.PI, 0, false);
-      ctx.fill();
-    } else if (hairStyle === "none") {
-      // Bald, do nothing
-    }
+    // Draw in Z-index order: Base Body -> Outfit -> Hair -> Accessory -> Held Tool
+    const drawLayer = (tex: HTMLCanvasElement | HTMLImageElement | null) => {
+      if (!tex) return;
+      ctx.drawImage(
+        tex,
+        frameCol * 32,
+        frameRow * 32,
+        32,
+        32,
+        px - 16,
+        py - 12, // Pivot aligns with shadow at py + 12
+        32,
+        32
+      );
+    };
 
-    // Special: Player straw hat override
-    if (isPlayer) {
-      ctx.fillStyle = "#f1c40f";
-      ctx.beginPath();
-      ctx.ellipse(0, -13, 9, 3, 0, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = "#d4ac0d";
-      ctx.beginPath();
-      ctx.arc(0, -15, 4.5, Math.PI, 0, false);
-      ctx.fill();
-    }
-
-    // 7. Carry Tools (Axes, pickaxes, etc.)
-    if (toolType) {
-      ctx.save();
-      ctx.strokeStyle = "#7f8c8d";
-      ctx.lineWidth = 1.5;
-
-      if (toolType === "woodcutter") {
-        ctx.beginPath();
-        ctx.moveTo(-4, 2);
-        ctx.lineTo(-10, -6);
-        ctx.stroke();
-        
-        ctx.fillStyle = "#bdc3c7";
-        ctx.beginPath();
-        ctx.moveTo(-10, -6);
-        ctx.lineTo(-14, -8);
-        ctx.lineTo(-12, -12);
-        ctx.lineTo(-8, -10);
-        ctx.closePath();
-        ctx.fill();
-      } else if (toolType === "miner") {
-        ctx.beginPath();
-        ctx.moveTo(-4, 2);
-        ctx.lineTo(-10, -6);
-        ctx.stroke();
-
-        ctx.strokeStyle = "#7f8c8d";
-        ctx.lineWidth = 2.0;
-        ctx.beginPath();
-        ctx.arc(-13, -9, 5, -Math.PI / 4, Math.PI / 2);
-        ctx.stroke();
-      } else if (toolType === "farmer") {
-        ctx.beginPath();
-        ctx.moveTo(-4, 4);
-        ctx.lineTo(-12, -8);
-        ctx.stroke();
-
-        ctx.strokeStyle = "#f1c40f";
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.moveTo(-12, -8);
-        ctx.lineTo(-16, -11);
-        ctx.moveTo(-12, -8);
-        ctx.lineTo(-14, -13);
-        ctx.moveTo(-12, -8);
-        ctx.lineTo(-10, -11);
-        ctx.stroke();
-      } else if (toolType === "fisher") {
-        ctx.strokeStyle = "#8d6e63"; // wooden rod
-        ctx.lineWidth = 1.5;
-        ctx.beginPath();
-        ctx.moveTo(-4, 4);
-        ctx.lineTo(-15, -10);
-        ctx.stroke();
-
-        // Fishing line
-        ctx.strokeStyle = "#fff";
-        ctx.lineWidth = 0.5;
-        ctx.beginPath();
-        ctx.moveTo(-15, -10);
-        ctx.lineTo(-20, 4);
-        ctx.stroke();
-      }
-      ctx.restore();
-    }
-
+    ctx.save();
+    drawLayer(bodyTex);
+    drawLayer(outfitTex);
+    drawLayer(hairTex);
+    drawLayer(accessoryTex);
+    drawLayer(toolTex);
     ctx.restore();
   }
 
@@ -2393,24 +2302,54 @@ export class RenderSystem extends System {
     }
   }
 
-  private drawWorker(ctx: CanvasRenderingContext2D, px: number, py: number, w: WorkerComponent): void {
+  private drawWorker(
+    ctx: CanvasRenderingContext2D,
+    px: number,
+    py: number,
+    w: WorkerComponent,
+    entId: string,
+    pos: PositionComponent,
+    vel: VelocityComponent
+  ): void {
+    const skinColor = w.skinColor || "pale";
     const hairStyle = w.hairStyle || "short";
     const hairColor = w.hairColor || "#34495e";
     const clothingStyle = w.clothingStyle || "shirt";
     const clothingColor = w.clothingColor || "#e67e22";
     const shirtColor = w.shirtColor || "#2c3e50";
+    const accessoryStyle = w.accessoryStyle || "none";
+    const accessoryColor = w.accessoryColor || "#e74c3c";
+
+    let direction: "down" | "up" | "left" | "right" = "down";
+    if (vel.vx > 0) direction = "right";
+    else if (vel.vx < 0) direction = "left";
+    else if (vel.vy > 0) direction = "down";
+    else if (vel.vy < 0) direction = "up";
+    else direction = this.lastDirections.get(entId) || "down";
+
+    if (vel.vx !== 0 || vel.vy !== 0) {
+      this.lastDirections.set(entId, direction);
+    }
+
+    const isWalking = pos.moveDuration !== undefined && pos.moveDuration > 0;
+    const isWorking = w.state === "working";
 
     this.drawLayeredCharacter(
       ctx,
       px,
       py,
+      skinColor,
       hairStyle,
       hairColor,
       clothingStyle,
       clothingColor,
       shirtColor,
+      accessoryStyle,
+      accessoryColor,
       w.role,
-      false
+      isWalking,
+      isWorking,
+      direction
     );
 
     ctx.save();

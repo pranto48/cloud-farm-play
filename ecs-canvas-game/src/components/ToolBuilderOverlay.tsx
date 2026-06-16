@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   WorkerComponent,
   PositionComponent,
@@ -8,6 +8,7 @@ import {
 } from "../game/components/GameComponents";
 import { spawnWorker } from "../game/Spawner";
 import { toast } from "../game/utils/Toast";
+import { CharacterTextureLoader } from "../game/systems/RenderSystem";
 
 interface GameData {
   playerInventory: Record<string, number>;
@@ -15,16 +16,224 @@ interface GameData {
   activeTool: BuildTool;
   globalStock: Record<string, number>;
   playerCustomization?: {
+    skinColor: string;
     hairStyle: string;
     hairColor: string;
     clothingStyle: string;
     clothingColor: string;
     shirtColor: string;
+    accessoryStyle: string;
+    accessoryColor: string;
   } | null;
 }
 
+const SKINS = ["pale", "tanned", "dark", "green"];
+const HAIRSTYLES = ["spiky", "short", "bob", "curly", "braids", "none"];
+const OUTFITS = ["overalls", "shirt", "jacket", "tunic", "dress", "apron"];
+const ACCESSORIES = ["none", "straw_hat", "cap", "ribbon"];
+
+const HAIR_COLORS = [
+  { name: "Blond", value: "#f1c40f" },
+  { name: "Brown", value: "#8a5a3b" },
+  { name: "Black", value: "#2c3e50" },
+  { name: "Red", value: "#c0392b" },
+  { name: "Purple", value: "#9b59b6" },
+  { name: "Grey", value: "#7f8c8d" },
+  { name: "Pink", value: "#ff7979" },
+  { name: "Blue", value: "#3498db" },
+];
+
+const OUTFIT_COLORS = [
+  { name: "Brown", value: "#8a5a3b" },
+  { name: "Blue", value: "#3498db" },
+  { name: "Green", value: "#2ecc71" },
+  { name: "Red", value: "#e74c3c" },
+  { name: "Orange", value: "#e67e22" },
+  { name: "Purple", value: "#9b59b6" },
+  { name: "Yellow", value: "#f1c40f" },
+  { name: "Charcoal", value: "#2c3e50" },
+];
+
+const SHIRT_COLORS = [
+  { name: "Red", value: "#c0392b" },
+  { name: "Blue", value: "#3498db" },
+  { name: "Green", value: "#2ecc71" },
+  { name: "Yellow", value: "#f1c40f" },
+  { name: "Dark Grey", value: "#2c3e50" },
+  { name: "White", value: "#ecf0f1" },
+  { name: "Pink", value: "#ff7979" },
+  { name: "Purple", value: "#9b59b6" },
+];
+
+const ACCESSORY_COLORS = [
+  { name: "Yellow", value: "#f1c40f" },
+  { name: "Red", value: "#e74c3c" },
+  { name: "Blue", value: "#3498db" },
+  { name: "Green", value: "#2ecc71" },
+  { name: "Orange", value: "#e67e22" },
+  { name: "Charcoal", value: "#2c3e50" },
+  { name: "White", value: "#ffffff" },
+];
+
+const PreviewCanvas = ({ customization }: { customization: any }) => {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    ctx.imageSmoothingEnabled = false;
+
+    const loader = new CharacterTextureLoader();
+    let animationId: number;
+    let time = 0;
+
+    const tick = () => {
+      time += 0.016;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      const skinColor = customization?.skinColor || "pale";
+      const hairStyle = customization?.hairStyle || "spiky";
+      const hairColor = customization?.hairColor || "#f1c40f";
+      const clothingStyle = customization?.clothingStyle || "overalls";
+      const clothingColor = customization?.clothingColor || "#8a5a3b";
+      const shirtColor = customization?.shirtColor || "#c0392b";
+      const accessoryStyle = customization?.accessoryStyle || "none";
+      const accessoryColor = customization?.accessoryColor || "#e74c3c";
+
+      // 1. Draw Ground Shadow (vector)
+      ctx.save();
+      ctx.fillStyle = "rgba(0,0,0,0.15)";
+      ctx.beginPath();
+      ctx.ellipse(64, 96, 40, 14, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+
+      // Walking animation column cycle
+      const frameCol = 1 + Math.floor((time * 6) % 2);
+
+      // Walking direction row cycle (Down, Left, Up, Right)
+      const dirIndex = Math.floor((time / 1.5) % 4);
+      const directionRows = [0, 2, 1, 3];
+      const frameRow = directionRows[dirIndex];
+
+      const bodyTex = loader.getTexture("body", skinColor, "", "");
+      const outfitTex = loader.getTexture("outfit", clothingStyle, clothingColor, shirtColor);
+      const hairTex = loader.getTexture("hair", hairStyle, hairColor, "");
+      const accessoryTex = loader.getTexture("accessory", accessoryStyle, accessoryColor, "");
+
+      const drawLayer = (tex: any) => {
+        if (!tex) return;
+        ctx.drawImage(
+          tex,
+          frameCol * 32,
+          frameRow * 32,
+          32,
+          32,
+          0,
+          0,
+          128,
+          128
+        );
+      };
+
+      ctx.save();
+      drawLayer(bodyTex);
+      drawLayer(outfitTex);
+      drawLayer(hairTex);
+      drawLayer(accessoryTex);
+      ctx.restore();
+
+      animationId = requestAnimationFrame(tick);
+    };
+
+    tick();
+
+    return () => {
+      cancelAnimationFrame(animationId);
+    };
+  }, [customization]);
+
+  return (
+    <canvas
+      ref={canvasRef}
+      width={128}
+      height={128}
+      style={{
+        imageRendering: "pixelated",
+        background: "rgba(0,0,0,0.2)",
+        borderRadius: "12px",
+        border: "2px solid rgba(52, 231, 228, 0.3)",
+        boxShadow: "0 4px 12px rgba(0,0,0,0.4)",
+        display: "block",
+        margin: "0 auto 12px auto",
+      }}
+    />
+  );
+};
+
+const OptionSelector = ({ label, value, onPrev, onNext }: { label: string; value: string; onPrev: () => void; onNext: () => void }) => {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+      <span style={{ fontSize: "11px", fontWeight: "800", textTransform: "uppercase", color: "#34e7e4", letterSpacing: "0.5px" }}>{label}</span>
+      <div style={{ display: "flex", alignItems: "center", gap: "8px", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "8px", padding: "4px 8px" }}>
+        <button 
+          onClick={onPrev}
+          style={{ background: "none", border: "none", color: "#34e7e4", fontSize: "14px", fontWeight: "bold", cursor: "pointer", padding: "0 4px" }}
+        >
+          &lt;
+        </button>
+        <span style={{ flex: 1, textAlign: "center", fontSize: "12px", fontWeight: "bold", textTransform: "capitalize", color: "#fff" }}>
+          {value.replace("_", " ")}
+        </span>
+        <button 
+          onClick={onNext}
+          style={{ background: "none", border: "none", color: "#34e7e4", fontSize: "14px", fontWeight: "bold", cursor: "pointer", padding: "0 4px" }}
+        >
+          &gt;
+        </button>
+      </div>
+    </div>
+  );
+};
+
+const ColorSwatchGrid = ({ label, selectedColor, colors, onChange }: { label: string; selectedColor: string; colors: { name: string; value: string }[]; onChange: (val: string) => void }) => {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+      <span style={{ fontSize: "11px", fontWeight: "800", textTransform: "uppercase", color: "#34e7e4", letterSpacing: "0.5px" }}>{label}</span>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(8, 1fr)", gap: "6px" }}>
+        {colors.map((c) => {
+          const isSelected = selectedColor?.toLowerCase() === c.value.toLowerCase();
+          return (
+            <button
+              key={c.value}
+              onClick={() => onChange(c.value)}
+              title={c.name}
+              style={{
+                width: "20px",
+                height: "20px",
+                borderRadius: "50%",
+                background: c.value,
+                border: isSelected ? "2px solid #34e7e4" : "1.5px solid rgba(255,255,255,0.3)",
+                boxShadow: isSelected ? "0 0 6px #34e7e4" : "none",
+                cursor: "pointer",
+                padding: 0,
+                transition: "all 0.15s ease",
+                transform: isSelected ? "scale(1.15)" : "none",
+              }}
+            />
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
 export function ToolBuilderOverlay() {
-  const [activeTab, setActiveTab] = useState<"factory" | "town" | "research" | "customizer">("factory");
+  const [activeTab, setActiveTab] = useState<"factory" | "town" | "research">("factory");
+  const [isWardrobeOpen, setIsWardrobeOpen] = useState(false);
   const [gameData, setGameData] = useState<GameData>({
     playerInventory: {},
     unlockedTechs: {},

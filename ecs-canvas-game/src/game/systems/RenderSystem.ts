@@ -1471,6 +1471,22 @@ export class RenderSystem extends System {
       ctx.moveTo(-12, -8);
       ctx.lineTo(-10, -11);
       ctx.stroke();
+    } else if (w.role === "fisher") {
+      // Draw a fishing rod
+      ctx.strokeStyle = "#8d6e63"; // wooden rod
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(-4, 4);
+      ctx.lineTo(-15, -10);
+      ctx.stroke();
+
+      // Fishing line
+      ctx.strokeStyle = "#fff";
+      ctx.lineWidth = 0.5;
+      ctx.beginPath();
+      ctx.moveTo(-15, -10);
+      ctx.lineTo(-20, 4);
+      ctx.stroke();
     }
 
     // Draw held item on their head if carrying resources

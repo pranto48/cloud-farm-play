@@ -72,6 +72,8 @@ export class Game {
     this.initGame();
 
     window.addEventListener("resize", () => this.resizeCanvas());
+    
+    (window as any).gameInstance = this;
   }
 
   private resizeCanvas(): void {
@@ -276,6 +278,30 @@ export class Game {
 
     // Execute logic updates in World (ticks Input, AI, Movement, Collisions, Lifetimes, Particles)
     this.world.update(dt);
+
+    // Sync state with React UI
+    if ((window as any).onGameUpdate) {
+      const playerEnt = this.world.getEntitiesWith([PlayerComponent])[0];
+      const player = playerEnt ? this.world.getComponent(playerEnt, PlayerComponent) : null;
+      
+      const structures = this.world.getEntitiesWith([StructureComponent]);
+      const storageHouses = structures.filter(s => this.world.getComponent(s, StructureComponent)!.type === "storage_house");
+
+      const globalStock: Record<string, number> = { wood: 0, stone: 0, iron_plate: 0, coal: 0, food: 0, fish: 0 };
+      for (const sh of storageHouses) {
+        const struct = this.world.getComponent(sh, StructureComponent)!;
+        for (const [item, qty] of Object.entries(struct.inventory)) {
+          globalStock[item] = (globalStock[item] || 0) + qty;
+        }
+      }
+
+      (window as any).onGameUpdate({
+        playerInventory: player ? player.inventory : {},
+        unlockedTechs: player ? player.unlockedTechs : {},
+        activeTool: player ? player.activeTool : "belt",
+        globalStock,
+      });
+    }
   }
 
   private setupToolbar(): void {
@@ -397,7 +423,7 @@ export class Game {
     });
   }
 
-  private saveGame(): void {
+  public saveGame(): void {
     const player = this.world.getComponent(this.playerEntityId, PlayerComponent);
     if (!player) return;
 
@@ -796,7 +822,7 @@ export class Game {
     }
   }
 
-  private researchTechnology(techId: string): void {
+  public researchTechnology(techId: string): void {
     const playerEnt = this.world.getEntitiesWith([PlayerComponent])[0];
     if (!playerEnt) return;
     const player = this.world.getComponent(playerEnt, PlayerComponent)!;
@@ -861,6 +887,22 @@ export class Game {
 
     this.updateUnlockedButtonsVisibility(player.unlockedTechs);
     this.refreshTechTreeUI();
+    this.saveGame();
+  }
+
+  public changeActiveTool(tool: BuildTool): void {
+    this.activeTool = tool;
+    const player = this.world.getComponent(this.playerEntityId, PlayerComponent);
+    if (player) {
+      player.activeTool = tool;
+    }
+  }
+
+  public resetGame(): void {
+    console.log("[Save/Load] Game reset requested.");
+    localStorage.removeItem("arcane_survivors_save");
+    this.world.clear();
+    this.initializeFreshWorld();
     this.saveGame();
   }
 }

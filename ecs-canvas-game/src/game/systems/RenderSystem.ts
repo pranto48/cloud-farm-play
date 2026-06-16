@@ -1403,9 +1403,10 @@ export class RenderSystem extends System {
         const struct = world.getComponent(entId, StructureComponent)!;
         this.drawStructure(this.ctx, px, py, struct, entId);
       } else if (item.isWorker) {
-        const wComp = world.getComponent(entId, WorkerComponent)!;
+        const wComp   = world.getComponent(entId, WorkerComponent)!;
         const velComp = world.getComponent(entId, VelocityComponent)!;
-        this.drawWorker(this.ctx, px, py, wComp, entId, item.pos, velComp);
+        const animComp = world.getComponent(entId, AnimationComponent);
+        this.drawWorker(this.ctx, px, py, wComp, entId, item.pos, velComp, animComp ?? undefined);
 
         const isBuilderTool = this.activeTool === "road" || this.activeTool === "fast_road" || this.activeTool === "storage_house" || this.activeTool === "worker_house";
         if (isBuilderTool && wComp.path && wComp.path.length > 0) {
@@ -1413,8 +1414,9 @@ export class RenderSystem extends System {
           this.drawWorkerPath(this.ctx, wComp, mapComp.tileSize);
         }
       } else if (entId === playerEntityId) {
-        const velComp = world.getComponent(entId, VelocityComponent)!;
-        this.drawPlayer(this.ctx, px, py, playerComp, entId, item.pos, velComp);
+        const velComp  = world.getComponent(entId, VelocityComponent)!;
+        const animComp = world.getComponent(entId, AnimationComponent);
+        this.drawPlayer(this.ctx, px, py, playerComp, entId, item.pos, velComp, animComp ?? undefined);
       }
     }
 
@@ -1431,14 +1433,15 @@ export class RenderSystem extends System {
     p: PlayerComponent | undefined,
     entId: string,
     pos: PositionComponent,
-    vel: VelocityComponent
+    vel: VelocityComponent,
+    anim?: AnimationComponent
   ): void {
-    const skinColor = p?.skinColor || "pale";
-    const hairStyle = p?.hairStyle || "spiky";
-    const hairColor = p?.hairColor || "#f1c40f";
+    const skinColor     = p?.skinColor     || "pale";
+    const hairStyle     = p?.hairStyle     || "spiky";
+    const hairColor     = p?.hairColor     || "#f1c40f";
     const clothingStyle = p?.clothingStyle || "overalls";
     const clothingColor = p?.clothingColor || "#8a5a3b";
-    const shirtColor = p?.shirtColor || "#c0392b";
+    const shirtColor    = p?.shirtColor    || "#c0392b";
     const accessoryStyle = p?.accessoryStyle || "straw_hat";
     const accessoryColor = p?.accessoryColor || "#f1c40f";
 
@@ -1448,7 +1451,7 @@ export class RenderSystem extends System {
     else if (vel.vx < 0) direction = "left";
     else if (vel.vy > 0) direction = "down";
     else if (vel.vy < 0) direction = "up";
-    else direction = this.lastDirections.get(entId) || "down";
+    else direction = (anim?.direction) || this.lastDirections.get(entId) || "down";
 
     if (vel.vx !== 0 || vel.vy !== 0) {
       this.lastDirections.set(entId, direction);
@@ -1458,21 +1461,12 @@ export class RenderSystem extends System {
     const isWorking = false;
 
     this.drawLayeredCharacter(
-      ctx,
-      px,
-      py,
-      skinColor,
-      hairStyle,
-      hairColor,
-      clothingStyle,
-      clothingColor,
-      shirtColor,
-      accessoryStyle,
-      accessoryColor,
-      null,
-      isWalking,
-      isWorking,
-      direction
+      ctx, px, py,
+      skinColor, hairStyle, hairColor,
+      clothingStyle, clothingColor, shirtColor,
+      accessoryStyle, accessoryColor,
+      null, isWalking, isWorking, direction,
+      anim
     );
   }
 
@@ -2323,24 +2317,27 @@ export class RenderSystem extends System {
     w: WorkerComponent,
     entId: string,
     pos: PositionComponent,
-    vel: VelocityComponent
+    vel: VelocityComponent,
+    anim?: AnimationComponent
   ): void {
-    const skinColor    = w.skinColor    || "pale";
-    const hairStyle    = w.hairStyle    || "short";
-    const hairColor    = w.hairColor    || "#34495e";
+    const skinColor     = w.skinColor     || "pale";
+    const hairStyle     = w.hairStyle     || "short";
+    const hairColor     = w.hairColor     || "#34495e";
     const clothingStyle = w.clothingStyle || "shirt";
     const clothingColor = w.clothingColor || "#e67e22";
-    const shirtColor   = w.shirtColor   || "#2c3e50";
+    const shirtColor    = w.shirtColor    || "#2c3e50";
     const accessoryStyle = w.accessoryStyle || "none";
     const accessoryColor = w.accessoryColor || "#e74c3c";
 
-    let direction: "down" | "up" | "left" | "right" = "down";
-    if (vel.vx > 0) direction = "right";
-    else if (vel.vx < 0) direction = "left";
-    else if (vel.vy > 0) direction = "down";
-    else if (vel.vy < 0) direction = "up";
-    else direction = this.lastDirections.get(entId) || "down";
-
+    // Use direction from AnimationComponent if available (more accurate than velocity)
+    let direction: "down" | "up" | "left" | "right" = anim?.direction || "down";
+    if (!anim) {
+      if (vel.vx > 0) direction = "right";
+      else if (vel.vx < 0) direction = "left";
+      else if (vel.vy > 0) direction = "down";
+      else if (vel.vy < 0) direction = "up";
+      else direction = this.lastDirections.get(entId) || "down";
+    }
     if (vel.vx !== 0 || vel.vy !== 0) {
       this.lastDirections.set(entId, direction);
     }
@@ -2348,26 +2345,13 @@ export class RenderSystem extends System {
     const isWalking = pos.moveDuration !== undefined && pos.moveDuration > 0;
     const isWorking = w.state === "working";
 
-    // Retrieve per-entity AnimationComponent (set by AnimationSystem)
-    const anim = world_getAnimFor(entId);
-
     this.drawLayeredCharacter(
-      ctx,
-      px,
-      py,
-      skinColor,
-      hairStyle,
-      hairColor,
-      clothingStyle,
-      clothingColor,
-      shirtColor,
-      accessoryStyle,
-      accessoryColor,
-      w.role,
-      isWalking,
-      isWorking,
-      direction,
-      anim ?? undefined
+      ctx, px, py,
+      skinColor, hairStyle, hairColor,
+      clothingStyle, clothingColor, shirtColor,
+      accessoryStyle, accessoryColor,
+      w.role, isWalking, isWorking, direction,
+      anim
     );
 
     ctx.save();
@@ -2383,7 +2367,6 @@ export class RenderSystem extends System {
 
     // Draw Hunger Status Bar / Warning Bubble
     if (w.isStarving) {
-      // Blinking red warning bubble
       const pulse = Math.abs(Math.sin(this.time * 6.0));
       ctx.fillStyle = `rgba(231, 76, 60, ${0.45 + pulse * 0.55})`;
       ctx.beginPath();
@@ -2395,10 +2378,9 @@ export class RenderSystem extends System {
       ctx.textBaseline = "middle";
       ctx.fillText("STARVING", 0, -18);
     } else if (w.hunger < 25) {
-      // Low hunger warning bar
       ctx.fillStyle = "rgba(0,0,0,0.6)";
       ctx.fillRect(-10, -18, 20, 3);
-      ctx.fillStyle = "#e67e22"; // orange warning
+      ctx.fillStyle = "#e67e22";
       ctx.fillRect(-10, -18, 20 * (w.hunger / 100), 3);
     }
 

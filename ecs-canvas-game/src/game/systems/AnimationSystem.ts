@@ -2,11 +2,30 @@ import { System } from "../ecs/System";
 import { World } from "../ecs/World";
 import {
   AnimationComponent,
+  ANIMATION_CLIPS,
+  type AnimationClip,
   VelocityComponent,
   WorkerComponent,
-  PlayerComponent,
+  PositionComponent,
 } from "../components/GameComponents";
 
+/**
+ * SpriteAnimationManager — selects and advances per-entity AnimationClips.
+ *
+ * Pipeline (runs every game tick, before RenderSystem):
+ *  1. Read velocity vector → resolve facing direction (preserve last when idle)
+ *  2. Read WorkerComponent FSM state + role → choose the correct clip name:
+ *       miner  + "working"  → mine_{dir}
+ *       farmer + "working"  → farm_{dir}
+ *       fisher + "working"  → fish_{dir}
+ *       any    + moving     → walk_{dir}
+ *       any    + idle/etc   → idle_{dir}
+ *  3. Look up the AnimationClip from ANIMATION_CLIPS
+ *  4. Reset the frame counter when the clip changes (avoids ghost frames)
+ *  5. Advance the per-entity frame timer at the clip's own FPS
+ *  6. Write clipName / row / col back to AnimationComponent so
+ *     RenderSystem.drawLayeredCharacter() can do a spritesheet slice.
+ */
 export class AnimationSystem extends System {
   readonly requiredComponents = [AnimationComponent, VelocityComponent];
 
@@ -14,94 +33,117 @@ export class AnimationSystem extends System {
     const entities = world.getEntitiesWith(this.requiredComponents);
 
     for (const entity of entities) {
-      const anim = world.getComponent(entity, AnimationComponent)!;
-      const vel = world.getComponent(entity, VelocityComponent)!;
+      const anim   = world.getComponent(entity, AnimationComponent)!;
+      const vel    = world.getComponent(entity, VelocityComponent)!;
       const worker = world.getComponent(entity, WorkerComponent);
-      const player = world.getComponent(entity, PlayerComponent);
+      const pos    = world.getComponent(entity, PositionComponent);
 
-      // 1. Determine direction based on velocity vector
-      let direction = anim.direction || "down";
-      if (vel.vx > 0) {
-        direction = "right";
-      } else if (vel.vx < 0) {
-        direction = "left";
-      } else if (vel.vy > 0) {
-        direction = "down";
-      } else if (vel.vy < 0) {
-        direction = "up";
-      }
-      anim.direction = direction as "down" | "up" | "left" | "right";
-
+      // ── 1. Resolve facing direction from velocity ────────────────────────
       const isMoving = vel.vx !== 0 || vel.vy !== 0;
 
-      // 2. Map actions and states to animation tracks
-      let track: "idle" | "walk_up" | "walk_down" | "walk_side" | "work_up" | "work_down" | "work_side" = "idle";
+      if (isMoving) {
+        if (Math.abs(vel.vx) >= Math.abs(vel.vy)) {
+          anim.direction = vel.vx > 0 ? "right" : "left";
+        } else {
+          anim.direction = vel.vy > 0 ? "down" : "up";
+        }
+      }
+      // When stationary, anim.direction retains its last value (facing preserved)
+
+      const dir = anim.direction; // "down" | "up" | "left" | "right"
+
+      // ── 2. Select clip name based on entity state ───────────────────────
+      let clipName = `idle_${dir}`;
 
       if (worker) {
-        // Worker state machine action coupling
-        const isMining = worker.state === "working" && worker.role === "miner";
-        const isFarming = worker.state === "working" && worker.role === "farmer";
-        const isFishing = worker.state === "working" && worker.role === "fisher";
-        const isWoodcutting = worker.state === "working" && worker.role === "woodcutter";
+        // Worker FSM → animation coupling
+        const state = worker.state;
+        const role  = worker.role;
 
-        if (isMining || isFarming || isFishing || isWoodcutting) {
-          if (direction === "up") {
-            track = "work_up";
-          } else if (direction === "down") {
-            track = "work_down";
+        if (state === "working") {
+          if (role === "miner" || role === "woodcutter") {
+            clipName = `mine_${dir}`;
+          } else if (role === "farmer") {
+            clipName = `farm_${dir}`;
+          } else if (role === "fisher") {
+            clipName = `fish_${dir}`;
           } else {
-            track = "work_side";
+            clipName = `work_${dir}`;
           }
-        } else if (isMoving) {
-          if (direction === "up") {
-            track = "walk_up";
-          } else if (direction === "down") {
-            track = "walk_down";
+        } else if (state === "eating") {
+          clipName = "eat_down";
+        } else if (state === "sleeping") {
+          clipName = "sleep_down";
+        } else if (state === "starving") {
+          clipName = `idle_${dir}`; // starving → frozen idle
+        } else if (isMoving || state === "seeking" || state === "returning") {
+          // Also trigger walk when pos.moveDuration > 0 (lerp in progress)
+          const isLerping = pos && pos.moveDuration > 0;
+          if (isMoving || isLerping) {
+            clipName = `walk_${dir}`;
           } else {
-            track = "walk_side";
+            clipName = `idle_${dir}`;
           }
         } else {
-          track = "idle";
+          clipName = `idle_${dir}`;
         }
       } else {
-        // Player/other default entity mapping
-        if (isMoving) {
-          if (direction === "up") {
-            track = "walk_up";
-          } else if (direction === "down") {
-            track = "walk_down";
-          } else {
-            track = "walk_side";
-          }
+        // Player / generic entity
+        const isLerping = pos && pos.moveDuration > 0;
+        if (isMoving || isLerping) {
+          clipName = `walk_${dir}`;
         } else {
-          track = "idle";
+          clipName = `idle_${dir}`;
         }
       }
 
-      // 3. Configure spritesheet slicing track configuration
-      anim.currentTrack = track as any;
+      // ── 3. Look up the clip ─────────────────────────────────────────────
+      const clip: AnimationClip | undefined = ANIMATION_CLIPS[clipName]
+        ?? ANIMATION_CLIPS[`idle_${dir}`]
+        ?? ANIMATION_CLIPS["idle_down"];
 
-      if (track === "idle") {
-        anim.totalFrames = 1;
-        anim.animationSpeed = 0;
+      // ── 4. Reset timer & frame if the clip changed ──────────────────────
+      if (anim.clipName !== clipName) {
+        anim.clipName = clipName;
+        anim.row      = clip.row;
+        anim.col      = clip.startCol;
+        anim.timer    = 0;
+
+        // Keep legacy fields in sync for serialiser / debug tools
+        anim.currentTrack = clipName;
         anim.currentFrame = 0;
-        anim.timer = 0;
-      } else if (track.startsWith("walk_")) {
-        anim.totalFrames = 2; // 2 frames walking cycle
-        anim.animationSpeed = 8; // 8 FPS
-      } else if (track.startsWith("work_")) {
-        anim.totalFrames = 2; // 2 frames work action swing/loop
-        anim.animationSpeed = 6; // 6 FPS
+        anim.totalFrames  = clip.endCol - clip.startCol + 1;
+        anim.animationSpeed = clip.fps;
+      } else {
+        // Ensure row is always current (direction can change without clip name change
+        // only when both roles and direction share the same clip key)
+        anim.row = clip.row;
       }
 
-      // 4. Update the frame loop timer
-      if (anim.animationSpeed > 0) {
+      // ── 5. Advance the per-entity frame timer ───────────────────────────
+      if (clip.fps > 0) {
         anim.timer += dt;
-        if (anim.timer >= 1 / anim.animationSpeed) {
-          anim.timer = 0;
-          anim.currentFrame = (anim.currentFrame + 1) % anim.totalFrames;
+        const frameDuration = 1 / clip.fps;
+
+        if (anim.timer >= frameDuration) {
+          anim.timer -= frameDuration;
+
+          // Advance column, wrapping within [startCol, endCol]
+          anim.col++;
+          if (anim.col > clip.endCol) {
+            anim.col = clip.loop ? clip.startCol : clip.endCol;
+          }
+
+          // Legacy sync
+          anim.currentFrame = anim.col - clip.startCol;
         }
+      } else {
+        // Static clip — always hold startCol
+        anim.col   = clip.startCol;
+        anim.timer = 0;
+        anim.currentFrame = 0;
       }
     }
   }
 }
+

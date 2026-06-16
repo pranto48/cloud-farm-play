@@ -92,16 +92,19 @@ export function findPath(
     return null;
   }
 
+  const endWeight = map.weights[end.r]?.[end.c] ?? Infinity;
+  const isGoalNonWalkable = endWeight === Infinity;
+
+  // If goal is non-walkable and we are already adjacent, path is just [start]
+  if (isGoalNonWalkable && Math.abs(start.c - end.c) + Math.abs(start.r - end.r) === 1) {
+    return [start];
+  }
+
   if (start.r === end.r && start.c === end.c) {
     return [start];
   }
 
-  const endTile = map.tiles[end.r][end.c];
-  if (endTile === "water" || endTile === "stone") {
-    return null;
-  }
-
-  const openSet = new MinHeap<PathNode>((a, b) => a.f - b.f);
+  const openSet = new MinHeap<PathNode>((a, b) => a.f - b.f || a.h - b.h);
   const closedSet = new Uint8Array(map.width * map.height);
   const openGValues = new Float32Array(map.width * map.height);
   openGValues.fill(Infinity);
@@ -125,14 +128,29 @@ export function findPath(
   while (openSet.size() > 0) {
     const curr = openSet.pop()!;
 
-    if (curr.r === end.r && curr.c === end.c) {
-      const path: { r: number; c: number }[] = [];
-      let temp: PathNode | null = curr;
-      while (temp !== null) {
-        path.push({ r: temp.r, c: temp.c });
-        temp = temp.parent;
+    // Check termination
+    if (isGoalNonWalkable) {
+      // Terminate when adjacent to non-walkable goal
+      if (Math.abs(curr.c - end.c) + Math.abs(curr.r - end.r) === 1) {
+        const path: { r: number; c: number }[] = [];
+        let temp: PathNode | null = curr;
+        while (temp !== null) {
+          path.push({ r: temp.r, c: temp.c });
+          temp = temp.parent;
+        }
+        return path.reverse();
       }
-      return path.reverse();
+    } else {
+      // Standard target reach
+      if (curr.r === end.r && curr.c === end.c) {
+        const path: { r: number; c: number }[] = [];
+        let temp: PathNode | null = curr;
+        while (temp !== null) {
+          path.push({ r: temp.r, c: temp.c });
+          temp = temp.parent;
+        }
+        return path.reverse();
+      }
     }
 
     const currIdx = curr.r * map.width + curr.c;
@@ -151,12 +169,12 @@ export function findPath(
         continue;
       }
 
-      const tileType = map.tiles[nr][nc];
-      if (tileType === "water" || tileType === "stone") {
+      const weight = map.weights[nr][nc];
+      // Skip pathing through Infinity weight obstacles
+      if (weight === Infinity) {
         continue;
       }
 
-      const weight = tileType === "road" ? 0.5 : 1.0;
       const gScore = curr.g + weight;
       if (gScore >= openGValues[nIdx]) {
         continue;

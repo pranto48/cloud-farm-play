@@ -251,13 +251,22 @@ export class RenderSystem extends System {
             // Draw deep water body
             this.drawOrganicBlob(this.ctx, r, c, map, ts, "water", "#3b6e8c", 0.62);
 
-            // Wave shimmers in center
-            const wave = Math.sin(this.time * 2.0 + c * 0.5) * 3;
+            // Crisp 3-frame flow animation loop (integer-snapped offsets to preserve pixelated rendering)
+            const waterFrame = Math.floor((this.time * 3) % 3);
             const cx = tx + ts / 2;
             const cy = ty + ts / 2;
             this.ctx.fillStyle = "#5d97bc";
-            this.ctx.fillRect(cx - 16, cy - 8 + wave, 12, 1.5);
-            this.ctx.fillRect(cx + 4, cy + 12 - wave, 16, 1.5);
+
+            if (waterFrame === 0) {
+              this.ctx.fillRect(Math.round(cx - 16), Math.round(cy - 8), 12, 2);
+              this.ctx.fillRect(Math.round(cx + 4), Math.round(cy + 12), 16, 2);
+            } else if (waterFrame === 1) {
+              this.ctx.fillRect(Math.round(cx - 12), Math.round(cy - 6), 12, 2);
+              this.ctx.fillRect(Math.round(cx + 8), Math.round(cy + 14), 16, 2);
+            } else {
+              this.ctx.fillRect(Math.round(cx - 8), Math.round(cy - 4), 12, 2);
+              this.ctx.fillRect(Math.round(cx + 12), Math.round(cy + 16), 16, 2);
+            }
           } else if (type === "stone") {
             // Draw drop shadow
             this.drawOrganicBlob(this.ctx, r, c, map, ts, "stone", "rgba(0, 0, 0, 0.2)", 0.66, 0, 4);
@@ -644,6 +653,7 @@ export class RenderSystem extends System {
       case "science_pack": symbol = "🧪"; color = "#3498db"; break;
       case "wheat": symbol = "🌾"; color = "#f1c40f"; break;
       case "food": symbol = "🍞"; color = "#e67e22"; break;
+      case "fish": symbol = "🐟"; color = "#3498db"; break;
     }
 
     ctx.fillStyle = color;
@@ -1175,8 +1185,8 @@ export class RenderSystem extends System {
         break;
       }
       case "crop": {
-        // Draw soil patch under the crop
-        ctx.fillStyle = "#5c4033"; // rich brown soil
+        // Draw soil patch under the crop (dark brown if watered, dry brown if dry)
+        ctx.fillStyle = s.isWatered ? "#3e2723" : "#8d6e63";
         ctx.beginPath();
         ctx.ellipse(0, 10, 16, 6, 0, 0, Math.PI * 2);
         ctx.fill();
@@ -1262,6 +1272,12 @@ export class RenderSystem extends System {
           ctx.font = "8px sans-serif";
           ctx.textAlign = "center";
           ctx.fillText(`${Math.floor(s.cropGrowth * 100)}%`, 0, -28);
+
+          if (!s.isWatered) {
+            ctx.fillStyle = "#3498db";
+            ctx.font = "10px sans-serif";
+            ctx.fillText("💧", 0, -38);
+          }
         } else {
           ctx.fillStyle = "#f1c40f";
           ctx.font = "bold 8px sans-serif";

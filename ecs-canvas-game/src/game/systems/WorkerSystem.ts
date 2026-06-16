@@ -34,11 +34,14 @@ export class WorkerSystem extends System {
       const sc = world.getComponent(ent, StructureComponent)!;
       if (sc.type === "crop") {
         if (sc.cropGrowth < 1.0) {
-          sc.cropGrowth += dt / 8.0; // Grows fully in 8 seconds
+          // Crops only grow if they have been watered
+          if (sc.isWatered) {
+            sc.cropGrowth += dt / 8.0; // Grows fully in 8 seconds
+          }
           if (sc.cropGrowth > 1.0) sc.cropGrowth = 1.0;
 
           // Grow particles
-          if (Math.random() < 0.04) {
+          if (sc.isWatered && Math.random() < 0.04) {
             const pos = world.getComponent(ent, PositionComponent)!;
             spawnParticle(world, pos.x + (Math.random() * 8 - 4), pos.y + (Math.random() * 8 - 4), "#2ecc71", 2.0);
           }
@@ -52,55 +55,73 @@ export class WorkerSystem extends System {
       const vel = world.getComponent(entity, VelocityComponent)!;
 
       // ==========================================
-      // 2. HUNGER DECAY & STARVATION SYSTEM
+      // 2. HUNGER & ENERGY DECAY SYSTEMS
       // ==========================================
-      // Decays by 1.67 points per second (reaches 0 in 60s)
+      // Hunger decays by 1.67 points per second (reaches 0 in 60s)
       wComp.hunger -= 1.67 * dt;
       if (wComp.hunger < 0) wComp.hunger = 0;
 
-      // Critical hunger threshold check: if hunger < 25, seek food at Storage House
-      if (wComp.hunger < 25 && wComp.state !== "moving_to_eat" && wComp.state !== "eating") {
+      // Energy decays by 0.83 points per second (reaches 0 in 120s)
+      wComp.energy -= 0.83 * dt;
+      if (wComp.energy < 0) wComp.energy = 0;
+
+      // Starving state triggers at hunger = 0
+      if (wComp.hunger <= 0) {
+        wComp.isStarving = true;
+        wComp.state = "starving";
+        vel.vx = 0;
+        vel.vy = 0;
+      }
+
+      // Check for hunger interrupts
+      if (wComp.hunger < 25 && wComp.state !== "eating" && wComp.state !== "starving") {
         const storageHouses = structures.filter(st => {
           const sc = world.getComponent(st, StructureComponent)!;
           return sc.type === "storage_house";
         });
 
         if (storageHouses.length > 0) {
-          // Store previous state to resume after eating
-          wComp.previousState = wComp.state;
-          wComp.state = "moving_to_eat";
-          wComp.path = [];
-          wComp.pathIndex = 0;
-          vel.vx = 0;
-          vel.vy = 0;
+          if (wComp.state !== "eating") {
+            wComp.previousState = wComp.state as any;
+            wComp.state = "eating";
+            wComp.path = [];
+            wComp.pathIndex = 0;
+            vel.vx = 0;
+            vel.vy = 0;
+          }
         }
       }
 
-      // Starving state triggers at hunger = 0
-      if (wComp.hunger <= 0) {
-        wComp.isStarving = true;
+      // Check for energy/sleep interrupts
+      if (wComp.energy < 15 && wComp.state !== "eating" && wComp.state !== "starving" && wComp.state !== "sleeping") {
+        wComp.previousState = wComp.state as any;
+        wComp.state = "sleeping";
+        wComp.path = [];
+        wComp.pathIndex = 0;
+        vel.vx = 0;
+        vel.vy = 0;
       }
 
-      if (wComp.isStarving) {
+      // Starving state behaviors
+      if (wComp.state === "starving") {
         vel.vx = 0;
         vel.vy = 0;
 
-        // Verify if food exists in any Storage House
+        // Verify if food is available in any Storage House
         const storageWithFood = structures.filter(st => {
           const sc = world.getComponent(st, StructureComponent)!;
-          return sc.type === "storage_house" && (sc.inventory["food"] || 0) > 0;
+          return sc.type === "storage_house" && ((sc.inventory["food"] || 0) > 0 || (sc.inventory["fish"] || 0) > 0);
         });
 
-        if (storageWithFood.length === 0) {
+        if (storageWithFood.length > 0) {
+          // Food is available! Seek it
+          wComp.isStarving = false;
+          wComp.state = "eating";
+          wComp.path = [];
+          wComp.pathIndex = 0;
+        } else {
           // Starving: Freeze completely
           continue;
-        } else {
-          // Food is available! Seek it
-          if (wComp.state !== "moving_to_eat") {
-            wComp.state = "moving_to_eat";
-            wComp.path = [];
-            wComp.pathIndex = 0;
-          }
         }
       }
 
@@ -127,159 +148,423 @@ export class WorkerSystem extends System {
         }
 
         case "seeking": {
-          vel.vx = 0;
-          vel.vy = 0;
+          // Seek and move to target if path is empty
+          if (wComp.path.length === 0) {
+            vel.vx = 0;
+            vel.vy = 0;
 
-          // FARMER ROLE SPECIFIC SEEKING
-          if (wComp.role === "farmer") {
-            // Priority 1: Seek closest fully-grown crop
-            const grownCrops = structures.filter(st => {
-              const sc = world.getComponent(st, StructureComponent)!;
-              return sc.type === "crop" && sc.cropGrowth >= 1.0;
-            });
-
-            let targetCropEntity: string | null = null;
-            let minCropDist = Infinity;
-
-            for (const cEnt of grownCrops) {
-              const cStruct = world.getComponent(cEnt, StructureComponent)!;
-              
-              // Ensure no other worker is currently routing to harvest this crop
-              const isTargeted = workerEntities.some(oEnt => {
-                if (oEnt === entity) return false;
-                const oc = world.getComponent(oEnt, WorkerComponent)!;
-                if (oc.state === "moving" && oc.path && oc.path.length > 0) {
-                  const endNode = oc.path[oc.path.length - 1];
-                  return endNode[0] === cStruct.gridY && endNode[1] === cStruct.gridX;
-                }
-                return false;
+            if (wComp.role === "farmer") {
+              // Priority 1: Seek closest fully-grown crop
+              const grownCrops = structures.filter(st => {
+                const sc = world.getComponent(st, StructureComponent)!;
+                return sc.type === "crop" && sc.cropGrowth >= 1.0;
               });
 
-              if (!isTargeted) {
+              let targetCropEntity: string | null = null;
+              let minCropDist = Infinity;
+
+              for (const cEnt of grownCrops) {
+                const cStruct = world.getComponent(cEnt, StructureComponent)!;
                 const dist = Math.abs(cStruct.gridY - row) + Math.abs(cStruct.gridX - col);
                 if (dist < minCropDist) {
                   minCropDist = dist;
                   targetCropEntity = cEnt;
                 }
               }
-            }
 
-            if (targetCropEntity) {
-              const sc = world.getComponent(targetCropEntity, StructureComponent)!;
-              const path = map.findPath(row, col, sc.gridY, sc.gridX);
-              if (path && path.length > 0) {
-                wComp.path = path;
-                wComp.pathIndex = 0;
-                wComp.state = "moving";
-                break;
+              if (targetCropEntity) {
+                const sc = world.getComponent(targetCropEntity, StructureComponent)!;
+                const path = map.findPath(row, col, sc.gridY, sc.gridX);
+                if (path && path.length > 0) {
+                  wComp.path = path;
+                  wComp.pathIndex = 0;
+                  break;
+                }
               }
-            }
 
-            // Priority 2: Seek empty grass tile near their cottage to plant
-            const cottage = structures.find(st => st === wComp.houseEntityId);
-            if (cottage) {
-              const houseStruct = world.getComponent(cottage, StructureComponent)!;
-              const hX = houseStruct.gridX;
-              const hY = houseStruct.gridY;
+              // Priority 2: Seek closest unwatered crop
+              const dryCrops = structures.filter(st => {
+                const sc = world.getComponent(st, StructureComponent)!;
+                return sc.type === "crop" && sc.cropGrowth < 1.0 && !sc.isWatered;
+              });
 
-              let plantR = -1;
-              let plantC = -1;
-              let minPlantDist = Infinity;
+              let targetDryEntity: string | null = null;
+              let minDryDist = Infinity;
 
-              // Scan 6-tile radius
-              for (let dr = -6; dr <= 6; dr++) {
-                for (let dc = -6; dc <= 6; dc++) {
-                  const r = hY + dr;
-                  const c = hX + dc;
+              for (const dEnt of dryCrops) {
+                const dStruct = world.getComponent(dEnt, StructureComponent)!;
+                const dist = Math.abs(dStruct.gridY - row) + Math.abs(dStruct.gridX - col);
+                if (dist < minDryDist) {
+                  minDryDist = dist;
+                  targetDryEntity = dEnt;
+                }
+              }
 
-                  if (r >= 0 && r < map.height && c >= 0 && c < map.width) {
-                    if (map.tiles[r][c] === "grass") {
-                      // Check unoccupied
-                      const occupied = structures.some(st => {
-                        const sc = world.getComponent(st, StructureComponent)!;
-                        return sc.gridX === c && sc.gridY === r;
-                      });
+              if (targetDryEntity) {
+                const sc = world.getComponent(targetDryEntity, StructureComponent)!;
+                const path = map.findPath(row, col, sc.gridY, sc.gridX);
+                if (path && path.length > 0) {
+                  wComp.path = path;
+                  wComp.pathIndex = 0;
+                  break;
+                }
+              }
 
-                      if (!occupied) {
-                        const dist = Math.abs(r - row) + Math.abs(c - col);
-                        if (dist < minPlantDist) {
-                          minPlantDist = dist;
-                          plantR = r;
-                          plantC = c;
+              // Priority 3: Seek empty grass tile near cottage to plant seeds
+              const cottage = structures.find(st => st === wComp.houseEntityId);
+              if (cottage) {
+                const houseStruct = world.getComponent(cottage, StructureComponent)!;
+                const hX = houseStruct.gridX;
+                const hY = houseStruct.gridY;
+
+                let plantR = -1;
+                let plantC = -1;
+                let minPlantDist = Infinity;
+
+                for (let dr = -6; dr <= 6; dr++) {
+                  for (let dc = -6; dc <= 6; dc++) {
+                    const r = hY + dr;
+                    const c = hX + dc;
+
+                    if (r >= 0 && r < map.height && c >= 0 && c < map.width) {
+                      if (map.tiles[r][c] === "grass") {
+                        const occupied = structures.some(st => {
+                          const sc = world.getComponent(st, StructureComponent)!;
+                          return sc.gridX === c && sc.gridY === r;
+                        });
+
+                        if (!occupied) {
+                          const dist = Math.abs(r - row) + Math.abs(c - col);
+                          if (dist < minPlantDist) {
+                            minPlantDist = dist;
+                            plantR = r;
+                            plantC = c;
+                          }
                         }
                       }
                     }
                   }
                 }
-              }
 
-              if (plantR !== -1 && plantC !== -1) {
-                const path = map.findPath(row, col, plantR, plantC);
-                if (path && path.length > 0) {
-                  wComp.path = path;
-                  wComp.pathIndex = 0;
-                  wComp.state = "moving";
+                if (plantR !== -1 && plantC !== -1) {
+                  const path = map.findPath(row, col, plantR, plantC);
+                  if (path && path.length > 0) {
+                    wComp.path = path;
+                    wComp.pathIndex = 0;
+                  } else {
+                    wComp.state = "idle";
+                  }
                 } else {
                   wComp.state = "idle";
                 }
               } else {
                 wComp.state = "idle";
               }
-            } else {
-              wComp.state = "idle";
-            }
-          } else {
-            // WOODCUTTER & MINER SEEKING
-            let targetRow = -1;
-            let targetCol = -1;
-            let minDist = Infinity;
+            } else if (wComp.role === "miner") {
+              // Seeks nearest mining resource tile: iron, copper, coal, or stone
+              let targetRow = -1;
+              let targetCol = -1;
+              let minDist = Infinity;
 
-            for (let r = 0; r < map.height; r++) {
-              for (let c = 0; c < map.width; c++) {
-                const tile = map.tiles[r][c];
-                let isMatch = false;
+              for (let r = 0; r < map.height; r++) {
+                for (let c = 0; c < map.width; c++) {
+                  const tile = map.tiles[r][c];
+                  const isMatch = tile === "iron" || tile === "copper" || tile === "coal" || tile === "stone";
 
-                if (wComp.role === "woodcutter") {
-                  isMatch = tile === "forest";
-                } else if (wComp.role === "miner") {
-                  isMatch = tile === "iron" || tile === "copper" || tile === "coal";
-                }
+                  if (isMatch) {
+                    const isOccupied = structures.some(st => {
+                      const sc = world.getComponent(st, StructureComponent)!;
+                      return sc.gridX === c && sc.gridY === r && sc.type !== "crop";
+                    });
+                    if (isOccupied) continue;
 
-                if (isMatch) {
-                  const isOccupied = structures.some(st => {
-                    const sc = world.getComponent(st, StructureComponent)!;
-                    return sc.gridX === c && sc.gridY === r;
-                  });
-                  if (isOccupied) continue;
-
-                  const dist = Math.abs(r - row) + Math.abs(c - col);
-                  if (dist < minDist) {
-                    minDist = dist;
-                    targetRow = r;
-                    targetCol = c;
+                    const dist = Math.abs(r - row) + Math.abs(c - col);
+                    if (dist < minDist) {
+                      minDist = dist;
+                      targetRow = r;
+                      targetCol = c;
+                    }
                   }
                 }
               }
-            }
 
-            if (targetRow !== -1 && targetCol !== -1) {
-              const path = map.findPath(row, col, targetRow, targetCol);
-              if (path && path.length > 0) {
-                wComp.path = path;
-                wComp.pathIndex = 0;
-                wComp.state = "moving";
+              if (targetRow !== -1 && targetCol !== -1) {
+                const path = map.findPath(row, col, targetRow, targetCol);
+                if (path && path.length > 0) {
+                  wComp.path = path;
+                  wComp.pathIndex = 0;
+                } else {
+                  wComp.state = "idle";
+                }
               } else {
                 wComp.state = "idle";
               }
-            } else {
-              wComp.state = "idle";
+            } else if (wComp.role === "fisher") {
+              // Seeks nearest water tile to fish
+              let targetRow = -1;
+              let targetCol = -1;
+              let minDist = Infinity;
+
+              for (let r = 0; r < map.height; r++) {
+                for (let c = 0; c < map.width; c++) {
+                  if (map.tiles[r][c] === "water") {
+                    const dist = Math.abs(r - row) + Math.abs(c - col);
+                    if (dist < minDist) {
+                      minDist = dist;
+                      targetRow = r;
+                      targetCol = c;
+                    }
+                  }
+                }
+              }
+
+              if (targetRow !== -1 && targetCol !== -1) {
+                const path = map.findPath(row, col, targetRow, targetCol);
+                if (path && path.length > 0) {
+                  wComp.path = path;
+                  wComp.pathIndex = 0;
+                } else {
+                  wComp.state = "idle";
+                }
+              } else {
+                wComp.state = "idle";
+              }
+            } else if (wComp.role === "woodcutter") {
+              // Woodcutter fallback
+              let targetRow = -1;
+              let targetCol = -1;
+              let minDist = Infinity;
+
+              for (let r = 0; r < map.height; r++) {
+                for (let c = 0; c < map.width; c++) {
+                  if (map.tiles[r][c] === "forest") {
+                    const dist = Math.abs(r - row) + Math.abs(c - col);
+                    if (dist < minDist) {
+                      minDist = dist;
+                      targetRow = r;
+                      targetCol = c;
+                    }
+                  }
+                }
+              }
+
+              if (targetRow !== -1 && targetCol !== -1) {
+                const path = map.findPath(row, col, targetRow, targetCol);
+                if (path && path.length > 0) {
+                  wComp.path = path;
+                  wComp.pathIndex = 0;
+                } else {
+                  wComp.state = "idle";
+                }
+              } else {
+                wComp.state = "idle";
+              }
+            }
+          }
+
+          // Walk along path if path exists
+          if (wComp.path.length > 0) {
+            this.walkPath(pos, vel, wComp, map, ts, dt, () => {
+              vel.vx = 0;
+              vel.vy = 0;
+              wComp.path = [];
+              wComp.pathIndex = 0;
+
+              const finalCol = Math.floor(pos.x / ts);
+              const finalRow = Math.floor(pos.y / ts);
+              
+              if (wComp.role === "farmer") {
+                const crop = structures.find(st => {
+                  const sc = world.getComponent(st, StructureComponent)!;
+                  return sc.type === "crop" && Math.abs(sc.gridX - finalCol) <= 1 && Math.abs(sc.gridY - finalRow) <= 1;
+                });
+                
+                if (crop) {
+                  const sc = world.getComponent(crop, StructureComponent)!;
+                  if (sc.cropGrowth >= 1.0) {
+                    wComp.timer = 2.0; // 2s harvest
+                  } else if (!sc.isWatered) {
+                    wComp.timer = 1.0; // 1s watering
+                  }
+                } else {
+                  wComp.timer = 1.0; // 1s plant
+                }
+              } else if (wComp.role === "miner") {
+                wComp.timer = 2.0; // 2s mine cycle
+              } else if (wComp.role === "fisher") {
+                wComp.timer = 2.0; // 2s fish cycle
+              } else if (wComp.role === "woodcutter") {
+                wComp.timer = 2.0;
+              }
+              wComp.state = "working";
+            });
+          }
+          break;
+        }
+
+        case "working": {
+          vel.vx = 0;
+          vel.vy = 0;
+          wComp.timer -= dt;
+
+          if (Math.random() < 0.25) {
+            let pColor = "#bdc3c7";
+            if (wComp.role === "woodcutter") pColor = "#8a5a3b";
+            else if (wComp.role === "miner") pColor = "#f1c40f";
+            else if (wComp.role === "farmer") pColor = "#2ecc71";
+            else if (wComp.role === "fisher") pColor = "#3498db";
+            spawnParticle(world, pos.x, pos.y, pColor, 2.5);
+          }
+
+          if (wComp.timer <= 0) {
+            const finalCol = Math.floor(pos.x / ts);
+            const finalRow = Math.floor(pos.y / ts);
+
+            if (wComp.role === "farmer") {
+              const crop = structures.find(st => {
+                const sc = world.getComponent(st, StructureComponent)!;
+                return sc.type === "crop" && Math.abs(sc.gridX - finalCol) <= 1 && Math.abs(sc.gridY - finalRow) <= 1;
+              });
+
+              if (crop) {
+                const sc = world.getComponent(crop, StructureComponent)!;
+                if (sc.cropGrowth >= 1.0) {
+                  // Harvest wheat -> yield food
+                  wComp.heldItem = "food";
+                  world.destroyEntity(crop);
+                  wComp.state = "returning";
+                } else if (!sc.isWatered) {
+                  // Water the crop
+                  sc.isWatered = true;
+                  toast.success("Farmer watered the crop!");
+                  wComp.state = "seeking";
+                } else {
+                  wComp.state = "seeking";
+                }
+              } else {
+                // Plant crop at current cell if grass
+                let plantR = finalRow;
+                let plantC = finalCol;
+                if (map.tiles[plantR]?.[plantC] !== "grass") {
+                  const dirs = [[-1, 0], [1, 0], [0, -1], [0, 1]];
+                  for (const [dr, dc] of dirs) {
+                    const nr = finalRow + dr;
+                    const nc = finalCol + dc;
+                    if (map.tiles[nr]?.[nc] === "grass") {
+                      const occupied = structures.some(st => {
+                        const sc = world.getComponent(st, StructureComponent)!;
+                        return sc.gridX === nc && sc.gridY === nr;
+                      });
+                      if (!occupied) {
+                        plantR = nr;
+                        plantC = nc;
+                        break;
+                      }
+                    }
+                  }
+                }
+
+                if (map.tiles[plantR]?.[plantC] === "grass") {
+                  const spawnX = plantC * ts + ts / 2;
+                  const spawnY = plantR * ts + ts / 2;
+                  spawnCrop(world, spawnX, spawnY, plantC, plantR);
+                  toast.success("Farmer planted seeds!");
+                }
+                wComp.state = "seeking";
+              }
+            } else if (wComp.role === "miner") {
+              // Check adjacent tiles for resources
+              let minedType: ItemType = "stone";
+              const dirs = [[0, 0], [-1, 0], [1, 0], [0, -1], [0, 1]];
+              for (const [dr, dc] of dirs) {
+                const nr = finalRow + dr;
+                const nc = finalCol + dc;
+                const tile = map.tiles[nr]?.[nc];
+                if (tile === "iron") { minedType = "iron_ore"; break; }
+                if (tile === "copper") { minedType = "copper_ore"; break; }
+                if (tile === "coal") { minedType = "coal"; break; }
+                if (tile === "stone") { minedType = "stone"; break; }
+              }
+              wComp.heldItem = minedType;
+              wComp.state = "returning";
+            } else if (wComp.role === "fisher") {
+              // Catch fish adjacent to water
+              let caught = false;
+              const dirs = [[-1, 0], [1, 0], [0, -1], [0, 1]];
+              for (const [dr, dc] of dirs) {
+                const nr = finalRow + dr;
+                const nc = finalCol + dc;
+                if (map.tiles[nr]?.[nc] === "water") {
+                  caught = true;
+                  break;
+                }
+              }
+              if (caught) {
+                wComp.heldItem = "fish";
+              }
+              wComp.state = "returning";
+            } else if (wComp.role === "woodcutter") {
+              wComp.heldItem = "wood";
+              wComp.state = "returning";
             }
           }
           break;
         }
 
-        case "moving_to_eat": {
+        case "returning": {
           if (wComp.path.length === 0) {
+            vel.vx = 0;
+            vel.vy = 0;
+
+            const storageHouses = structures.filter(st => {
+              const sc = world.getComponent(st, StructureComponent)!;
+              return sc.type === "storage_house";
+            });
+
+            if (storageHouses.length > 0) {
+              let nearestHouse = "";
+              let minHouseDist = Infinity;
+
+              for (const h of storageHouses) {
+                const hPos = world.getComponent(h, PositionComponent)!;
+                const hDist = Math.abs(hPos.x - pos.x) + Math.abs(hPos.y - pos.y);
+                if (hDist < minHouseDist) {
+                  minHouseDist = hDist;
+                  nearestHouse = h;
+                }
+              }
+
+              const houseStruct = world.getComponent(nearestHouse, StructureComponent)!;
+              const path = map.findPath(row, col, houseStruct.gridY, houseStruct.gridX);
+
+              if (path && path.length > 0) {
+                wComp.path = path;
+                wComp.pathIndex = 0;
+              } else {
+                this.depositItem(world, entity, wComp, structures, playerEnt);
+              }
+            } else {
+              this.depositItem(world, entity, wComp, structures, playerEnt);
+            }
+          }
+
+          if (wComp.path.length > 0) {
+            this.walkPath(pos, vel, wComp, map, ts, dt, () => {
+              vel.vx = 0;
+              vel.vy = 0;
+              wComp.path = [];
+              wComp.pathIndex = 0;
+              this.depositItem(world, entity, wComp, structures, playerEnt);
+            });
+          }
+          break;
+        }
+
+        case "eating": {
+          if (wComp.path.length === 0) {
+            vel.vx = 0;
+            vel.vy = 0;
+
             const storageHouses = structures.filter(st => {
               const sc = world.getComponent(st, StructureComponent)!;
               return sc.type === "storage_house";
@@ -306,198 +591,121 @@ export class WorkerSystem extends System {
                 wComp.pathIndex = 0;
               } else {
                 this.eatFood(world, entity, wComp, structures);
-                break;
               }
             } else {
               wComp.state = "idle";
-              break;
             }
           }
 
-          // Traverse path to eat
-          if (wComp.pathIndex >= wComp.path.length) {
-            vel.vx = 0;
-            vel.vy = 0;
-            wComp.path = [];
-            wComp.pathIndex = 0;
-            this.eatFood(world, entity, wComp, structures);
-          } else {
-            const targetNode = wComp.path[wComp.pathIndex];
-            const targetX = targetNode[1] * ts + ts / 2;
-            const targetY = targetNode[0] * ts + ts / 2;
-
-            const dx = targetX - pos.x;
-            const dy = targetY - pos.y;
-            const dist = Math.sqrt(dx * dx + dy * dy);
-
-            if (dist < 5) {
-              wComp.pathIndex++;
-            } else {
-              const currentCellWeight = map.weights[row]?.[col] || 1.0;
-              const baseSpeed = 100;
-              const currentSpeed = baseSpeed / currentCellWeight;
-
-              const dirX = dx / dist;
-              const dirY = dy / dist;
-
-              vel.vx = dirX * currentSpeed;
-              vel.vy = dirY * currentSpeed;
-
-              pos.x += vel.vx * dt;
-              pos.y += vel.vy * dt;
-            }
-          }
-          break;
-        }
-
-        case "moving": {
-          if (wComp.pathIndex >= wComp.path.length) {
-            vel.vx = 0;
-            vel.vy = 0;
-
-            if (wComp.heldItem !== null) {
-              // Reached storage house -> Deposit item
-              this.depositItem(world, entity, wComp, structures, playerEnt);
-            } else {
-              // Reached resource tile
-              const targetNode = wComp.path[wComp.path.length - 1];
-              const targetCrop = structures.find(st => {
-                const sc = world.getComponent(st, StructureComponent)!;
-                return sc.type === "crop" && sc.gridX === targetNode[1] && sc.gridY === targetNode[0];
-              });
-
-              if (wComp.role === "farmer") {
-                if (targetCrop) {
-                  wComp.timer = 2.0; // 2 seconds to harvest
-                } else {
-                  wComp.timer = 1.0; // 1 second to plant
-                }
-              } else {
-                wComp.timer = 2.0; // Woodcutter/Miner work cycle
-              }
-              wComp.state = "working";
-            }
-            break;
-          }
-
-          const targetNode = wComp.path[wComp.pathIndex];
-          const targetX = targetNode[1] * ts + ts / 2;
-          const targetY = targetNode[0] * ts + ts / 2;
-
-          const dx = targetX - pos.x;
-          const dy = targetY - pos.y;
-          const dist = Math.sqrt(dx * dx + dy * dy);
-
-          if (dist < 5) {
-            wComp.pathIndex++;
-          } else {
-            const currentCellWeight = map.weights[row]?.[col] || 1.0;
-            const baseSpeed = 100;
-            const currentSpeed = baseSpeed / currentCellWeight;
-
-            const dirX = dx / dist;
-            const dirY = dy / dist;
-
-            vel.vx = dirX * currentSpeed;
-            vel.vy = dirY * currentSpeed;
-
-            pos.x += vel.vx * dt;
-            pos.y += vel.vy * dt;
-          }
-          break;
-        }
-
-        case "working": {
-          vel.vx = 0;
-          vel.vy = 0;
-          wComp.timer -= dt;
-
-          if (Math.random() < 0.2) {
-            let pColor = "#bdc3c7";
-            if (wComp.role === "woodcutter") pColor = "#8a5a3b";
-            else if (wComp.role === "miner") pColor = "#f1c40f";
-            else if (wComp.role === "farmer") pColor = "#2ecc71";
-            spawnParticle(world, pos.x, pos.y, pColor, 2.5);
-          }
-
-          if (wComp.timer <= 0) {
-            // Find if crop exists at current tile
-            const currentCrop = structures.find(st => {
-              const sc = world.getComponent(st, StructureComponent)!;
-              return sc.type === "crop" && sc.gridX === col && sc.gridY === row;
-            });
-
-            if (wComp.role === "farmer") {
-              if (currentCrop) {
-                // Harvesting crop: get food, destroy crop entity
-                wComp.heldItem = "food";
-                world.destroyEntity(currentCrop);
-                wComp.state = "returning";
-              } else {
-                // Planting crop: spawn crop entity, return to seeking
-                const spawnX = col * ts + ts / 2;
-                const spawnY = row * ts + ts / 2;
-                spawnCrop(world, spawnX, spawnY, col, row);
-                wComp.state = "seeking";
-                
-                toast.success("Planted wheat crop!");
-              }
-            } else {
-              // Miner & Woodcutter
-              const tile = map.tiles[row]?.[col] || "grass";
-
-              if (wComp.role === "woodcutter") {
-                wComp.heldItem = "wood";
-              } else if (wComp.role === "miner") {
-                if (tile === "iron") wComp.heldItem = "iron_ore";
-                else if (tile === "copper") wComp.heldItem = "copper_ore";
-                else if (tile === "coal") wComp.heldItem = "coal";
-                else wComp.heldItem = "stone";
-              }
-              wComp.state = "returning";
-            }
-          }
-          break;
-        }
-
-        case "returning": {
-          vel.vx = 0;
-          vel.vy = 0;
-
-          const storageHouses = structures.filter(st => {
-            const sc = world.getComponent(st, StructureComponent)!;
-            return sc.type === "storage_house";
-          });
-
-          if (storageHouses.length > 0) {
-            let nearestHouse = "";
-            let minHouseDist = Infinity;
-
-            for (const h of storageHouses) {
-              const hPos = world.getComponent(h, PositionComponent)!;
-              const hDist = Math.abs(hPos.x - pos.x) + Math.abs(hPos.y - pos.y);
-              if (hDist < minHouseDist) {
-                minHouseDist = hDist;
-                nearestHouse = h;
-              }
-            }
-
-            const houseStruct = world.getComponent(nearestHouse, StructureComponent)!;
-            const path = map.findPath(row, col, houseStruct.gridY, houseStruct.gridX);
-
-            if (path && path.length > 0) {
-              wComp.path = path;
+          if (wComp.path.length > 0) {
+            this.walkPath(pos, vel, wComp, map, ts, dt, () => {
+              vel.vx = 0;
+              vel.vy = 0;
+              wComp.path = [];
               wComp.pathIndex = 0;
-              wComp.state = "moving";
+              this.eatFood(world, entity, wComp, structures);
+            });
+          }
+          break;
+        }
+
+        case "sleeping": {
+          if (wComp.path.length === 0 && wComp.timer <= 0) {
+            vel.vx = 0;
+            vel.vy = 0;
+
+            const cottage = structures.find(st => st === wComp.houseEntityId);
+            if (cottage) {
+              const houseStruct = world.getComponent(cottage, StructureComponent)!;
+              const path = map.findPath(row, col, houseStruct.gridY, houseStruct.gridX);
+
+              if (path && path.length > 0) {
+                wComp.path = path;
+                wComp.pathIndex = 0;
+              } else {
+                wComp.timer = 5.0; // sleep for 5 seconds
+              }
             } else {
-              this.depositItem(world, entity, wComp, structures, playerEnt);
+              wComp.state = "idle";
             }
-          } else {
-            this.depositItem(world, entity, wComp, structures, playerEnt);
+          }
+
+          if (wComp.path.length > 0) {
+            this.walkPath(pos, vel, wComp, map, ts, dt, () => {
+              vel.vx = 0;
+              vel.vy = 0;
+              wComp.path = [];
+              wComp.pathIndex = 0;
+              wComp.timer = 5.0;
+            });
+          }
+
+          // At cottage sleeping
+          if (wComp.path.length === 0 && wComp.timer > 0) {
+            wComp.timer -= dt;
+            wComp.energy += 20 * dt; // fully restores in 5s
+            
+            if (Math.random() < 0.15) {
+              spawnParticle(world, pos.x, pos.y, "#9b59b6", 2.0); // purple sleep Zzzs
+            }
+
+            if (wComp.energy >= 100 || wComp.timer <= 0) {
+              wComp.energy = 100;
+              wComp.timer = 0;
+              wComp.state = wComp.previousState || "seeking";
+              wComp.previousState = null;
+              toast.success("Worker woke up refreshed!");
+            }
           }
           break;
         }
       }
+    }
+  }
+
+  private walkPath(
+    pos: PositionComponent,
+    vel: VelocityComponent,
+    wComp: WorkerComponent,
+    map: MapComponent,
+    ts: number,
+    dt: number,
+    onReach: () => void
+  ): void {
+    if (wComp.pathIndex >= wComp.path.length) {
+      onReach();
+      return;
+    }
+
+    const targetNode = wComp.path[wComp.pathIndex];
+    const targetX = targetNode[1] * ts + ts / 2;
+    const targetY = targetNode[0] * ts + ts / 2;
+
+    const dx = targetX - pos.x;
+    const dy = targetY - pos.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+
+    if (dist < 5) {
+      wComp.pathIndex++;
+      if (wComp.pathIndex >= wComp.path.length) {
+        onReach();
+      }
+    } else {
+      const col = Math.floor(pos.x / ts);
+      const row = Math.floor(pos.y / ts);
+      const currentCellWeight = map.weights[row]?.[col] || 3.0;
+      
+      const baseSpeed = 100;
+      const currentSpeed = baseSpeed / currentCellWeight;
+
+      const dirX = dx / dist;
+      const dirY = dy / dist;
+
+      vel.vx = dirX * currentSpeed;
+      vel.vy = dirY * currentSpeed;
+
+      pos.x += vel.vx * dt;
+      pos.y += vel.vy * dt;
     }
   }
 
@@ -535,14 +743,17 @@ export class WorkerSystem extends System {
       }
     }
 
+    // Fish caught is deposited as food to sustain workers
+    const depositedItem: ItemType = (item === "fish") ? "food" : item;
+
     if (targetHouse) {
       const sc = world.getComponent(targetHouse, StructureComponent)!;
-      sc.inventory[item] = (sc.inventory[item] || 0) + 1;
+      sc.inventory[depositedItem] = (sc.inventory[depositedItem] || 0) + 1;
     }
 
     if (playerEnt) {
       const pComp = world.getComponent(playerEnt, PlayerComponent)!;
-      pComp.inventory[item] = (pComp.inventory[item] || 0) + 1;
+      pComp.inventory[depositedItem] = (pComp.inventory[depositedItem] || 0) + 1;
       
       for (let i = 0; i < 3; i++) {
         spawnParticle(world, pos.x, pos.y, "#2ecc71", 2.5);
@@ -578,15 +789,22 @@ export class WorkerSystem extends System {
     if (targetHouse) {
       const sc = world.getComponent(targetHouse, StructureComponent)!;
       const foodCount = sc.inventory["food"] || 0;
+      const fishCount = sc.inventory["fish"] || 0;
 
-      if (foodCount > 0) {
-        sc.inventory["food"]--;
+      if (foodCount > 0 || fishCount > 0) {
+        if (foodCount > 0) {
+          sc.inventory["food"]--;
+        } else {
+          sc.inventory["fish"]--;
+        }
         
         const playerEnt = world.getEntitiesWith([PlayerComponent])[0];
         if (playerEnt) {
           const player = world.getComponent(playerEnt, PlayerComponent)!;
-          if (player.inventory["food"] > 0) {
-            player.inventory["food"]--;
+          if (foodCount > 0) {
+            if (player.inventory["food"] > 0) player.inventory["food"]--;
+          } else {
+            if (player.inventory["fish"] > 0) player.inventory["fish"]--;
           }
         }
 
@@ -606,14 +824,14 @@ export class WorkerSystem extends System {
       } else {
         wComp.hunger = 0;
         wComp.isStarving = true;
-        wComp.state = "moving_to_eat";
+        wComp.state = "starving";
         wComp.path = [];
         wComp.pathIndex = 0;
       }
     } else {
       wComp.hunger = 0;
       wComp.isStarving = true;
-      wComp.state = "moving_to_eat";
+      wComp.state = "starving";
       wComp.path = [];
       wComp.pathIndex = 0;
     }

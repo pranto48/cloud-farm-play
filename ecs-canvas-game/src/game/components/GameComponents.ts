@@ -1,4 +1,5 @@
 import { Component } from "../ecs/Component";
+import { findPath as aStarFindPath } from "../utils/AStar";
 
 export class PositionComponent extends Component {
   public x: number;
@@ -105,10 +106,10 @@ export class MapComponent extends Component {
 
   public getTileWeight(type: TileType): number {
     if (type === "fast_road") return 0.25;
-    if (type === "road") return 0.5;
-    if (type === "grass") return 1.0;
+    if (type === "road") return 1.0;
+    if (type === "grass") return 3.0;
     if (type === "water" || type === "forest" || type === "stone") return Infinity;
-    return 1.0; // ores / veins
+    return 3.0; // ores / veins behave like grass
   }
 
   public updateTile(row: number, col: number, type: TileType): void {
@@ -120,96 +121,9 @@ export class MapComponent extends Component {
   }
 
   public findPath(startRow: number, startCol: number, goalRow: number, goalCol: number): [number, number][] | null {
-    if (startRow === goalRow && startCol === goalCol) return [];
-    
-    if (startRow < 0 || startRow >= this.height || startCol < 0 || startCol >= this.width ||
-        goalRow < 0 || goalRow >= this.height || goalCol < 0 || goalCol >= this.width) {
-      return null;
-    }
-
-    interface PathNode {
-      r: number;
-      c: number;
-      g: number;
-      h: number;
-      f: number;
-      parent: PathNode | null;
-    }
-
-    const openList: PathNode[] = [];
-    const closedSet = new Set<string>();
-
-    const startNode: PathNode = {
-      r: startRow,
-      c: startCol,
-      g: 0,
-      h: Math.abs(startRow - goalRow) + Math.abs(startCol - goalCol),
-      f: 0,
-      parent: null,
-    };
-    startNode.f = startNode.g + startNode.h;
-    openList.push(startNode);
-
-    const key = (r: number, c: number) => `${r},${c}`;
-
-    while (openList.length > 0) {
-      openList.sort((a, b) => a.f - b.f || a.h - b.h);
-      const current = openList.shift()!;
-
-      if (current.r === goalRow && current.c === goalCol) {
-        const path: [number, number][] = [];
-        let curr: PathNode | null = current;
-        while (curr !== null) {
-          path.push([curr.r, curr.c]);
-          curr = curr.parent;
-        }
-        return path.reverse();
-      }
-
-      closedSet.add(key(current.r, current.c));
-
-      const dirs = [
-        [-1, 0],
-        [1, 0],
-        [0, -1],
-        [0, 1],
-      ];
-
-      for (const [dr, dc] of dirs) {
-        const nr = current.r + dr;
-        const nc = current.c + dc;
-
-        if (nr < 0 || nr >= this.height || nc < 0 || nc >= this.width) continue;
-        if (closedSet.has(key(nr, nc))) continue;
-
-        const weight = this.weights[nr][nc];
-        if (weight === Infinity) continue;
-
-        const gScore = current.g + weight;
-        const hScore = Math.abs(nr - goalRow) + Math.abs(nc - goalCol);
-        const fScore = gScore + hScore;
-
-        const existingNode = openList.find(node => node.r === nr && node.c === nc);
-        if (existingNode) {
-          if (gScore < existingNode.g) {
-            existingNode.g = gScore;
-            existingNode.f = fScore;
-            existingNode.parent = current;
-          }
-        } else {
-          openList.push({
-            r: nr,
-            c: nc,
-            g: gScore,
-            h: hScore,
-            f: fScore,
-            parent: current,
-          });
-        }
-      }
-    }
-
-    return null;
+    const path = aStarFindPath(this, { r: startRow, c: startCol }, { r: goalRow, c: goalCol });
+    if (!path) return null;
+    return path.map(node => [node.r, node.c]);
   }
 }
 
@@ -226,7 +140,8 @@ export type ItemType =
   | "electronic_circuit"
   | "science_pack"
   | "wheat"
-  | "food";
+  | "food"
+  | "fish";
 
 export class ItemComponent extends Component {
   public type: ItemType;
@@ -329,6 +244,7 @@ export class StructureComponent extends Component {
 
   // Crop growth progress
   public cropGrowth: number = 0;
+  public isWatered: boolean = false;
 
   constructor(
     type: StructureType,
@@ -382,8 +298,8 @@ export class BoxColliderComponent extends Component {
 }
 
 export class WorkerComponent extends Component {
-  public state: "idle" | "seeking" | "moving" | "working" | "returning" | "moving_to_eat" | "eating";
-  public role: "woodcutter" | "miner" | "farmer" | null;
+  public state: "idle" | "seeking" | "working" | "returning" | "eating" | "sleeping" | "starving";
+  public role: "farmer" | "miner" | "fisher" | "woodcutter" | null;
   public houseEntityId: string;
   public path: [number, number][]; // [row, col] grid path
   public pathIndex: number;
@@ -391,7 +307,9 @@ export class WorkerComponent extends Component {
   public heldItem: ItemType | null;
   public hunger: number;
   public isStarving: boolean;
-  public previousState: "idle" | "seeking" | "moving" | "working" | "returning" | null;
+  public energy: number;
+  public sleepTimer: number;
+  public previousState: "idle" | "seeking" | "working" | "returning" | null;
 
   constructor(houseEntityId: string) {
     super();
@@ -404,6 +322,8 @@ export class WorkerComponent extends Component {
     this.heldItem = null;
     this.hunger = 100;
     this.isStarving = false;
+    this.energy = 100;
+    this.sleepTimer = 0;
     this.previousState = null;
   }
 }

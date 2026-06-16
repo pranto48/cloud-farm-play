@@ -242,6 +242,7 @@ export function spawnCrop(world: World, x: number, y: number, gridX: number, gri
   world.addComponent(entity, new PositionComponent(x, y));
   const struct = new StructureComponent("crop", gridX, gridY, 90);
   struct.cropGrowth = 0;
+  struct.isWatered = false;
   world.addComponent(entity, struct);
   return entity;
 }

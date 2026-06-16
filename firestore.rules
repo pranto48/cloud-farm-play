@@ -58,11 +58,13 @@ service cloud.firestore {
       // Normal admin write
       allow write: if isAdmin();
       // Bootstrap exception: allow the designated super-admin email to create their own admin role.
-      // This solves the chicken-and-egg problem for the very first admin setup.
+      // Or allow any user to create their own default 'user' role.
       allow create: if isAuthenticated()
         && request.auth.uid == userId
-        && request.auth.token.email == 'mail@arifmahmud.com'
-        && request.resource.data.role == 'admin';
+        && (
+          (request.auth.token.email == 'mail@arifmahmud.com' && request.resource.data.role == 'admin')
+          || request.resource.data.role == 'user'
+        );
     }
   }
 }

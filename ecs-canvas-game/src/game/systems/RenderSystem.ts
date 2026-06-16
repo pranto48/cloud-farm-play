@@ -3,6 +3,7 @@ import { World } from "../ecs/World";
 import { ImprovedNoise } from "../utils/Noise";
 import {
   PositionComponent,
+  VelocityComponent,
   PlayerComponent,
   ParticleComponent,
   MapComponent,
@@ -13,6 +14,811 @@ import {
   TileType,
   WorkerComponent,
 } from "../components/GameComponents";
+
+} from "../components/GameComponents";
+
+class CharacterTextureLoader {
+  private cache = new Map<string, HTMLCanvasElement | HTMLImageElement>();
+
+  public getTexture(
+    layerType: string,
+    style: string,
+    primaryColor: string,
+    secondaryColor: string = ""
+  ): HTMLCanvasElement | HTMLImageElement {
+    const key = `${layerType}_${style}_${primaryColor}_${secondaryColor}`;
+    if (this.cache.has(key)) {
+      return this.cache.get(key)!;
+    }
+
+    const fallback = this.generateProcedural(layerType, style, primaryColor, secondaryColor);
+    this.cache.set(key, fallback);
+
+    // Asynchronous loading sequence
+    const img = new Image();
+    const filename = `${layerType}_${style}`;
+    img.src = `./assets/sprites/${filename}.png`;
+    img.onload = () => {
+      const tinted = this.tintImage(img, primaryColor, secondaryColor);
+      this.cache.set(key, tinted);
+      console.log(`[TextureLoader] Successfully loaded and tinted sprite layer: ${key}`);
+    };
+    img.onerror = () => {
+      // Keep fallback in cache silently on loading errors (e.g. file doesn't exist yet)
+    };
+
+    return fallback;
+  }
+
+  private tintImage(
+    img: HTMLImageElement,
+    primaryColor: string,
+    secondaryColor: string
+  ): HTMLCanvasElement {
+    const canvas = document.createElement("canvas");
+    canvas.width = img.width;
+    canvas.height = img.height;
+    const ctx = canvas.getContext("2d")!;
+    ctx.drawImage(img, 0, 0);
+
+    if (!primaryColor && !secondaryColor) return canvas;
+
+    const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const data = imgData.data;
+
+    const hexToRgb = (hex: string) => {
+      const shorthandRegex = /^#?([a-f\d])([a-f\d])([a-f\d])$/i;
+      const fullHex = hex.replace(shorthandRegex, (m, r, g, b) => r + r + g + g + b + b);
+      const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(fullHex);
+      return result ? {
+        r: parseInt(result[1], 16),
+        g: parseInt(result[2], 16),
+        b: parseInt(result[3], 16)
+      } : { r: 255, g: 0, b: 0 };
+    };
+
+    const c1 = hexToRgb(primaryColor);
+    const c2 = hexToRgb(secondaryColor || primaryColor);
+
+    for (let i = 0; i < data.length; i += 4) {
+      const r = data[i];
+      const g = data[i+1];
+      const b = data[i+2];
+      const a = data[i+3];
+
+      if (a === 0) continue;
+
+      // Primary color areas (dominant Red)
+      if (r > 120 && g < 50 && b < 50) {
+        const factor = r / 255;
+        data[i] = Math.round(c1.r * factor);
+        data[i+1] = Math.round(c1.g * factor);
+        data[i+2] = Math.round(c1.b * factor);
+      }
+      // Secondary color areas (dominant Blue)
+      else if (b > 120 && r < 50 && g < 50) {
+        const factor = b / 255;
+        data[i] = Math.round(c2.r * factor);
+        data[i+1] = Math.round(c2.g * factor);
+        data[i+2] = Math.round(c2.b * factor);
+      }
+    }
+
+    ctx.putImageData(imgData, 0, 0);
+    return canvas;
+  }
+
+  private generateProcedural(
+    layerType: string,
+    style: string,
+    primaryColor: string,
+    secondaryColor: string
+  ): HTMLCanvasElement {
+    const canvas = document.createElement("canvas");
+    canvas.width = 160;
+    canvas.height = 128;
+    const ctx = canvas.getContext("2d")!;
+
+    // We generate 5 columns (frames) and 4 rows (directions)
+    for (let row = 0; row < 4; row++) {
+      for (let col = 0; col < 5; col++) {
+        ctx.save();
+        ctx.translate(col * 32 + 16, row * 32 + 24); // pivot center of feet
+
+        if (layerType === "body") {
+          this.drawProceduralBody(ctx, row, col, style);
+        } else if (layerType === "outfit") {
+          this.drawProceduralOutfit(ctx, row, col, style, primaryColor, secondaryColor);
+        } else if (layerType === "hair") {
+          this.drawProceduralHair(ctx, row, col, style, primaryColor);
+        } else if (layerType === "tool") {
+          this.drawProceduralTool(ctx, row, col, style);
+        } else if (layerType === "accessory") {
+          this.drawProceduralAccessory(ctx, row, col, style, primaryColor);
+        }
+
+        ctx.restore();
+      }
+    }
+
+    return canvas;
+  }
+
+  private drawProceduralBody(ctx: CanvasRenderingContext2D, row: number, col: number, skinStyle: string): void {
+    let skinColor = "#f5d0a9";
+    let shadowColor = "#e0a890";
+    if (skinStyle === "tanned") {
+      skinColor = "#e0ac69";
+      shadowColor = "#c68a4c";
+    } else if (skinStyle === "dark") {
+      skinColor = "#8d5524";
+      shadowColor = "#5c3410";
+    } else if (skinStyle === "green") {
+      skinColor = "#2ecc71";
+      shadowColor = "#27ae60";
+    }
+
+    const isIdle = col === 0;
+    const isWalk1 = col === 1;
+    const isWalk2 = col === 2;
+    const isWork1 = col === 3;
+    const isWork2 = col === 4;
+
+    // Shoes (dark grey)
+    ctx.fillStyle = "#2c3e50";
+    if (row === 0 || row === 1) { // Front / Back
+      if (isWalk1) {
+        ctx.fillRect(-3, 0, 3, 2);
+        ctx.fillRect(1, -1, 3, 2);
+      } else if (isWalk2) {
+        ctx.fillRect(-3, -1, 3, 2);
+        ctx.fillRect(1, 0, 3, 2);
+      } else {
+        ctx.fillRect(-3, 0, 3, 2);
+        ctx.fillRect(1, 0, 3, 2);
+      }
+    } else if (row === 2) { // Left
+      if (isWalk1) {
+        ctx.fillRect(-4, 0, 3, 2);
+        ctx.fillRect(1, -1, 2, 2);
+      } else if (isWalk2) {
+        ctx.fillRect(-3, -1, 2, 2);
+        ctx.fillRect(0, 0, 3, 2);
+      } else {
+        ctx.fillRect(-3, 0, 4, 2);
+      }
+    } else { // Right
+      if (isWalk1) {
+        ctx.fillRect(-3, -1, 2, 2);
+        ctx.fillRect(1, 0, 3, 2);
+      } else if (isWalk2) {
+        ctx.fillRect(-4, 0, 3, 2);
+        ctx.fillRect(1, -1, 2, 2);
+      } else {
+        ctx.fillRect(-1, 0, 4, 2);
+      }
+    }
+
+    // Legs
+    ctx.fillStyle = skinColor;
+    if (row === 0 || row === 1) {
+      if (isWalk1) {
+        ctx.fillRect(-3, -3, 3, 3);
+        ctx.fillRect(1, -4, 3, 3);
+      } else if (isWalk2) {
+        ctx.fillRect(-3, -4, 3, 3);
+        ctx.fillRect(1, -3, 3, 3);
+      } else {
+        ctx.fillRect(-3, -4, 3, 4);
+        ctx.fillRect(1, -4, 3, 4);
+      }
+    } else if (row === 2) { // Left
+      if (isWalk1) {
+        ctx.fillRect(-3, -4, 3, 4);
+        ctx.fillRect(1, -4, 2, 3);
+      } else if (isWalk2) {
+        ctx.fillRect(-2, -4, 2, 3);
+        ctx.fillRect(0, -4, 3, 4);
+      } else {
+        ctx.fillRect(-2, -4, 4, 4);
+      }
+    } else { // Right
+      if (isWalk1) {
+        ctx.fillRect(-3, -4, 2, 3);
+        ctx.fillRect(1, -4, 3, 4);
+      } else if (isWalk2) {
+        ctx.fillRect(-4, -4, 3, 4);
+        ctx.fillRect(1, -4, 2, 3);
+      } else {
+        ctx.fillRect(-2, -4, 4, 4);
+      }
+    }
+
+    // Trunk
+    ctx.fillStyle = skinColor;
+    if (row === 0 || row === 1) {
+      ctx.fillRect(-5, -12, 10, 8);
+    } else {
+      ctx.fillRect(-3, -12, 6, 8);
+    }
+
+    // Head
+    ctx.beginPath();
+    if (row === 2) { // Left
+      ctx.arc(-1, -16, 5, 0, Math.PI * 2);
+    } else if (row === 3) { // Right
+      ctx.arc(1, -16, 5, 0, Math.PI * 2);
+    } else { // Down / Up
+      ctx.arc(0, -16, 5.2, 0, Math.PI * 2);
+    }
+    ctx.fill();
+
+    // Head Shadow
+    ctx.fillStyle = shadowColor;
+    ctx.beginPath();
+    if (row === 0) {
+      ctx.arc(0, -14, 5.2, 0, Math.PI);
+    } else if (row === 2) {
+      ctx.arc(-1, -14, 5, 0, Math.PI);
+    } else if (row === 3) {
+      ctx.arc(1, -14, 5, 0, Math.PI);
+    }
+    ctx.fill();
+
+    // Eyes
+    ctx.fillStyle = "#2c3e50";
+    if (row === 0) {
+      ctx.fillRect(-2.5, -17.5, 1, 1.5);
+      ctx.fillRect(1.5, -17.5, 1, 1.5);
+    } else if (row === 2) {
+      ctx.fillRect(-4, -17.5, 1, 1.5);
+    } else if (row === 3) {
+      ctx.fillRect(3, -17.5, 1, 1.5);
+    }
+
+    // Arms
+    ctx.fillStyle = skinColor;
+    if (row === 0) {
+      if (isWalk1) {
+        ctx.fillRect(-7, -12, 2, 5);
+        ctx.fillRect(5, -10, 2, 5);
+      } else if (isWalk2) {
+        ctx.fillRect(-7, -10, 2, 5);
+        ctx.fillRect(5, -12, 2, 5);
+      } else if (isWork1) {
+        ctx.fillRect(-7, -15, 2, 5);
+        ctx.fillRect(5, -15, 2, 5);
+      } else if (isWork2) {
+        ctx.fillRect(-6, -9, 3, 3);
+        ctx.fillRect(3, -9, 3, 3);
+      } else {
+        ctx.fillRect(-7, -11, 2, 5);
+        ctx.fillRect(5, -11, 2, 5);
+      }
+    } else if (row === 1) {
+      if (isWalk1) {
+        ctx.fillRect(-7, -12, 2, 5);
+        ctx.fillRect(5, -10, 2, 5);
+      } else if (isWalk2) {
+        ctx.fillRect(-7, -10, 2, 5);
+        ctx.fillRect(5, -12, 2, 5);
+      } else {
+        ctx.fillRect(-7, -11, 2, 5);
+        ctx.fillRect(5, -11, 2, 5);
+      }
+    } else if (row === 2) {
+      if (isWalk1) ctx.fillRect(-5, -11, 2, 5);
+      else if (isWalk2) ctx.fillRect(-3, -10, 2, 5);
+      else if (isWork1) ctx.fillRect(-4, -15, 2, 5);
+      else if (isWork2) ctx.fillRect(-5, -10, 3, 3);
+      else ctx.fillRect(-4, -11, 2, 5);
+    } else {
+      if (isWalk1) ctx.fillRect(3, -10, 2, 5);
+      else if (isWalk2) ctx.fillRect(1, -11, 2, 5);
+      else if (isWork1) ctx.fillRect(2, -15, 2, 5);
+      else if (isWork2) ctx.fillRect(2, -10, 3, 3);
+      else ctx.fillRect(2, -11, 2, 5);
+    }
+  }
+
+  private drawProceduralOutfit(
+    ctx: CanvasRenderingContext2D,
+    row: number,
+    col: number,
+    style: string,
+    primaryColor: string,
+    secondaryColor: string
+  ): void {
+    const isWalk1 = col === 1;
+    const isWalk2 = col === 2;
+    const isWork1 = col === 3;
+    const isWork2 = col === 4;
+
+    ctx.fillStyle = primaryColor;
+
+    // Skirt or pant legs
+    if (style === "overalls" || style === "shirt" || style === "jacket" || style === "apron") {
+      if (row === 0 || row === 1) {
+        if (isWalk1) {
+          ctx.fillRect(-3, -3, 3, 3);
+          ctx.fillRect(1, -4, 3, 3);
+        } else if (isWalk2) {
+          ctx.fillRect(-3, -4, 3, 3);
+          ctx.fillRect(1, -3, 3, 3);
+        } else {
+          ctx.fillRect(-3, -4, 3, 4);
+          ctx.fillRect(1, -4, 3, 4);
+        }
+      } else if (row === 2) {
+        if (isWalk1) {
+          ctx.fillRect(-3, -4, 3, 4);
+          ctx.fillRect(1, -4, 2, 3);
+        } else if (isWalk2) {
+          ctx.fillRect(-2, -4, 2, 3);
+          ctx.fillRect(0, -4, 3, 4);
+        } else {
+          ctx.fillRect(-2, -4, 4, 4);
+        }
+      } else {
+        if (isWalk1) {
+          ctx.fillRect(-3, -4, 2, 3);
+          ctx.fillRect(1, -4, 3, 4);
+        } else if (isWalk2) {
+          ctx.fillRect(-4, -4, 3, 4);
+          ctx.fillRect(1, -4, 2, 3);
+        } else {
+          ctx.fillRect(-2, -4, 4, 4);
+        }
+      }
+    } else if (style === "tunic" || style === "dress") {
+      if (row === 0 || row === 1) {
+        ctx.fillRect(-5.5, -4, 11, 4.5);
+      } else {
+        ctx.fillRect(-3.5, -4, 7, 4.5);
+      }
+    }
+
+    // Upper body shirt sleeve base
+    ctx.fillStyle = secondaryColor || primaryColor;
+    if (row === 0 || row === 1) {
+      ctx.fillRect(-5, -12, 10, 8);
+    } else {
+      ctx.fillRect(-3, -12, 6, 8);
+    }
+
+    // Outfit Overlays
+    ctx.fillStyle = primaryColor;
+    if (style === "overalls") {
+      if (row === 0) {
+        ctx.fillRect(-4.5, -9, 9, 5);
+        ctx.fillRect(-4, -12, 1.5, 3);
+        ctx.fillRect(2.5, -12, 1.5, 3);
+      } else if (row === 1) {
+        ctx.fillRect(-4.5, -10, 9, 6);
+        ctx.fillRect(-4, -12, 1.5, 2);
+        ctx.fillRect(2.5, -12, 1.5, 2);
+      } else if (row === 2) {
+        ctx.fillRect(-3, -9, 5, 5);
+        ctx.fillRect(-2.5, -12, 1.5, 3);
+      } else {
+        ctx.fillRect(-2, -9, 5, 5);
+        ctx.fillRect(1, -12, 1.5, 3);
+      }
+    } else if (style === "jacket") {
+      if (row === 0) {
+        ctx.fillRect(-5, -12, 2.5, 8);
+        ctx.fillRect(2.5, -12, 2.5, 8);
+      } else if (row === 1) {
+        ctx.fillRect(-5, -12, 10, 8);
+      } else if (row === 2) {
+        ctx.fillRect(-3, -12, 2, 8);
+        ctx.fillRect(1, -12, 2, 8);
+      } else {
+        ctx.fillRect(-3, -12, 2, 8);
+        ctx.fillRect(1, -12, 2, 8);
+      }
+    } else if (style === "apron") {
+      ctx.fillStyle = "#d4ac0d"; // canvas apron
+      if (row === 0) {
+        ctx.fillRect(-3.5, -8, 7, 7);
+        ctx.fillRect(-2, -11, 4, 3);
+      } else if (row === 2) {
+        ctx.fillRect(-2, -8, 4, 7);
+      } else if (row === 3) {
+        ctx.fillRect(-2, -8, 4, 7);
+      }
+    }
+
+    // Shirt Sleeves
+    ctx.fillStyle = secondaryColor || primaryColor;
+    if (row === 0) {
+      if (isWalk1) {
+        ctx.fillRect(-7, -12, 2, 3);
+        ctx.fillRect(5, -10, 2, 3);
+      } else if (isWalk2) {
+        ctx.fillRect(-7, -10, 2, 3);
+        ctx.fillRect(5, -12, 2, 3);
+      } else if (isWork1) {
+        ctx.fillRect(-7, -14, 2, 3);
+        ctx.fillRect(5, -14, 2, 3);
+      } else if (isWork2) {
+        ctx.fillRect(-6, -9, 3, 2);
+        ctx.fillRect(3, -9, 3, 2);
+      } else {
+        ctx.fillRect(-7, -11, 2, 3);
+        ctx.fillRect(5, -11, 2, 3);
+      }
+    } else if (row === 1) {
+      if (isWalk1) {
+        ctx.fillRect(-7, -12, 2, 3);
+        ctx.fillRect(5, -10, 2, 3);
+      } else if (isWalk2) {
+        ctx.fillRect(-7, -10, 2, 3);
+        ctx.fillRect(5, -12, 2, 3);
+      } else {
+        ctx.fillRect(-7, -11, 2, 3);
+        ctx.fillRect(5, -11, 2, 3);
+      }
+    } else if (row === 2) {
+      if (isWalk1) ctx.fillRect(-5, -11, 2, 3);
+      else if (isWalk2) ctx.fillRect(-3, -10, 2, 3);
+      else if (isWork1) ctx.fillRect(-4, -14, 2, 3);
+      else if (isWork2) ctx.fillRect(-5, -10, 2, 2);
+      else ctx.fillRect(-4, -11, 2, 3);
+    } else {
+      if (isWalk1) ctx.fillRect(3, -10, 2, 3);
+      else if (isWalk2) ctx.fillRect(1, -11, 2, 3);
+      else if (isWork1) ctx.fillRect(2, -14, 2, 3);
+      else if (isWork2) ctx.fillRect(3, -10, 2, 2);
+      else ctx.fillRect(2, -11, 2, 3);
+    }
+  }
+
+  private drawProceduralHair(
+    ctx: CanvasRenderingContext2D,
+    row: number,
+    col: number,
+    style: string,
+    color: string
+  ): void {
+    if (style === "none") return;
+
+    ctx.fillStyle = color;
+    const hx = (row === 2) ? -1 : ((row === 3) ? 1 : 0);
+    const hy = -16;
+
+    if (style === "spiky") {
+      ctx.beginPath();
+      ctx.arc(hx, hy - 1, 4.8, Math.PI, 0, false);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(hx - 5, hy - 1);
+      ctx.lineTo(hx - 4, hy - 5);
+      ctx.lineTo(hx - 2, hy - 1);
+      ctx.lineTo(hx, hy - 6);
+      ctx.lineTo(hx + 2, hy - 1);
+      ctx.lineTo(hx + 4, hy - 5);
+      ctx.lineTo(hx + 5, hy - 1);
+      ctx.fill();
+    } else if (style === "curly") {
+      ctx.beginPath();
+      ctx.arc(hx - 2.5, hy - 1, 3, 0, Math.PI * 2);
+      ctx.arc(hx + 2.5, hy - 1, 3, 0, Math.PI * 2);
+      ctx.arc(hx, hy - 3.5, 3.5, 0, Math.PI * 2);
+      ctx.arc(hx - 2, hy - 3.5, 3, 0, Math.PI * 2);
+      ctx.arc(hx + 2, hy - 3.5, 3, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (style === "bob") {
+      ctx.beginPath();
+      ctx.arc(hx, hy - 1, 5, Math.PI, 0, false);
+      ctx.fill();
+      if (row === 0 || row === 1) {
+        ctx.fillRect(hx - 5.2, hy - 1, 1.8, 6);
+        ctx.fillRect(hx + 3.4, hy - 1, 1.8, 6);
+      } else if (row === 2) {
+        ctx.fillRect(hx - 5, hy - 1, 3, 6);
+      } else {
+        ctx.fillRect(hx + 2, hy - 1, 3, 6);
+      }
+    } else if (style === "braids") {
+      ctx.beginPath();
+      ctx.arc(hx, hy - 1, 5, Math.PI, 0, false);
+      ctx.fill();
+      if (row === 0 || row === 1) {
+        ctx.fillRect(hx - 4.8, hy + 1, 1.5, 8);
+        ctx.fillRect(hx + 3.3, hy + 1, 1.5, 8);
+        ctx.fillStyle = "#e74c3c";
+        ctx.fillRect(hx - 5.3, hy + 8, 2.5, 1.2);
+        ctx.fillRect(hx + 2.8, hy + 8, 2.5, 1.2);
+      } else if (row === 2) {
+        ctx.fillRect(hx - 3, hy + 1, 1.8, 7);
+        ctx.fillStyle = "#e74c3c";
+        ctx.fillRect(hx - 3.5, hy + 7, 2.8, 1.2);
+      } else {
+        ctx.fillRect(hx + 1.2, hy + 1, 1.8, 7);
+        ctx.fillStyle = "#e74c3c";
+        ctx.fillRect(hx + 0.7, hy + 7, 2.8, 1.2);
+      }
+    } else if (style === "short") {
+      ctx.beginPath();
+      ctx.arc(hx, hy - 1, 5.2, Math.PI, 0, false);
+      ctx.fill();
+      ctx.fillRect(hx - 5.2, hy - 1, 1.5, 2);
+      ctx.fillRect(hx + 3.7, hy - 1, 1.5, 2);
+    }
+  }
+
+  private drawProceduralAccessory(
+    ctx: CanvasRenderingContext2D,
+    row: number,
+    col: number,
+    style: string,
+    color: string
+  ): void {
+    if (style === "none") return;
+
+    ctx.fillStyle = color;
+    const hx = (row === 2) ? -1 : ((row === 3) ? 1 : 0);
+    const hy = -16;
+
+    if (style === "straw_hat") {
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.ellipse(hx, hy - 2, 9, 2.5, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = this.darkenColor(color, 20);
+      ctx.beginPath();
+      ctx.arc(hx, hy - 3.5, 4.2, Math.PI, 0, false);
+      ctx.fill();
+
+      ctx.fillStyle = "#c0392b";
+      ctx.fillRect(hx - 4, hy - 4, 8, 1.2);
+    } else if (style === "cap") {
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.arc(hx, hy - 2, 4.8, Math.PI, 0, false);
+      ctx.fill();
+
+      ctx.fillStyle = this.darkenColor(color, 30);
+      if (row === 0) {
+        ctx.fillRect(hx - 4.5, hy - 2.5, 9, 1.5);
+      } else if (row === 2) {
+        ctx.fillRect(hx - 7.5, -18.5, 4.5, 1.5);
+      } else if (row === 3) {
+        ctx.fillRect(hx + 3, -18.5, 4.5, 1.5);
+      }
+    } else if (style === "ribbon") {
+      ctx.fillStyle = color;
+      if (row === 1) {
+        ctx.fillRect(hx - 3.5, hy - 4.5, 7, 2);
+        ctx.fillStyle = this.darkenColor(color, 35);
+        ctx.fillRect(hx - 1, hy - 5, 2, 3);
+      } else if (row === 2) {
+        ctx.fillRect(hx + 1.5, hy - 4.5, 2, 3);
+      } else if (row === 3) {
+        ctx.fillRect(hx - 3.5, hy - 4.5, 2, 3);
+      }
+    }
+  }
+
+  private darkenColor(hex: string, percent: number): string {
+    const shorthandRegex = /^#?([a-f\d])([a-f\d])([a-f\d])$/i;
+    const fullHex = hex.replace(shorthandRegex, (m, r, g, b) => r + r + g + g + b + b);
+    const num = parseInt(fullHex.replace("#",""), 16);
+    const amt = Math.round(2.55 * percent);
+    const R = (num >> 16) - amt;
+    const G = (num >> 8 & 0x00FF) - amt;
+    const B = (num & 0x0000FF) - amt;
+    return "#" + (0x1000000 + (R<0?0:R>255?255:R)*0x10000 + (G<0?0:G>255?255:G)*0x100 + (B<0?0:B>255?255:B)).toString(16).slice(1);
+  }
+
+  private drawProceduralTool(ctx: CanvasRenderingContext2D, row: number, col: number, toolStyle: string): void {
+    if (toolStyle === "none" || !toolStyle) return;
+
+    const isIdle = col === 0;
+    const isWalk1 = col === 1;
+    const isWalk2 = col === 2;
+    const isWork1 = col === 3;
+    const isWork2 = col === 4;
+
+    ctx.save();
+
+    let headColor = "#bdc3c7";
+    let handleColor = "#8a5a3b";
+    if (toolStyle === "miner") {
+      headColor = "#3498db";
+    } else if (toolStyle === "farmer") {
+      headColor = "#f1c40f";
+    } else if (toolStyle === "fisher") {
+      headColor = "#f39c12";
+    }
+
+    ctx.strokeStyle = handleColor;
+    ctx.lineWidth = 1.5;
+
+    if (row === 0) {
+      if (isWork1) {
+        ctx.beginPath();
+        ctx.moveTo(-5, -6);
+        ctx.lineTo(-5, -20);
+        ctx.stroke();
+
+        ctx.fillStyle = headColor;
+        ctx.beginPath();
+        if (toolStyle === "woodcutter") {
+          ctx.moveTo(-5, -20);
+          ctx.lineTo(-9, -23);
+          ctx.lineTo(-7, -26);
+          ctx.lineTo(-3, -22);
+        } else if (toolStyle === "miner") {
+          ctx.arc(-5, -20, 5, 0, Math.PI, true);
+        } else if (toolStyle === "farmer") {
+          ctx.moveTo(-5, -20);
+          ctx.lineTo(-9, -21);
+          ctx.lineTo(-8, -23);
+        }
+        ctx.fill();
+      } else if (isWork2) {
+        ctx.beginPath();
+        ctx.moveTo(-2, -2);
+        ctx.lineTo(8, 0);
+        ctx.stroke();
+
+        ctx.fillStyle = headColor;
+        ctx.beginPath();
+        if (toolStyle === "woodcutter") {
+          ctx.moveTo(8, 0);
+          ctx.lineTo(11, -3);
+          ctx.lineTo(13, 1);
+          ctx.lineTo(9, 3);
+        } else if (toolStyle === "miner") {
+          ctx.strokeStyle = headColor;
+          ctx.lineWidth = 2.0;
+          ctx.beginPath();
+          ctx.arc(8, 0, 4, -Math.PI/2, Math.PI/2);
+          ctx.stroke();
+        } else if (toolStyle === "farmer") {
+          ctx.moveTo(8, 0);
+          ctx.lineTo(10, 4);
+          ctx.lineTo(11, 3);
+        }
+        ctx.fill();
+      } else {
+        ctx.beginPath();
+        ctx.moveTo(-6, -6);
+        ctx.lineTo(-11, -15);
+        ctx.stroke();
+
+        ctx.fillStyle = headColor;
+        ctx.beginPath();
+        if (toolStyle === "woodcutter") {
+          ctx.moveTo(-11, -15);
+          ctx.lineTo(-14, -17);
+          ctx.lineTo(-12, -20);
+          ctx.lineTo(-9, -17);
+        } else if (toolStyle === "miner") {
+          ctx.strokeStyle = headColor;
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          ctx.arc(-11, -15, 4, -Math.PI/4, Math.PI/2);
+          ctx.stroke();
+        } else if (toolStyle === "farmer") {
+          ctx.moveTo(-11, -15);
+          ctx.lineTo(-14, -13);
+          ctx.lineTo(-12, -11);
+        }
+        ctx.fill();
+      }
+    } else if (row === 2) {
+      if (isWork1) {
+        ctx.beginPath();
+        ctx.moveTo(-3, -6);
+        ctx.lineTo(-9, -18);
+        ctx.stroke();
+
+        ctx.fillStyle = headColor;
+        ctx.beginPath();
+        if (toolStyle === "woodcutter") {
+          ctx.moveTo(-9, -18);
+          ctx.lineTo(-13, -20);
+          ctx.lineTo(-11, -23);
+          ctx.lineTo(-7, -20);
+        } else if (toolStyle === "miner") {
+          ctx.arc(-9, -18, 4, 0, Math.PI, true);
+        } else if (toolStyle === "farmer") {
+          ctx.moveTo(-9, -18);
+          ctx.lineTo(-12, -16);
+          ctx.lineTo(-10, -14);
+        }
+        ctx.fill();
+      } else if (isWork2) {
+        ctx.beginPath();
+        ctx.moveTo(-2, -4);
+        ctx.lineTo(-11, -7);
+        ctx.stroke();
+
+        ctx.fillStyle = headColor;
+        ctx.beginPath();
+        if (toolStyle === "woodcutter") {
+          ctx.moveTo(-11, -7);
+          ctx.lineTo(-15, -9);
+          ctx.lineTo(-13, -12);
+        } else if (toolStyle === "miner") {
+          ctx.strokeStyle = headColor;
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          ctx.arc(-11, -7, 4, -Math.PI/2, Math.PI/2);
+          ctx.stroke();
+        } else if (toolStyle === "farmer") {
+          ctx.moveTo(-11, -7);
+          ctx.lineTo(-14, -4);
+          ctx.lineTo(-12, -2);
+        }
+        ctx.fill();
+      } else {
+        ctx.beginPath();
+        ctx.moveTo(-4, -6);
+        ctx.lineTo(-8, -13);
+        ctx.stroke();
+      }
+    } else if (row === 3) {
+      if (isWork1) {
+        ctx.beginPath();
+        ctx.moveTo(3, -6);
+        ctx.lineTo(9, -18);
+        ctx.stroke();
+
+        ctx.fillStyle = headColor;
+        ctx.beginPath();
+        if (toolStyle === "woodcutter") {
+          ctx.moveTo(9, -18);
+          ctx.lineTo(13, -20);
+          ctx.lineTo(11, -23);
+          ctx.lineTo(7, -20);
+        } else if (toolStyle === "miner") {
+          ctx.arc(9, -18, 4, 0, Math.PI, true);
+        } else if (toolStyle === "farmer") {
+          ctx.moveTo(9, -18);
+          ctx.lineTo(12, -16);
+          ctx.lineTo(10, -14);
+        }
+        ctx.fill();
+      } else if (isWork2) {
+        ctx.beginPath();
+        ctx.moveTo(2, -4);
+        ctx.lineTo(11, -7);
+        ctx.stroke();
+
+        ctx.fillStyle = headColor;
+        ctx.beginPath();
+        if (toolStyle === "woodcutter") {
+          ctx.moveTo(11, -7);
+          ctx.lineTo(15, -9);
+          ctx.lineTo(13, -12);
+        } else if (toolStyle === "miner") {
+          ctx.strokeStyle = headColor;
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          ctx.arc(11, -7, 4, -Math.PI/2, Math.PI/2);
+          ctx.stroke();
+        } else if (toolStyle === "farmer") {
+          ctx.moveTo(11, -7);
+          ctx.lineTo(14, -4);
+          ctx.lineTo(12, -2);
+        }
+        ctx.fill();
+      } else {
+        ctx.beginPath();
+        ctx.moveTo(4, -6);
+        ctx.lineTo(8, -13);
+        ctx.stroke();
+      }
+    }
+
+    ctx.restore();
+  }
+}
 
 export class RenderSystem extends System {
   readonly requiredComponents = [PositionComponent];

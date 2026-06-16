@@ -80,11 +80,14 @@ export class PlayerComponent extends Component {
   public unlockedTechs: Record<string, boolean> = {};
 
   // Customization fields
+  public skinColor: string = "pale";
   public hairStyle: string = "spiky";
   public hairColor: string = "#f1c40f";
   public clothingStyle: string = "overalls";
   public clothingColor: string = "#8a5a3b";
   public shirtColor: string = "#c0392b";
+  public accessoryStyle: string = "straw_hat";
+  public accessoryColor: string = "#f1c40f";
   
   constructor() {
     super();
@@ -331,11 +334,14 @@ export class WorkerComponent extends Component {
   public previousState: "idle" | "seeking" | "working" | "returning" | null;
 
   // Customization fields
+  public skinColor: string = "pale";
   public hairStyle: string = "short";
   public hairColor: string = "#34495e";
   public clothingStyle: string = "shirt";
   public clothingColor: string = "#e67e22";
   public shirtColor: string = "#2c3e50";
+  public accessoryStyle: string = "none";
+  public accessoryColor: string = "#e74c3c";
 
   constructor(houseEntityId: string) {
     super();

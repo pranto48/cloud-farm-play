@@ -366,6 +366,13 @@ export function ToolBuilderOverlay() {
     }
   };
 
+  const cycleOption = (field: string, list: string[], direction: number) => {
+    const current = (gameData.playerCustomization as any)?.[field] || list[0];
+    const idx = list.indexOf(current);
+    const nextIdx = (idx + direction + list.length) % list.length;
+    updatePlayerCustomization(field, list[nextIdx]);
+  };
+
   const workerInfo = getCottageWorker();
 
   // Tech Tree requirements helper
@@ -408,10 +415,11 @@ export function ToolBuilderOverlay() {
             Research Techs
           </button>
           <button
-            className={`tab-btn ${activeTab === "customizer" ? "active" : ""}`}
-            onClick={() => setActiveTab("customizer")}
+            className="tab-btn"
+            style={{ border: "1.5px solid rgba(52, 231, 228, 0.4)", color: "#34e7e4", background: "rgba(52, 231, 228, 0.05)" }}
+            onClick={() => setIsWardrobeOpen(true)}
           >
-            Customize Farmer
+            👗 Wardrobe
           </button>
         </div>
 
@@ -494,87 +502,6 @@ export function ToolBuilderOverlay() {
                 <span className="tool-icon">🏡</span>
                 <span className="tool-label">Worker House</span>
               </button>
-            </div>
-          )}
-          {activeTab === "customizer" && (
-            <div className="tools-group active" style={{ gap: "8px", flexFlow: "row nowrap", overflowX: "auto", maxWidth: "calc(100% - 150px)" }}>
-              <div style={{ display: "flex", flexDirection: "column", gap: "2px", minWidth: "100px" }}>
-                <span style={{ fontSize: "11px", opacity: 0.8, color: "#fff" }}>Hair Style:</span>
-                <select
-                  value={gameData.playerCustomization?.hairStyle || "spiky"}
-                  onChange={(e) => updatePlayerCustomization("hairStyle", e.target.value)}
-                  style={{ background: "#2c3e50", color: "#fff", border: "1px solid #34495e", padding: "4px", fontSize: "12px", borderRadius: "4px", cursor: "pointer" }}
-                >
-                  <option value="spiky">Spiky</option>
-                  <option value="short">Short</option>
-                  <option value="bob">Bob</option>
-                  <option value="curly">Curly</option>
-                  <option value="braids">Braids</option>
-                  <option value="none">Bald</option>
-                </select>
-              </div>
-
-              <div style={{ display: "flex", flexDirection: "column", gap: "2px", minWidth: "100px" }}>
-                <span style={{ fontSize: "11px", opacity: 0.8, color: "#fff" }}>Hair Color:</span>
-                <select
-                  value={gameData.playerCustomization?.hairColor || "#f1c40f"}
-                  onChange={(e) => updatePlayerCustomization("hairColor", e.target.value)}
-                  style={{ background: "#2c3e50", color: "#fff", border: "1px solid #34495e", padding: "4px", fontSize: "12px", borderRadius: "4px", cursor: "pointer" }}
-                >
-                  <option value="#f1c40f">Blond</option>
-                  <option value="#8a5a3b">Brown</option>
-                  <option value="#2c3e50">Black</option>
-                  <option value="#c0392b">Red</option>
-                  <option value="#9b59b6">Purple</option>
-                  <option value="#7f8c8d">Grey</option>
-                </select>
-              </div>
-
-              <div style={{ display: "flex", flexDirection: "column", gap: "2px", minWidth: "100px" }}>
-                <span style={{ fontSize: "11px", opacity: 0.8, color: "#fff" }}>Outfit Style:</span>
-                <select
-                  value={gameData.playerCustomization?.clothingStyle || "overalls"}
-                  onChange={(e) => updatePlayerCustomization("clothingStyle", e.target.value)}
-                  style={{ background: "#2c3e50", color: "#fff", border: "1px solid #34495e", padding: "4px", fontSize: "12px", borderRadius: "4px", cursor: "pointer" }}
-                >
-                  <option value="overalls">Overalls</option>
-                  <option value="shirt">Shirt</option>
-                  <option value="jacket">Jacket</option>
-                  <option value="tunic">Tunic</option>
-                </select>
-              </div>
-
-              <div style={{ display: "flex", flexDirection: "column", gap: "2px", minWidth: "100px" }}>
-                <span style={{ fontSize: "11px", opacity: 0.8, color: "#fff" }}>Outfit Color:</span>
-                <select
-                  value={gameData.playerCustomization?.clothingColor || "#8a5a3b"}
-                  onChange={(e) => updatePlayerCustomization("clothingColor", e.target.value)}
-                  style={{ background: "#2c3e50", color: "#fff", border: "1px solid #34495e", padding: "4px", fontSize: "12px", borderRadius: "4px", cursor: "pointer" }}
-                >
-                  <option value="#8a5a3b">Brown</option>
-                  <option value="#3498db">Blue</option>
-                  <option value="#2ecc71">Green</option>
-                  <option value="#e74c3c">Red</option>
-                  <option value="#e67e22">Orange</option>
-                  <option value="#9b59b6">Purple</option>
-                </select>
-              </div>
-
-              <div style={{ display: "flex", flexDirection: "column", gap: "2px", minWidth: "100px" }}>
-                <span style={{ fontSize: "11px", opacity: 0.8, color: "#fff" }}>Inner Shirt:</span>
-                <select
-                  value={gameData.playerCustomization?.shirtColor || "#c0392b"}
-                  onChange={(e) => updatePlayerCustomization("shirtColor", e.target.value)}
-                  style={{ background: "#2c3e50", color: "#fff", border: "1px solid #34495e", padding: "4px", fontSize: "12px", borderRadius: "4px", cursor: "pointer" }}
-                >
-                  <option value="#c0392b">Red</option>
-                  <option value="#3498db">Blue</option>
-                  <option value="#2ecc71">Green</option>
-                  <option value="#f1c40f">Yellow</option>
-                  <option value="#2c3e50">Dark Grey</option>
-                  <option value="#ecf0f1">White</option>
-                </select>
-              </div>
             </div>
           )}
 
@@ -837,6 +764,111 @@ export function ToolBuilderOverlay() {
 
             <button className="dialog-btn secondary" onClick={() => setShowTechTree(false)}>
               Close Tree
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Wardrobe Modal */}
+      {isWardrobeOpen && (
+        <div className="dialog-overlay" style={{ display: "flex" }}>
+          <div className="dialog-content" style={{ width: "440px", gap: "16px" }}>
+            <h3 style={{ margin: "0" }}>👗 Player Wardrobe Customizer</h3>
+            <p className="dialog-desc" style={{ margin: "0" }}>
+              Design your farmer's style. Changes will apply instantly to your character in the world!
+            </p>
+
+            <div style={{ display: "flex", gap: "24px", textAlign: "left", width: "100%" }}>
+              {/* Left Column: Preview */}
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", width: "140px", flexShrink: 0 }}>
+                <span style={{ fontSize: "11px", fontWeight: "800", textTransform: "uppercase", color: "#34e7e4", letterSpacing: "0.5px", marginBottom: "8px" }}>
+                  Live Preview
+                </span>
+                <PreviewCanvas customization={gameData.playerCustomization} />
+                <span style={{ fontSize: "10px", color: "#a4b0be", fontStyle: "italic" }}>
+                  Walking Cycle
+                </span>
+              </div>
+
+              {/* Right Column: Cyclers & Swatches */}
+              <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "14px", maxHeight: "330px", overflowY: "auto", paddingRight: "6px" }}>
+                {/* 1. Skin Selector */}
+                <OptionSelector
+                  label="Skin Tone"
+                  value={gameData.playerCustomization?.skinColor || "pale"}
+                  onPrev={() => cycleOption("skinColor", SKINS, -1)}
+                  onNext={() => cycleOption("skinColor", SKINS, 1)}
+                />
+
+                {/* 2. Hair Style Selector */}
+                <OptionSelector
+                  label="Hair Style"
+                  value={gameData.playerCustomization?.hairStyle || "spiky"}
+                  onPrev={() => cycleOption("hairStyle", HAIRSTYLES, -1)}
+                  onNext={() => cycleOption("hairStyle", HAIRSTYLES, 1)}
+                />
+
+                {/* 3. Hair Color Swatches */}
+                <ColorSwatchGrid
+                  label="Hair Color"
+                  selectedColor={gameData.playerCustomization?.hairColor || "#f1c40f"}
+                  colors={HAIR_COLORS}
+                  onChange={(val) => updatePlayerCustomization("hairColor", val)}
+                />
+
+                {/* 4. Outfit Style Selector */}
+                <OptionSelector
+                  label="Outfit Style"
+                  value={gameData.playerCustomization?.clothingStyle || "overalls"}
+                  onPrev={() => cycleOption("clothingStyle", OUTFITS, -1)}
+                  onNext={() => cycleOption("clothingStyle", OUTFITS, 1)}
+                />
+
+                {/* 5. Outfit Color Swatches */}
+                <ColorSwatchGrid
+                  label="Outfit Color"
+                  selectedColor={gameData.playerCustomization?.clothingColor || "#8a5a3b"}
+                  colors={OUTFIT_COLORS}
+                  onChange={(val) => updatePlayerCustomization("clothingColor", val)}
+                />
+
+                {/* 6. Shirt Color Swatches */}
+                <ColorSwatchGrid
+                  label="Shirt Color"
+                  selectedColor={gameData.playerCustomization?.shirtColor || "#c0392b"}
+                  colors={SHIRT_COLORS}
+                  onChange={(val) => updatePlayerCustomization("shirtColor", val)}
+                />
+
+                {/* 7. Accessory/Hat Style Selector */}
+                <OptionSelector
+                  label="Accessory / Hat"
+                  value={gameData.playerCustomization?.accessoryStyle || "none"}
+                  onPrev={() => cycleOption("accessoryStyle", ACCESSORIES, -1)}
+                  onNext={() => cycleOption("accessoryStyle", ACCESSORIES, 1)}
+                />
+
+                {/* 8. Accessory Color Swatches */}
+                <ColorSwatchGrid
+                  label="Accessory Color"
+                  selectedColor={gameData.playerCustomization?.accessoryColor || "#e74c3c"}
+                  colors={ACCESSORY_COLORS}
+                  onChange={(val) => updatePlayerCustomization("accessoryColor", val)}
+                />
+              </div>
+            </div>
+
+            <button
+              className="dialog-btn success"
+              onClick={() => {
+                setIsWardrobeOpen(false);
+                if (gameInstance) {
+                  gameInstance.saveGame();
+                }
+              }}
+              style={{ width: "100%", marginTop: "8px" }}
+            >
+              Save & Close
             </button>
           </div>
         </div>

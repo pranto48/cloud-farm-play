@@ -99,7 +99,7 @@ export class PlayerComponent extends Component {
   }
 }
 
-export type TileType = "grass" | "water" | "stone" | "forest" | "iron" | "copper" | "coal" | "road" | "fast_road";
+export type TileType = "grass" | "water" | "river" | "stone" | "forest" | "iron" | "copper" | "coal" | "road" | "fast_road";
 
 export class MapComponent extends Component {
   public width: number;
@@ -130,7 +130,7 @@ export class MapComponent extends Component {
     if (type === "fast_road") return 0.25;
     if (type === "road") return 1.0;
     if (type === "grass") return 3.0;
-    if (type === "water" || type === "forest" || type === "stone") return Infinity;
+    if (type === "water" || type === "river" || type === "forest" || type === "stone") return Infinity;
     return 3.0; // ores / veins behave like grass
   }
 

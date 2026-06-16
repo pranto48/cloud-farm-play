@@ -29,7 +29,7 @@ import { ParticleSystem } from "./systems/ParticleSystem";
 import { RenderSystem } from "./systems/RenderSystem";
 import { WorkerSystem } from "./systems/WorkerSystem";
 import { toast } from "./utils/Toast";
-import { ensureAuthenticated, saveToCloud, loadFromCloud } from "./FirebaseSync";
+import { ensureAuthenticated, saveToCloud, loadFromCloud, compressToBinaryString, decompressFromBinaryString } from "./FirebaseSync";
 
 export class Game {
   private canvas: HTMLCanvasElement;
@@ -460,8 +460,13 @@ export class Game {
     };
 
     // Save to local storage as double persistence / local cache
-    localStorage.setItem("arcane_survivors_save", JSON.stringify(saveData));
-    console.log("[Save/Load] Autosaved game state to localStorage.");
+    try {
+      const compressedStr = compressToBinaryString(saveData);
+      localStorage.setItem("arcane_survivors_save", compressedStr);
+      console.log("[Save/Load] Autosaved game state to localStorage (gzipped).");
+    } catch (err) {
+      console.error("[Save/Load] Failed to save to localStorage:", err);
+    }
 
     // Save to Firebase Cloud Firestore with compression
     if (this.uid) {
@@ -488,7 +493,14 @@ export class Game {
     if (!saveStr) return false;
 
     try {
-      const saveData = JSON.parse(saveStr);
+      let saveData: any;
+      if (saveStr.trim().startsWith("{")) {
+        // Fallback for old uncompressed JSON string
+        saveData = JSON.parse(saveStr);
+      } else {
+        saveData = decompressFromBinaryString(saveStr);
+      }
+
       if (!saveData || !saveData.entities) return false;
 
       this.deserializeGame(saveData);

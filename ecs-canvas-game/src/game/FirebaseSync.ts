@@ -59,11 +59,36 @@ export function ensureAuthenticated(): Promise<User> {
 }
 
 /**
+ * Compresses any JSON-serializable object into a binary string using pako.gzip.
+ */
+export function compressToBinaryString(saveData: any): string {
+  const jsonStr = JSON.stringify(saveData);
+  const compressed = pako.gzip(jsonStr);
+  let binaryString = "";
+  for (let i = 0; i < compressed.length; i++) {
+    binaryString += String.fromCharCode(compressed[i]);
+  }
+  return binaryString;
+}
+
+/**
+ * Decompresses a binary string using pako.ungzip back into a JSON object.
+ */
+export function decompressFromBinaryString(binaryString: string): any {
+  const bytes = new Uint8Array(binaryString.length);
+  for (let i = 0; i < binaryString.length; i++) {
+    bytes[i] = binaryString.charCodeAt(i);
+  }
+  const decompressed = pako.ungzip(bytes, { to: "string" });
+  return JSON.parse(decompressed);
+}
+
+/**
  * Compresses the JSON game state and saves it to the Firestore 'saves' collection.
  */
 export async function saveToCloud(uid: string, saveData: any): Promise<void> {
   const jsonStr = JSON.stringify(saveData);
-  const compressed = pako.deflate(jsonStr);
+  const compressed = pako.gzip(jsonStr);
   const bytes = Bytes.fromUint8Array(compressed);
 
   const docRef = doc(db, "saves", uid);
@@ -93,6 +118,6 @@ export async function loadFromCloud(uid: string): Promise<any | null> {
   // payload.data is a Bytes instance
   const bytesInstance = payload.data as Bytes;
   const uint8 = bytesInstance.toUint8Array();
-  const decompressed = pako.inflate(uint8, { to: "string" });
+  const decompressed = pako.ungzip(uint8, { to: "string" });
   return JSON.parse(decompressed);
 }

@@ -33,7 +33,26 @@ export type UserGameRow = {
 export async function fetchMyGames(userId: string): Promise<UserGameRow[]> {
   const q = query(collection(db, "user_games"), where("user_id", "==", userId));
   const snap = await getDocs(q);
-  const userGames = snap.docs.map(d => d.data());
+  let userGames = snap.docs.map(d => d.data());
+
+  const hasMeadow = userGames.some((ug: any) => ug.game_id === "meadow-life");
+  if (!hasMeadow && userId && userId !== "undefined") {
+    try {
+      const userGameId = `${userId}_meadow-life`;
+      const userGameRef = doc(db, "user_games", userGameId);
+      const defaultUserGame = {
+        id: userGameId,
+        user_id: userId,
+        game_id: "meadow-life",
+        added_at: new Date().toISOString(),
+        last_played_at: null
+      };
+      await setDoc(userGameRef, defaultUserGame);
+      userGames.push(defaultUserGame);
+    } catch (err) {
+      console.warn("[Firebase] Auto-provisioning user game meadow-life failed:", err);
+    }
+  }
 
   const results = await Promise.all(userGames.map(async (ug: any) => {
     const gameSnap = await getDoc(doc(db, "games", ug.game_id));
@@ -60,6 +79,25 @@ export async function fetchMyGames(userId: string): Promise<UserGameRow[]> {
 export async function fetchGameBySlug(slug: string): Promise<GameRow | null> {
   const docSnap = await getDoc(doc(db, "games", slug));
   if (docSnap.exists()) return docSnap.data() as GameRow;
+
+  if (slug === "meadow-life") {
+    try {
+      const meadowRef = doc(db, "games", "meadow-life");
+      const defaultGame: GameRow = {
+        id: "meadow-life",
+        title: "Meadow Life",
+        slug: "meadow-life",
+        description: "A cozy original farming demo. Till soil, plant seeds, water crops, and watch your meadow grow.",
+        genre: "Cozy Farming RPG",
+        cover_url: null,
+        created_at: new Date().toISOString()
+      };
+      await setDoc(meadowRef, defaultGame);
+      return defaultGame;
+    } catch (err) {
+      console.warn("[Firebase] Seeding meadow-life on fetchGameBySlug failed:", err);
+    }
+  }
 
   const q = query(collection(db, "games"), where("slug", "==", slug));
   const qSnap = await getDocs(q);
@@ -204,7 +242,28 @@ export async function fetchIsAdmin(userId: string): Promise<boolean> {
 
 export async function fetchAllGames(): Promise<GameRow[]> {
   const snap = await getDocs(collection(db, "games"));
-  const games = snap.docs.map(d => d.data() as GameRow);
+  let games = snap.docs.map(d => d.data() as GameRow);
+
+  const hasMeadow = games.some(g => g.id === "meadow-life" || g.slug === "meadow-life");
+  if (!hasMeadow) {
+    try {
+      const meadowRef = doc(db, "games", "meadow-life");
+      const defaultGame: GameRow = {
+        id: "meadow-life",
+        title: "Meadow Life",
+        slug: "meadow-life",
+        description: "A cozy original farming demo. Till soil, plant seeds, water crops, and watch your meadow grow.",
+        genre: "Cozy Farming RPG",
+        cover_url: null,
+        created_at: new Date().toISOString()
+      };
+      await setDoc(meadowRef, defaultGame);
+      games.push(defaultGame);
+    } catch (err) {
+      console.warn("[Firebase] Seeding meadow-life on fetchAllGames failed:", err);
+    }
+  }
+
   return games.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
 }
 

@@ -9,7 +9,7 @@ import {
   PlayerComponent,
   ItemType,
 } from "../components/GameComponents";
-import { spawnCrop, spawnParticle } from "../Spawner";
+import { spawnCrop, spawnParticle, spawnResourceBurst } from "../Spawner";
 import { toast } from "../utils/Toast";
 
 export class WorkerSystem extends System {
@@ -475,17 +475,19 @@ export class WorkerSystem extends System {
             } else if (wComp.role === "miner") {
               // Check adjacent tiles for resources
               let minedType: ItemType = "stone";
+              let resourceTile: "iron" | "copper" | "coal" | "stone" = "stone";
               const dirs = [[0, 0], [-1, 0], [1, 0], [0, -1], [0, 1]];
               for (const [dr, dc] of dirs) {
                 const nr = finalRow + dr;
                 const nc = finalCol + dc;
                 const tile = map.tiles[nr]?.[nc];
-                if (tile === "iron") { minedType = "iron_ore"; break; }
-                if (tile === "copper") { minedType = "copper_ore"; break; }
-                if (tile === "coal") { minedType = "coal"; break; }
-                if (tile === "stone") { minedType = "stone"; break; }
+                if (tile === "iron") { minedType = "iron_ore"; resourceTile = "iron"; break; }
+                if (tile === "copper") { minedType = "copper_ore"; resourceTile = "copper"; break; }
+                if (tile === "coal") { minedType = "coal"; resourceTile = "coal"; break; }
+                if (tile === "stone") { minedType = "stone"; resourceTile = "stone"; break; }
               }
               wComp.heldItem = minedType;
+              spawnResourceBurst(world, pos.x, pos.y, resourceTile, 8);
               wComp.state = "returning";
             } else if (wComp.role === "fisher") {
               // Catch fish adjacent to water
@@ -505,6 +507,7 @@ export class WorkerSystem extends System {
               wComp.state = "returning";
             } else if (wComp.role === "woodcutter") {
               wComp.heldItem = "wood";
+              spawnResourceBurst(world, pos.x, pos.y, "wood", 8);
               wComp.state = "returning";
             }
           }

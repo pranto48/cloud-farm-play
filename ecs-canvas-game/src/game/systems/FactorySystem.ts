@@ -9,7 +9,7 @@ import {
   RECIPES,
   ItemType,
 } from "../components/GameComponents";
-import { spawnItemEntity, spawnParticle } from "../Spawner";
+import { spawnItemEntity, spawnParticle, spawnResourceBurst } from "../Spawner";
 
 export class FactorySystem extends System {
   readonly requiredComponents = [StructureComponent, PositionComponent];
@@ -370,12 +370,13 @@ export class FactorySystem extends System {
       if ((s.type === "drill" || s.type === "advanced_drill") && s.isPowered) {
         const type = mapComp.tiles[s.gridY]?.[s.gridX];
         let minedItem: ItemType | null = null;
+        let resourceType: "wood" | "stone" | "iron" | "copper" | "coal" | null = null;
 
-        if (type === "forest") minedItem = "wood";
-        else if (type === "stone") minedItem = "stone";
-        else if (type === "iron") minedItem = "iron_ore";
-        else if (type === "copper") minedItem = "copper_ore";
-        else if (type === "coal") minedItem = "coal";
+        if (type === "forest") { minedItem = "wood"; resourceType = "wood"; }
+        else if (type === "stone") { minedItem = "stone"; resourceType = "stone"; }
+        else if (type === "iron") { minedItem = "iron_ore"; resourceType = "iron"; }
+        else if (type === "copper") { minedItem = "copper_ore"; resourceType = "copper"; }
+        else if (type === "coal") { minedItem = "coal"; resourceType = "coal"; }
 
         if (minedItem) {
           s.timer += dt;
@@ -422,10 +423,13 @@ export class FactorySystem extends System {
 
             if (placed) {
               s.timer = 0;
-              // Spark particles
               const pos = world.getComponent(ent, PositionComponent)!;
-              for (let i = 0; i < 3; i++) {
-                spawnParticle(world, pos.x, pos.y, "#f1c40f", 2.5);
+              if (resourceType) {
+                spawnResourceBurst(world, pos.x, pos.y, resourceType, 8);
+              } else {
+                for (let i = 0; i < 3; i++) {
+                  spawnParticle(world, pos.x, pos.y, "#f1c40f", 2.5);
+                }
               }
             }
           }

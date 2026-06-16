@@ -2171,84 +2171,144 @@ export class RenderSystem extends System {
         break;
       }
       case "crop": {
-        // Draw soil patch under the crop (dark brown if watered, dry brown if dry)
+        // Draw farming soil tile (rounded square covering most of the 64x64 grid cell)
+        const size = 58;
+        const halfSize = size / 2;
+        
+        // Base soil color - dry: #8d6e63, watered: #3e2723 (darker brown)
         ctx.fillStyle = s.isWatered ? "#3e2723" : "#8d6e63";
+        ctx.strokeStyle = s.isWatered ? "#271510" : "#5d4037";
+        ctx.lineWidth = 2;
         ctx.beginPath();
-        ctx.ellipse(0, 10, 16, 6, 0, 0, Math.PI * 2);
+        ctx.roundRect(-halfSize, -halfSize + 4, size, size - 8, 8); // raise slightly or keep centered
         ctx.fill();
+        ctx.stroke();
+
+        // Draw tilled rows/furrows lines inside the soil tile for that professional retro farming look
+        ctx.strokeStyle = s.isWatered ? "#2d1b18" : "#725349";
+        ctx.lineWidth = 2;
+        for (let rowY = -halfSize + 8; rowY < halfSize - 4; rowY += 10) {
+          ctx.beginPath();
+          ctx.moveTo(-halfSize + 6, rowY);
+          ctx.lineTo(halfSize - 6, rowY);
+          ctx.stroke();
+        }
 
         ctx.save();
-        if (s.cropGrowth < 0.4) {
-          // Stage 1: Small green shoots
+        if (s.cropGrowth < 0.25) {
+          // Stage 0: Seed (bare soil with tiny seed mounds & minimal green sprout tips)
+          ctx.fillStyle = s.isWatered ? "#21100b" : "#5d4037"; // dark hole
+          
+          // Three seed mounds
+          const seedCoords = [
+            { x: -10, y: -4 },
+            { x: 2, y: -8 },
+            { x: 8, y: 4 }
+          ];
+
+          for (const coord of seedCoords) {
+            ctx.beginPath();
+            ctx.arc(coord.x, coord.y + 10, 3, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Tiny yellow/brown seed dot in center
+            ctx.fillStyle = "#e67e22";
+            ctx.beginPath();
+            ctx.arc(coord.x, coord.y + 10, 1.2, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Tiny green leaf tip just peaking out (0.5px or 1px green speck)
+            ctx.fillStyle = "#2ecc71";
+            ctx.fillRect(coord.x - 0.5, coord.y + 7.5, 1, 2);
+          }
+        } else if (s.cropGrowth < 0.55) {
+          // Stage 1: Sprout (small green shoots)
           ctx.strokeStyle = "#2ecc71"; // vibrant green
           ctx.lineWidth = 2.5;
           ctx.lineCap = "round";
-          // Left shoot
-          ctx.beginPath();
-          ctx.moveTo(-6, 10);
-          ctx.quadraticCurveTo(-10, 2, -8, -2);
-          ctx.stroke();
-          // Right shoot
-          ctx.beginPath();
-          ctx.moveTo(6, 10);
-          ctx.quadraticCurveTo(10, 4, 8, 0);
-          ctx.stroke();
-          // Center shoot
-          ctx.beginPath();
-          ctx.moveTo(0, 10);
-          ctx.quadraticCurveTo(0, 0, 2, -4);
-          ctx.stroke();
+
+          // Three small shoots
+          const shootOffsets = [-8, 0, 8];
+          for (let i = 0; i < shootOffsets.length; i++) {
+            const ox = shootOffsets[i];
+            const oy = 10;
+            ctx.beginPath();
+            ctx.moveTo(ox, oy);
+            ctx.quadraticCurveTo(ox - 3, oy - 6, ox - 4, oy - 10);
+            ctx.stroke();
+
+            // Tiny side leaf
+            ctx.beginPath();
+            ctx.moveTo(ox - 2, oy - 4);
+            ctx.quadraticCurveTo(ox, oy - 6, ox + 2, oy - 5);
+            ctx.stroke();
+          }
         } else if (s.cropGrowth < 0.85) {
-          // Stage 2: Growing taller, yellowish-green
+          // Stage 2: Growing (medium-sized leafy plants, yellowish-green)
           ctx.strokeStyle = "#a3cb38"; // yellowish green
           ctx.lineWidth = 3;
           ctx.lineCap = "round";
-          
-          // Left stalk
-          ctx.beginPath();
-          ctx.moveTo(-8, 10);
-          ctx.quadraticCurveTo(-14, -2, -10, -10);
-          ctx.stroke();
-          // Right stalk
-          ctx.beginPath();
-          ctx.moveTo(8, 10);
-          ctx.quadraticCurveTo(14, 0, 10, -8);
-          ctx.stroke();
-          // Center stalk
-          ctx.beginPath();
-          ctx.moveTo(0, 10);
-          ctx.quadraticCurveTo(-2, -6, 0, -14);
-          ctx.stroke();
+
+          const offsets = [-9, 0, 9];
+          for (let i = 0; i < offsets.length; i++) {
+            const ox = offsets[i];
+            const oy = 10;
+
+            // Stalk
+            ctx.beginPath();
+            ctx.moveTo(ox, oy);
+            ctx.quadraticCurveTo(ox - 5, oy - 10, ox - 2, oy - 18);
+            ctx.stroke();
+
+            // Leaves branching off
+            ctx.beginPath();
+            ctx.moveTo(ox - 2, oy - 6);
+            ctx.quadraticCurveTo(ox - 8, oy - 10, ox - 8, oy - 12);
+            ctx.stroke();
+
+            ctx.beginPath();
+            ctx.moveTo(ox - 1, oy - 12);
+            ctx.quadraticCurveTo(ox + 5, oy - 16, ox + 6, oy - 15);
+            ctx.stroke();
+          }
         } else {
-          // Stage 3: Fully grown golden wheat
+          // Stage 3: Ready for Harvest (tall swaying golden wheat)
           ctx.strokeStyle = "#f1c40f"; // golden yellow
           ctx.lineWidth = 3.5;
           ctx.lineCap = "round";
-          
-          // Draw three stalks of golden wheat
-          // Stalk 1 (Left)
-          ctx.beginPath();
-          ctx.moveTo(-10, 10);
-          ctx.quadraticCurveTo(-18, -4, -12, -18);
-          ctx.stroke();
-          // Stalk 2 (Center)
-          ctx.beginPath();
-          ctx.moveTo(0, 10);
-          ctx.quadraticCurveTo(-2, -10, 0, -22);
-          ctx.stroke();
-          // Stalk 3 (Right)
-          ctx.beginPath();
-          ctx.moveTo(10, 10);
-          ctx.quadraticCurveTo(18, -2, 12, -16);
-          ctx.stroke();
 
-          // Draw golden wheat heads (little ovals/filled circles at the top of stalks)
-          ctx.fillStyle = "#f39c12"; // dark orange-yellow for depth
-          ctx.beginPath();
-          ctx.arc(-12, -18, 4, 0, Math.PI * 2);
-          ctx.arc(0, -22, 4.5, 0, Math.PI * 2);
-          ctx.arc(12, -16, 4, 0, Math.PI * 2);
-          ctx.fill();
+          // Calculate sway offset based on time and grid coordinate for organic variety
+          const sway = Math.sin(this.time * 4.5 + s.gridX * 0.7) * 4;
+
+          const offsets = [-10, 0, 10];
+          const stalkHeights = [-18, -22, -16];
+
+          for (let i = 0; i < offsets.length; i++) {
+            const ox = offsets[i];
+            const oy = 10;
+            const targetHeight = stalkHeights[i];
+
+            // Draw curved stalk
+            ctx.beginPath();
+            ctx.moveTo(ox, oy);
+            ctx.quadraticCurveTo(ox + sway * 0.5, oy + targetHeight * 0.5, ox + sway, oy + targetHeight);
+            ctx.stroke();
+
+            // Draw golden wheat head
+            ctx.fillStyle = "#f39c12"; // dark orange-yellow
+            ctx.beginPath();
+            ctx.arc(ox + sway, oy + targetHeight, 4.5, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Draw little grain extensions (grains of wheat)
+            ctx.fillStyle = "#f1c40f";
+            ctx.beginPath();
+            ctx.arc(ox + sway - 3, oy + targetHeight - 2, 2.0, 0, Math.PI * 2);
+            ctx.arc(ox + sway + 3, oy + targetHeight - 2, 2.0, 0, Math.PI * 2);
+            ctx.arc(ox + sway - 2, oy + targetHeight + 2, 2.0, 0, Math.PI * 2);
+            ctx.arc(ox + sway + 2, oy + targetHeight + 2, 2.0, 0, Math.PI * 2);
+            ctx.fill();
+          }
         }
         ctx.restore();
 

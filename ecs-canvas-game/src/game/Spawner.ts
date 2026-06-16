@@ -283,3 +283,36 @@ export function spawnItemEntity(world: World, x: number, y: number, type: ItemTy
   world.addComponent(entity, new ItemComponent(type));
   return entity;
 }
+
+export function spawnResourceBurst(
+  world: World,
+  x: number,
+  y: number,
+  resourceType: "wood" | "stone" | "iron" | "copper" | "coal",
+  count: number = 8
+): void {
+  const colors = {
+    wood: ["#8a5a3b", "#704214", "#27ae60", "#2ecc71"],
+    stone: ["#7f8c8d", "#95a5a6", "#bdc3c7"],
+    iron: ["#78909c", "#b0bec5", "#cfd8dc", "#eceff1"],
+    copper: ["#d35400", "#e67e22", "#ff7043", "#ffaa66"],
+    coal: ["#212121", "#37474f", "#455a64", "#2c3e50"]
+  };
+
+  const palette = colors[resourceType] || ["#ffffff"];
+  for (let i = 0; i < count; i++) {
+    const color = palette[Math.floor(Math.random() * palette.length)];
+    const angle = Math.random() * Math.PI * 2;
+    const speed = 40 + Math.random() * 80;
+    const vx = Math.cos(angle) * speed;
+    const vy = Math.sin(angle) * speed;
+    const size = 3 + Math.random() * 3;
+    const decay = 0.015 + Math.random() * 0.02;
+
+    const entity = world.createEntity();
+    world.addComponent(entity, new PositionComponent(x, y));
+    world.addComponent(entity, new VelocityComponent(vx, vy));
+    world.addComponent(entity, new ParticleComponent(color, size, vx, vy, 1.0, decay));
+  }
+}
+

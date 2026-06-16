@@ -79,6 +79,9 @@ export class Game {
   private resizeCanvas(): void {
     this.canvas.width = window.innerWidth;
     this.canvas.height = window.innerHeight;
+    if (this.ctx) {
+      this.ctx.imageSmoothingEnabled = false;
+    }
   }
 
   private drawLoadingScreen(text: string): void {

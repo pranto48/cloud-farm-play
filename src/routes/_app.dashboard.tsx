@@ -15,11 +15,23 @@ export const Route = createFileRoute("/_app/dashboard")({
 
 function Dashboard() {
   const { user } = useAuth();
-  const userId = user!.uid;
+  const userId = user?.uid || (user as any)?.id;
 
-  const games = useQuery({ queryKey: ["my-games", userId], queryFn: () => fetchMyGames(userId) });
-  const stats = useQuery({ queryKey: ["play-stats", userId], queryFn: () => fetchPlayStats(userId) });
-  const saves = useQuery({ queryKey: ["all-saves", userId], queryFn: () => fetchAllCloudSaves(userId) });
+  const games = useQuery({ 
+    queryKey: ["my-games", userId], 
+    queryFn: () => fetchMyGames(userId!),
+    enabled: !!userId && userId !== "undefined"
+  });
+  const stats = useQuery({ 
+    queryKey: ["play-stats", userId], 
+    queryFn: () => fetchPlayStats(userId!),
+    enabled: !!userId && userId !== "undefined"
+  });
+  const saves = useQuery({ 
+    queryKey: ["all-saves", userId], 
+    queryFn: () => fetchAllCloudSaves(userId!),
+    enabled: !!userId && userId !== "undefined"
+  });
 
   const lastPlayed = games.data?.find((g) => g.last_played_at) ?? games.data?.[0];
   const totalGames = games.data?.length ?? 0;

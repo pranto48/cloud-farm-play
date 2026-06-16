@@ -18,13 +18,13 @@ export const Route = createFileRoute("/_app/games/$slug")({
 function GameDetails() {
   const { slug } = Route.useParams();
   const { user } = useAuth();
-  const userId = user!.uid;
+  const userId = user?.uid || (user as any)?.id;
   const qc = useQueryClient();
   const game = useQuery({ queryKey: ["game", slug], queryFn: () => fetchGameBySlug(slug) });
   const save = useQuery({
     queryKey: ["cloud-save", userId, game.data?.id],
-    queryFn: () => fetchCloudSave(userId, game.data!.id),
-    enabled: !!game.data?.id,
+    queryFn: () => fetchCloudSave(userId!, game.data!.id),
+    enabled: !!game.data?.id && !!userId && userId !== "undefined",
   });
   const del = useMutation({
     mutationFn: () => deleteCloudSave(save.data!.id),

@@ -138,6 +138,10 @@ export async function upsertCloudSave(params: {
   slotName?: string;
 }) {
   const slot = params.slotName ?? "Auto Save";
+  if (!params.userId || params.userId === "undefined") {
+    console.warn("[Firebase] upsertCloudSave: userId is missing or invalid, skipping save.", params);
+    return;
+  }
   const docId = `${params.userId}_${params.gameId}_${slot.replace(/\s+/g, "_")}`;
   const saveRef = doc(db, "cloud_saves", docId);
   
@@ -156,6 +160,10 @@ export async function deleteCloudSave(id: string) {
 }
 
 export async function touchLastPlayed(userId: string, gameId: string) {
+  if (!userId || userId === "undefined") {
+    console.warn("[Firebase] touchLastPlayed: userId is missing or invalid, skipping.", { userId, gameId });
+    return;
+  }
   const docId = `${userId}_${gameId}`;
   await setDoc(doc(db, "user_games", docId), {
     last_played_at: new Date().toISOString()
@@ -163,6 +171,10 @@ export async function touchLastPlayed(userId: string, gameId: string) {
 }
 
 export async function startPlaySession(userId: string, gameId: string) {
+  if (!userId || userId === "undefined") {
+    console.warn("[Firebase] startPlaySession: userId is missing or invalid, skipping session start.", { userId, gameId });
+    return { id: "temp_session", started_at: new Date().toISOString() };
+  }
   const docRef = doc(collection(db, "play_sessions"));
   const startedAt = new Date().toISOString();
   await setDoc(docRef, {

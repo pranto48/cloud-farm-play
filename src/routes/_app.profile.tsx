@@ -20,15 +20,17 @@ export const Route = createFileRoute("/_app/profile")({
 
 function ProfilePage() {
   const { user, isAdmin } = useAuth();
-  const userId = user!.uid;
+  const userId = user?.uid || (user as any)?.id;
   const qc = useQueryClient();
   const profile = useQuery({
     queryKey: ["profile", userId],
     queryFn: async () => {
+      if (!userId || userId === "undefined") return null;
       const docSnap = await getDoc(doc(db, "profiles", userId));
       if (docSnap.exists()) return docSnap.data();
       return null;
     },
+    enabled: !!userId && userId !== "undefined"
   });
   
   const [displayName, setDisplayName] = useState("");
@@ -43,6 +45,10 @@ function ProfilePage() {
   }, [profile.data]);
 
   async function save() {
+    if (!userId || userId === "undefined") {
+      toast.error("User ID is missing or invalid");
+      return;
+    }
     setBusy(true);
     try {
       await setDoc(doc(db, "profiles", userId), {

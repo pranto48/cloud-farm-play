@@ -36,13 +36,13 @@ function PlayPage() {
   const { slug } = Route.useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const userId = user?.uid;
+  const userId = user?.uid || (user as any)?.id;
 
   const game = useQuery({ queryKey: ["game", slug], queryFn: () => fetchGameBySlug(slug) });
   const save = useQuery({
     queryKey: ["cloud-save", userId, game.data?.id],
     queryFn: () => fetchCloudSave(userId!, game.data!.id),
-    enabled: !!game.data?.id && !!userId,
+    enabled: !!game.data?.id && !!userId && userId !== "undefined",
   });
 
   const [chosen, setChosen] = useState<GameState | null>(null);
@@ -83,7 +83,7 @@ function PlayPage() {
   }, [game.data, chosen, userId]);
 
   const doSave = useCallback(async (state: GameState, opts?: { silent?: boolean }) => {
-    if (!userId || !game.data) return;
+    if (!userId || userId === "undefined" || !game.data) return;
     setStatus("saving");
     try {
       await upsertCloudSave({

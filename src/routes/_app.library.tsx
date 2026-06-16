@@ -19,8 +19,12 @@ export const Route = createFileRoute("/_app/library")({
 
 function LibraryPage() {
   const { user } = useAuth();
-  const userId = user!.uid;
-  const { data, isLoading } = useQuery({ queryKey: ["my-games", userId], queryFn: () => fetchMyGames(userId) });
+  const userId = user?.uid || (user as any)?.id;
+  const { data, isLoading } = useQuery({ 
+    queryKey: ["my-games", userId], 
+    queryFn: () => fetchMyGames(userId!),
+    enabled: !!userId && userId !== "undefined"
+  });
   const [q, setQ] = useState("");
   const [genre, setGenre] = useState<string>("all");
 

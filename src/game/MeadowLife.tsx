@@ -346,6 +346,36 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                 }
               }
             }
+
+            // 3. Chimney smoke particles (Farm House at (16,24) and Shop at (72,32))
+            if (t.kind === "house" && Math.random() < 0.05) {
+              if ((x === 16 && y === 24) || (x === 72 && y === 32)) {
+                particlesRef.current.push({
+                  x: x * TILE + 14,
+                  y: y * TILE - 8,
+                  vx: 5 + Math.random() * 8, // drift right slightly
+                  vy: -25 - Math.random() * 15, // float up
+                  color: "rgba(220, 220, 220, 0.35)",
+                  age: 0,
+                  maxAge: 1.5 + Math.random() * 0.5,
+                  type: "smoke"
+                });
+              }
+            }
+
+            // 4. Hired worker cabins chimney smoke
+            if (t.kind === "placed_item" && t.placedItemId === "worker_cabin" && Math.random() < 0.05) {
+              particlesRef.current.push({
+                x: x * TILE + 16,
+                y: y * TILE - 4,
+                vx: 4 + Math.random() * 6,
+                vy: -20 - Math.random() * 10,
+                color: "rgba(220, 220, 220, 0.3)",
+                age: 0,
+                maxAge: 1.4 + Math.random() * 0.4,
+                type: "smoke"
+              });
+            }
           }
         }
 
@@ -375,6 +405,9 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
             // Swaying leaf movement
             p.vx += Math.sin(p.age * 6) * 15 * dt;
             p.vy = 25 + Math.sin(p.age * 3) * 5; // slow drift
+          } else if (p.type === "smoke") {
+            // Smoke drifts upward, no gravity, slightly sways
+            p.vx += Math.sin(p.age * 4) * 8 * dt;
           } else if (p.type === "water" && p.vy > 100) {
             // Rain drops fall fast without gravity acceleration
           } else {
@@ -470,6 +503,14 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
           ctx.ellipse(0, 0, 3, 1.5, 0, 0, Math.PI * 2);
           ctx.fill();
           ctx.restore();
+        } else if (p.type === "smoke") {
+          const ratio = p.age / p.maxAge;
+          const radius = 3 + ratio * 8; // expand from 3px to 11px
+          const alpha = Math.max(0, 0.4 - ratio * 0.4); // fade out
+          ctx.fillStyle = `rgba(220, 220, 220, ${alpha})`;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, radius, 0, Math.PI * 2);
+          ctx.fill();
         } else if (p.type === "water") {
           ctx.fillStyle = p.color;
           ctx.beginPath();

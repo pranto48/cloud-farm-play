@@ -2216,7 +2216,8 @@ export function draw(
     Math.min(gridRows * TILE - viewHeight, playerPy - viewHeight / 2)
   );
 
-  ctx.fillStyle = state.inMine ? "#231f20" : "#7ec77a";
+  // Background
+  ctx.fillStyle = state.inMine ? "#231f20" : "#5da859"; // deep forest base grass for outer borders
   ctx.fillRect(0, 0, viewWidth, viewHeight);
 
   ctx.save();
@@ -2227,70 +2228,101 @@ export function draw(
   const startRow = Math.max(0, Math.floor(cameraY / TILE));
   const endRow = Math.min(gridRows, Math.ceil((cameraY + viewHeight) / TILE));
 
-  // 1. Terrain Tiles Layer
+  const phase = getTimePhase(state.time);
+
+  // Checker functions for terrains
+  const isWater = (t: Tile | undefined) => !!t && t.kind === "water";
+  const isPath = (t: Tile | undefined) => !!t && t.kind === "path";
+  const isSoil = (t: Tile | undefined) => !!t && (t.kind === "soil" || t.kind === "watered" || t.cropId !== undefined);
+
+  // 1. Terrain Tiles Layer (Layer 1: Base Grass Background + Base overlay)
+  for (let y = startRow; y < endRow; y++) {
+    for (let x = startCol; x < endCol; x++) {
+      const px = x * TILE;
+      const py = y * TILE;
+
+      if (!state.inMine) {
+        // Smooth noise-based grass color
+        const grassColor = getGrassColor(x, y);
+        ctx.fillStyle = grassColor;
+        ctx.fillRect(px, py, TILE, TILE);
+
+        // Cute floral and blades accents deterministically seeded
+        const r = seedRandom(x * 37 + y * 73);
+        if (r < 0.15) {
+          // Grass blades using curved paths
+          ctx.strokeStyle = "#4e8a4a";
+          ctx.lineWidth = 1.2;
+          ctx.beginPath();
+          const bx = px + 8 + r * 10;
+          const by = py + 24 - r * 8;
+          ctx.moveTo(bx, by);
+          ctx.quadraticCurveTo(bx - 3, by - 6, bx - 5, by - 12);
+          ctx.moveTo(bx + 4, by + 2);
+          ctx.quadraticCurveTo(bx + 5, by - 5, bx + 7, by - 10);
+          ctx.stroke();
+        } else if (r < 0.22) {
+          // Tiny flowers
+          const fx = px + 8 + r * 14;
+          const fy = py + 8 + r * 14;
+          const fColor = r < 0.17 ? "#ffffff" : r < 0.20 ? "#f1c40f" : "#9b59b6";
+          ctx.fillStyle = fColor;
+          ctx.beginPath();
+          ctx.arc(fx - 2, fy, 1.8, 0, Math.PI * 2);
+          ctx.arc(fx + 2, fy, 1.8, 0, Math.PI * 2);
+          ctx.arc(fx, fy - 2, 1.8, 0, Math.PI * 2);
+          ctx.arc(fx, fy + 2, 1.8, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = "#e67e22";
+          ctx.beginPath();
+          ctx.arc(fx, fy, 1, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      } else {
+        // Mine dirt tiles
+        const t = currentGrid[y][x];
+        if (t.kind !== "mine_wall") {
+          ctx.fillStyle = (x + y) % 2 === 0 ? "#3d312a" : "#352b25";
+          ctx.fillRect(px, py, TILE, TILE);
+          ctx.fillStyle = "#2c231e";
+          if ((x * 3 + y) % 5 === 0) ctx.fillRect(px + 6, py + 14, 8, 2);
+        }
+      }
+    }
+  }
+
+  // Terrain Tiles Layer (Layer 2: Winding Paths, Connected Shore Water, Connected Soils)
   for (let y = startRow; y < endRow; y++) {
     for (let x = startCol; x < endCol; x++) {
       const t = currentGrid[y][x];
       const px = x * TILE;
       const py = y * TILE;
 
-      if (t.kind === "grass") {
-        // Detailed seamless grass drawing
-        ctx.fillStyle = (x + y) % 2 === 0 ? "#7ec77a" : "#74bf72";
-        ctx.fillRect(px, py, TILE, TILE);
-
-        // draw cute floral accents
-        if ((x * 17 + y * 23) % 9 === 0) {
-          ctx.fillStyle = "#8ad186";
-          ctx.fillRect(px + 4, py + 8, 2, 4);
-          ctx.fillRect(px + 20, py + 18, 2, 3);
-        }
-        if ((x * 11 + y * 7) % 20 === 0) {
-          ctx.fillStyle = "#f39c12"; // orange bloom
-          ctx.fillRect(px + 14, py + 12, 3, 3);
-        }
-      } else if (t.kind === "mine_dirt") {
-        // stone paving texture
-        ctx.fillStyle = (x + y) % 2 === 0 ? "#3d312a" : "#352b25";
-        ctx.fillRect(px, py, TILE, TILE);
-        ctx.fillStyle = "#2c231e";
-        if ((x * 3 + y) % 5 === 0) ctx.fillRect(px + 6, py + 14, 8, 2);
-      } else if (t.kind === "mine_wall") {
-        ctx.fillStyle = "#201814";
-        ctx.fillRect(px, py, TILE, TILE);
-        ctx.fillStyle = "#15100d";
-        ctx.fillRect(px + 2, py + 2, TILE - 4, TILE - 4);
-      } else if (t.kind === "mine_ladder") {
-        ctx.fillStyle = "#352b25";
-        ctx.fillRect(px, py, TILE, TILE);
-        ctx.fillStyle = "#a87b51";
-        ctx.fillRect(px + 8, py + 2, 3, TILE - 4);
-        ctx.fillRect(px + 20, py + 2, 3, TILE - 4);
-        for (let i = 4; i < TILE - 2; i += 6) {
-          ctx.fillRect(px + 8, py + i, 12, 2);
-        }
-      } else if (t.kind === "path") {
-        ctx.fillStyle = "#ceb48a"; // sandy path
-        ctx.fillRect(px, py, TILE, TILE);
-        ctx.fillStyle = "#bd9e72";
-        if ((x + y) % 4 === 0) {
-          ctx.fillRect(px, py, 4, 4);
-          ctx.fillRect(px + 16, py + 16, 4, 4);
+      if (t.kind === "path") {
+        // Gravel path outer border
+        drawOrganicBlob(ctx, y, x, currentGrid, TILE, isPath, "#bd9e72", 0.65);
+        // Slate/sandy path core
+        drawOrganicBlob(ctx, y, x, currentGrid, TILE, isPath, "#ceb48a", 0.45);
+        
+        // Add random tiny gravel pebbles
+        const pathR = seedRandom(x * 47 + y * 83);
+        if (pathR < 0.25) {
+          ctx.fillStyle = "#bd9e72";
+          ctx.fillRect(px + 8 + pathR * 12, py + 8 + pathR * 12, 2, 2);
         }
       } else if (t.kind === "water") {
-        // Shimmering base water
-        ctx.fillStyle = "#2980b9"; // darker blue depth
-        ctx.fillRect(px, py, TILE, TILE);
+        // 1. Sandy beach shoreline
+        drawOrganicBlob(ctx, y, x, currentGrid, TILE, isWater, "#e5cbb3", 0.75);
+        // 2. Shallow water transition
+        drawOrganicBlob(ctx, y, x, currentGrid, TILE, isWater, "#4c81a3", 0.6);
+        // 3. Deep water core
+        drawOrganicBlob(ctx, y, x, currentGrid, TILE, isWater, "#2980b9", 0.46);
 
-        const shimmer = Math.sin(Date.now() / 800 + (x * 3 + y * 7) * 0.2) * 0.12 + 0.88;
-        ctx.fillStyle = `rgba(52, 152, 219, ${shimmer})`; // animated base shimmer
-        ctx.fillRect(px, py, TILE, TILE);
-
-        // Wave Crest Ripple calculations
-        const wave = Math.sin(Date.now() / 250 + x * 0.4 + y * 0.2) * 1.8;
+        // Animated wave ripples inside the deep water core
+        const wave = Math.sin(Date.now() / 250 + x * 0.4 + y * 0.2) * 1.5;
         ctx.fillStyle = "#aed6f1";
-        ctx.fillRect(px + 4, py + 8 + wave, 6, 1.5);
-        ctx.fillRect(px + 18, py + 20 - wave, 8, 1.5);
+        ctx.fillRect(px + 10, py + 12 + wave, 6, 1.2);
+        ctx.fillRect(px + 16, py + 22 - wave, 6, 1.2);
 
         // Stepping water lily pads with bobbing and rotation
         if ((x * 13 + y * 9) % 23 === 0) {
@@ -2308,60 +2340,236 @@ export function draw(
 
           // Pink Lily Flower bloom
           if ((x * 13 + y * 9) % 46 === 0) {
-            ctx.fillStyle = "#f48fb1"; // pink flower petal
+            ctx.fillStyle = "#f48fb1";
             ctx.beginPath();
             ctx.arc(-1.5, -1.5, 2, 0, Math.PI * 2);
             ctx.arc(1.5, 1.5, 2, 0, Math.PI * 2);
             ctx.fill();
-            ctx.fillStyle = "#ffffff"; // flower center
+            ctx.fillStyle = "#ffffff";
             ctx.beginPath();
             ctx.arc(0, 0, 1.2, 0, Math.PI * 2);
             ctx.fill();
           }
           ctx.restore();
         }
-      } else if (t.kind === "soil" || t.kind === "watered") {
-        ctx.fillStyle = t.kind === "watered" ? "#4a3120" : "#8a5a3b";
-        ctx.fillRect(px + 1, py + 1, TILE - 2, TILE - 2);
+      } else if (t.kind === "soil" || t.kind === "watered" || t.cropId !== undefined) {
+        // Draw connected soil plots with a darker shadow/border first
+        drawOrganicBlob(ctx, y, x, currentGrid, TILE, isSoil, "#5a3b25", 0.68);
+        const soilColor = (t.kind === "watered" || t.watered) ? "#4a3120" : "#8a5a3b";
+        drawOrganicBlob(ctx, y, x, currentGrid, TILE, isSoil, soilColor, 0.58);
 
-        // Watered soil glistening effect
+        // Glistening effect on watered soils
         if (t.kind === "watered" || t.watered) {
           const glisten = Math.sin(Date.now() / 350 + (x * 17 + y * 23));
           if (glisten > 0.82) {
             ctx.fillStyle = "rgba(174, 214, 241, 0.75)";
-            const gx = px + 4 + ((x * 11 + y * 7) % 22);
-            const gy = py + 4 + ((x * 5 + y * 13) % 22);
+            const gx = px + 6 + ((x * 11 + y * 7) % 18);
+            const gy = py + 6 + ((x * 5 + y * 13) % 18);
             ctx.fillRect(gx, gy, 1.5, 1.5);
           }
         }
       } else if (t.kind === "house") {
-        // Detailed Stardew wood cabin drawing
-        ctx.fillStyle = "#935116"; // rustic siding
-        ctx.fillRect(px, py, TILE, TILE);
-        ctx.fillStyle = "#5c330e";
-        // horizontal boards
-        for (let i = 6; i < TILE; i += 8) {
-          ctx.fillRect(px, py + i, TILE, 2);
+        // Determine whether this house tile belongs to the Farm House or the Shop storefront
+        if (x >= 12 && x <= 17 && y >= 24 && y <= 28) {
+          // Farm House building (6x5, rx: 0..5, ry: 0..4)
+          const rx = x - 12;
+          const ry = y - 24;
+
+          if (ry === 0 || ry === 1) {
+            // Dark red brick shingles
+            ctx.fillStyle = "#7b241c";
+            ctx.fillRect(px, py, TILE, TILE);
+            ctx.fillStyle = "#511812";
+            ctx.fillRect(px, py + TILE - 2, TILE, 2);
+            for (let i = (ry === 0 ? 0 : 4); i < TILE; i += 8) {
+              ctx.fillRect(px + i, py, 2, TILE);
+            }
+            if (ry === 1) {
+              ctx.fillStyle = "#4a2306"; // eaves under roof
+              ctx.fillRect(px, py + TILE - 4, TILE, 4);
+            }
+            // Draw chimney stack on the roof (rx = 4, ry = 0)
+            if (rx === 4 && ry === 0) {
+              ctx.fillStyle = "#5d6d7e"; // gray stone chimney
+              ctx.fillRect(px + 8, py - 10, 12, 20);
+              ctx.fillStyle = "#2c3e50"; // rim
+              ctx.fillRect(px + 6, py - 12, 16, 4);
+            }
+          } else {
+            // Wall log siding
+            ctx.fillStyle = "#a0522d";
+            ctx.fillRect(px, py, TILE, TILE);
+            ctx.fillStyle = "#5c2d16";
+            for (let i = 6; i < TILE; i += 8) {
+              ctx.fillRect(px, py + i, TILE, 2);
+            }
+
+            // Window frames + glowing glass
+            if ((rx === 1 || rx === 4) && ry === 2) {
+              ctx.fillStyle = "#3e2723";
+              ctx.fillRect(px + 4, py + 6, TILE - 8, TILE - 12);
+              const glow = (phase === "night" || phase === "evening") ? "#f1c40f" : "#85c1e9";
+              ctx.fillStyle = glow;
+              ctx.fillRect(px + 6, py + 8, TILE - 12, TILE - 16);
+              ctx.fillStyle = "#3e2723";
+              ctx.fillRect(px + TILE / 2 - 1, py + 8, 2, TILE - 16);
+              ctx.fillRect(px + 6, py + TILE / 2 - 1, TILE - 12, 2);
+            }
+
+            // Doorway at the bottom center
+            if (rx === 3 && ry === 4) {
+              ctx.fillStyle = "#3e2723"; // frame
+              ctx.fillRect(px + 4, py, TILE - 8, TILE);
+              ctx.fillStyle = "#795548"; // brown door
+              ctx.fillRect(px + 6, py + 2, TILE - 12, TILE - 2);
+              ctx.fillStyle = "#d4ac0d"; // knob
+              ctx.beginPath();
+              ctx.arc(px + TILE - 10, py + TILE / 2, 2, 0, Math.PI * 2);
+              ctx.fill();
+            }
+          }
+        } else if (x >= 64 && x <= 74 && y >= 32 && y <= 40) {
+          // Shop building (11x9, rx: 0..10, ry: 0..8)
+          const rx = x - 64;
+          const ry = y - 32;
+
+          if (ry >= 0 && ry <= 2) {
+            // Slate blue roof shingles
+            ctx.fillStyle = "#2e4053";
+            ctx.fillRect(px, py, TILE, TILE);
+            ctx.fillStyle = "#1b2631";
+            ctx.fillRect(px, py + TILE - 2, TILE, 2);
+            for (let i = (ry % 2 === 0 ? 0 : 4); i < TILE; i += 8) {
+              ctx.fillRect(px + i, py, 2, TILE);
+            }
+            if (ry === 2) {
+              ctx.fillStyle = "#2c3e50"; // eaves
+              ctx.fillRect(px, py + TILE - 4, TILE, 4);
+            }
+            // Shop Chimney stack (rx = 8, ry = 0)
+            if (rx === 8 && ry === 0) {
+              ctx.fillStyle = "#5d6d7e";
+              ctx.fillRect(px + 8, py - 10, 12, 20);
+              ctx.fillStyle = "#2c3e50";
+              ctx.fillRect(px + 6, py - 12, 16, 4);
+            }
+          } else {
+            // Tan siding walls
+            ctx.fillStyle = "#ceb48a";
+            ctx.fillRect(px, py, TILE, TILE);
+            ctx.fillStyle = "#9c8259";
+            for (let i = 6; i < TILE; i += 8) {
+              ctx.fillRect(px, py + i, TILE, 2);
+            }
+
+            // Display Sign
+            if ((rx === 5 || rx === 6) && ry === 3) {
+              ctx.fillStyle = "#784212";
+              ctx.fillRect(px, py + 8, TILE, TILE - 16);
+              ctx.fillStyle = "#f5c542";
+              ctx.fillRect(px + 2, py + 10, TILE - 4, TILE - 20);
+              ctx.fillStyle = "#784212";
+              ctx.font = "bold 8px sans-serif";
+              ctx.textAlign = "center";
+              ctx.fillText(rx === 5 ? "SH" : "OP", px + TILE / 2, py + TILE / 2 + 2);
+            }
+
+            // Large Shop Windows
+            if ((rx === 2 || rx === 8) && ry === 4) {
+              ctx.fillStyle = "#3e2723";
+              ctx.fillRect(px + 2, py + 4, TILE - 4, TILE - 8);
+              const glow = (phase === "night" || phase === "evening") ? "#f1c40f" : "#85c1e9";
+              ctx.fillStyle = glow;
+              ctx.fillRect(px + 4, py + 6, TILE - 8, TILE - 12);
+              ctx.fillStyle = "rgba(255, 255, 255, 0.35)";
+              ctx.beginPath();
+              ctx.moveTo(px + 6, py + 6);
+              ctx.lineTo(px + TILE - 6, py + TILE - 6);
+              ctx.lineTo(px + TILE - 9, py + TILE - 6);
+              ctx.lineTo(px + 6, py + 9);
+              ctx.fill();
+            }
+
+            // Storefront Entry Door
+            if (rx === 5 && ry === 8) {
+              ctx.fillStyle = "#3e2723";
+              ctx.fillRect(px + 4, py, TILE - 8, TILE);
+              ctx.fillStyle = "#795548";
+              ctx.fillRect(px + 6, py + 2, TILE - 12, TILE - 2);
+              ctx.fillStyle = "#d4ac0d";
+              ctx.beginPath();
+              ctx.arc(px + TILE - 10, py + TILE / 2, 2, 0, Math.PI * 2);
+              ctx.fill();
+            }
+          }
+        } else {
+          // Fallback simple house
+          ctx.fillStyle = "#935116";
+          ctx.fillRect(px, py, TILE, TILE);
+          ctx.fillStyle = "#5c330e";
+          for (let i = 6; i < TILE; i += 8) {
+            ctx.fillRect(px, py + i, TILE, 2);
+          }
         }
       } else if (t.kind === "shop") {
-        ctx.fillStyle = "#965d34";
+        // Premium Stardew shop counter/register
+        ctx.fillStyle = "#ceb48a"; // background siding
         ctx.fillRect(px, py, TILE, TILE);
-        ctx.fillStyle = "#e59866";
-        ctx.fillRect(px + 4, py + 14, TILE - 8, 10); // display counter
-      } else if (t.kind === "mine_cave") {
-        ctx.fillStyle = "#7ec77a";
-        ctx.fillRect(px, py, TILE, TILE);
-        // cave arch
-        ctx.fillStyle = "#2c3e50";
-        ctx.fillRect(px + 4, py + 6, TILE - 8, TILE - 6);
-        ctx.fillStyle = "#17202a";
-        ctx.fillRect(px + 8, py + 12, TILE - 16, TILE - 12);
-      } else if (t.kind === "tree") {
-        // Draw grass background first
-        ctx.fillStyle = (x + y) % 2 === 0 ? "#7ec77a" : "#74bf72";
-        ctx.fillRect(px, py, TILE, TILE);
+        ctx.fillStyle = "#784212"; // wood table frame
+        ctx.fillRect(px + 2, py + 4, TILE - 4, TILE - 8);
+        ctx.fillStyle = "#a0522d"; // counter top
+        ctx.fillRect(px + 1, py + 2, TILE - 2, 4);
 
-        // Decaying hit shake calculation
+        // Gold scale/cash register on counter
+        ctx.fillStyle = "#d4ac0d";
+        ctx.fillRect(px + 8, py + 6, 6, 6);
+        ctx.fillStyle = "#5d6d7e";
+        ctx.fillRect(px + 18, py + 4, 8, 8);
+      } else if (t.kind === "mine_cave") {
+        // Beautiful rock arch cave entrance
+        ctx.fillStyle = "#5a3b25"; // background shade
+        ctx.fillRect(px + 2, py + 2, TILE - 4, TILE - 2);
+
+        ctx.fillStyle = "#7f8c8d"; // stone arch left
+        ctx.fillRect(px + 2, py + 6, 6, TILE - 6);
+        ctx.fillRect(px + TILE - 8, py + 6, 6, TILE - 6);
+        ctx.fillRect(px + 2, py + 2, TILE - 4, 6); // top arch
+
+        ctx.fillStyle = "#11161b"; // dark deep tunnel
+        ctx.fillRect(px + 8, py + 8, TILE - 16, TILE - 8);
+      } else if (t.kind === "mine_wall") {
+        ctx.fillStyle = "#201814";
+        ctx.fillRect(px, py, TILE, TILE);
+        ctx.fillStyle = "#15100d";
+        ctx.fillRect(px + 2, py + 2, TILE - 4, TILE - 4);
+      } else if (t.kind === "mine_ladder") {
+        ctx.fillStyle = "#352b25";
+        ctx.fillRect(px, py, TILE, TILE);
+        ctx.fillStyle = "#a87b51";
+        ctx.fillRect(px + 8, py + 2, 3, TILE - 4);
+        ctx.fillRect(px + 20, py + 2, 3, TILE - 4);
+        for (let i = 4; i < TILE - 2; i += 6) {
+          ctx.fillRect(px + 8, py + i, 12, 2);
+        }
+      }
+    }
+  }
+
+  // Terrain Tiles Layer (Layer 3: Trees, Growing Crops, Debris, and Placed Items)
+  for (let y = startRow; y < endRow; y++) {
+    for (let x = startCol; x < endCol; x++) {
+      const t = currentGrid[y][x];
+      const px = x * TILE;
+      const py = y * TILE;
+
+      // Render Tree
+      if (t.kind === "tree") {
+        // 1. Draw organic shadow blob under tree base
+        ctx.fillStyle = "rgba(0, 0, 0, 0.25)";
+        ctx.beginPath();
+        ctx.ellipse(px + 16, py + 30, 12, 5, 0, 0, Math.PI * 2);
+        ctx.fill();
+
         let hitShake = 0;
         if (t.lastHitTime) {
           const elapsed = Date.now() - t.lastHitTime;
@@ -2370,44 +2578,64 @@ export function draw(
           }
         }
 
-        // Gentle wind sway (applied as a canvas rotation/shear around the base of the trunk)
-        const windSwayAngle = Math.sin(Date.now() / 900 + x * 0.4) * 0.04; // small rotation
+        const windSwayAngle = Math.sin(Date.now() / 900 + x * 0.4) * 0.04;
 
         ctx.save();
-        ctx.translate(px + 16 + hitShake, py + 32); // origin at trunk base
+        ctx.translate(px + 16 + hitShake, py + 32);
         ctx.rotate(windSwayAngle);
 
-        // Trunk (drawn relative to translated base at (0, 0))
-        ctx.fillStyle = "#8a5a3b"; // brown trunk
-        ctx.fillRect(-3, -20, 6, 20); // centered horizontally
+        // Detailed wood bark trunk
+        ctx.fillStyle = "#70482e"; // brown bark
+        ctx.fillRect(-4, -22, 8, 22);
+        ctx.fillStyle = "#593924"; // vertical bark lines
+        ctx.fillRect(-2, -22, 1, 22);
+        ctx.fillRect(2, -18, 1, 18);
 
-        // Branches/Leaves (Swaying with the trunk, plus minor internal sway)
+        // Fluffy leaves (3 overlapping layers)
         const leafSwayX = Math.sin(Date.now() / 400 + y) * 0.8;
-        ctx.fillStyle = "#27ae60"; // dark green base
+        
+        // Layer 1: Dark background leaves
+        ctx.fillStyle = "#1e7e34";
         ctx.beginPath();
-        ctx.arc(0 + leafSwayX, -26, 12, 0, Math.PI * 2);
+        ctx.arc(0 + leafSwayX, -30, 15, 0, Math.PI * 2);
         ctx.fill();
 
-        ctx.fillStyle = "#2ecc71"; // light green highlights
+        // Layer 2: Medium leaves
+        ctx.fillStyle = "#28a745";
         ctx.beginPath();
-        ctx.arc(-4 + leafSwayX, -30, 8, 0, Math.PI * 2);
-        ctx.arc(4 + leafSwayX, -28, 7, 0, Math.PI * 2);
+        ctx.arc(-8 + leafSwayX, -35, 12, 0, Math.PI * 2);
+        ctx.arc(8 + leafSwayX, -35, 12, 0, Math.PI * 2);
+        ctx.arc(0 + leafSwayX, -42, 13, 0, Math.PI * 2);
         ctx.fill();
 
-        // If it's a fruit tree, draw some red apples!
+        // Layer 3: Highlight light green leaves
+        ctx.fillStyle = "#5cb85c";
+        ctx.beginPath();
+        ctx.arc(-5 + leafSwayX, -38, 8, 0, Math.PI * 2);
+        ctx.arc(5 + leafSwayX, -38, 8, 0, Math.PI * 2);
+        ctx.arc(0 + leafSwayX, -45, 9, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Apples (5 deterministic spots)
         if ((x * 7 + y * 13) % 5 === 0) {
-          ctx.fillStyle = "#e74c3c"; // red apples
-          ctx.beginPath();
-          ctx.arc(-4 + leafSwayX, -26, 2.5, 0, Math.PI * 2);
-          ctx.arc(2 + leafSwayX, -32, 2.5, 0, Math.PI * 2);
-          ctx.arc(-1 + leafSwayX, -22, 2.5, 0, Math.PI * 2);
-          ctx.fill();
+          ctx.fillStyle = "#d9534f"; // beautiful red apple
+          const apples = [
+            [-6, -32], [6, -34], [-2, -40], [4, -42], [-8, -42]
+          ];
+          apples.forEach(([ax, ay]) => {
+            ctx.beginPath();
+            ctx.arc(ax + leafSwayX, ay, 2.5, 0, Math.PI * 2);
+            ctx.fill();
+            // stem
+            ctx.fillStyle = "#5c3a21";
+            ctx.fillRect(ax + leafSwayX, ay - 4, 1, 2);
+          });
         }
 
         ctx.restore();
       }
 
-      // Draw weeds/branches/stones debris with hit shake
+      // Render Debris & Ores with hit/rustle shake
       let debrisShake = 0;
       if (t.lastHitTime) {
         const elapsed = Date.now() - t.lastHitTime;
@@ -2417,7 +2645,6 @@ export function draw(
       }
 
       if (t.kind === "debris_weed") {
-        // Rustle shaking on weeds
         let weedShake = debrisShake;
         if (t.lastRustleTime) {
           const elapsed = Date.now() - t.lastRustleTime;
@@ -2425,35 +2652,141 @@ export function draw(
             weedShake += Math.sin(elapsed * 0.05) * 2.5 * (1 - elapsed / 400);
           }
         }
-        ctx.fillStyle = "#27ae60";
-        ctx.fillRect(px + 8 + weedShake, py + 16, 16, 12);
-        ctx.fillStyle = "#2ecc71";
-        ctx.fillRect(px + 12 + weedShake, py + 8, 8, 10);
-      } else if (t.kind === "debris_branch") {
-        ctx.fillStyle = "#8a5a3b";
-        ctx.fillRect(px + 6 + debrisShake, py + 18, 20, 5);
-        ctx.fillRect(px + 18 + debrisShake, py + 12, 5, 8);
-      } else if (t.kind === "debris_stone" || t.kind === "ore_copper" || t.kind === "ore_iron" || t.kind === "ore_gold") {
-        ctx.fillStyle = t.kind === "debris_stone" ? "#839192" : "#566573";
+
+        // Mossy weed clump with shadow
+        ctx.fillStyle = "rgba(0, 0, 0, 0.15)";
         ctx.beginPath();
-        ctx.moveTo(px + 6 + debrisShake, py + 26);
-        ctx.lineTo(px + 16 + debrisShake, py + 6);
-        ctx.lineTo(px + 26 + debrisShake, py + 26);
+        ctx.ellipse(px + 16, py + 24, 10, 4, 0, 0, Math.PI * 2);
         ctx.fill();
 
-        if (t.kind === "ore_copper") {
-          ctx.fillStyle = "#e67e22";
-          ctx.fillRect(px + 14 + debrisShake, py + 14, 4, 4);
-        } else if (t.kind === "ore_iron") {
-          ctx.fillStyle = "#bdc3c7";
-          ctx.fillRect(px + 14 + debrisShake, py + 14, 4, 4);
-        } else if (t.kind === "ore_gold") {
-          ctx.fillStyle = "#f1c40f";
-          ctx.fillRect(px + 13 + debrisShake, py + 12, 5, 5);
-        }
+        ctx.fillStyle = "#27ae60";
+        ctx.beginPath();
+        ctx.arc(px + 12 + weedShake, py + 20, 6, 0, Math.PI * 2);
+        ctx.arc(px + 20 + weedShake, py + 20, 5, 0, Math.PI * 2);
+        ctx.arc(px + 16 + weedShake, py + 15, 6, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = "#5cb85c"; // highlight moss
+        ctx.beginPath();
+        ctx.arc(px + 12 + weedShake, py + 18, 3, 0, Math.PI * 2);
+        ctx.arc(px + 18 + weedShake, py + 14, 4, 0, Math.PI * 2);
+        ctx.fill();
+
+      } else if (t.kind === "debris_branch") {
+        // Shadow
+        ctx.fillStyle = "rgba(0, 0, 0, 0.15)";
+        ctx.beginPath();
+        ctx.ellipse(px + 16 + debrisShake, py + 22, 12, 3, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Branch stick with node segments
+        ctx.fillStyle = "#8a5a3b";
+        ctx.fillRect(px + 6 + debrisShake, py + 18, 20, 4);
+        ctx.fillRect(px + 18 + debrisShake, py + 10, 4, 8);
+        ctx.fillRect(px + 10 + debrisShake, py + 14, 3, 5);
+
+        ctx.fillStyle = "#ba8b68"; // wood core
+        ctx.fillRect(px + 6 + debrisShake, py + 19, 2, 2);
+        ctx.fillRect(px + 24 + debrisShake, py + 19, 2, 2);
+
+      } else if (t.kind === "debris_stone") {
+        // Gray cracked rock
+        ctx.fillStyle = "rgba(0, 0, 0, 0.2)";
+        ctx.beginPath();
+        ctx.ellipse(px + 16 + debrisShake, py + 24, 11, 4, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = "#7f8c8d";
+        ctx.beginPath();
+        ctx.moveTo(px + 6 + debrisShake, py + 24);
+        ctx.lineTo(px + 10 + debrisShake, py + 12);
+        ctx.lineTo(px + 20 + debrisShake, py + 10);
+        ctx.lineTo(px + 26 + debrisShake, py + 24);
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.fillStyle = "#95a5a6"; // facet highlight
+        ctx.beginPath();
+        ctx.moveTo(px + 10 + debrisShake, py + 12);
+        ctx.lineTo(px + 20 + debrisShake, py + 10);
+        ctx.lineTo(px + 16 + debrisShake, py + 24);
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.strokeStyle = "#566573"; // rock crack
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(px + 15 + debrisShake, py + 11);
+        ctx.lineTo(px + 13 + debrisShake, py + 18);
+        ctx.stroke();
+
+      } else if (t.kind === "ore_copper" || t.kind === "ore_iron" || t.kind === "ore_gold") {
+        // Rich crystalline metallic ore deposit
+        ctx.fillStyle = "rgba(0, 0, 0, 0.25)";
+        ctx.beginPath();
+        ctx.ellipse(px + 16 + debrisShake, py + 24, 12, 5, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = "#47525d"; // host stone base
+        ctx.beginPath();
+        ctx.moveTo(px + 6 + debrisShake, py + 24);
+        ctx.lineTo(px + 12 + debrisShake, py + 10);
+        ctx.lineTo(px + 22 + debrisShake, py + 12);
+        ctx.lineTo(px + 26 + debrisShake, py + 24);
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.fillStyle = "#5c6a77"; // facet
+        ctx.beginPath();
+        ctx.moveTo(px + 12 + debrisShake, py + 10);
+        ctx.lineTo(px + 22 + debrisShake, py + 12);
+        ctx.lineTo(px + 18 + debrisShake, py + 24);
+        ctx.closePath();
+        ctx.fill();
+
+        const gemColors = {
+          ore_copper: ["#d35400", "#e67e22", "#f39c12"],
+          ore_iron: ["#7f8c8d", "#bdc3c7", "#ecf0f1"],
+          ore_gold: ["#d4ac0d", "#f1c40f", "#f9e79f"]
+        }[t.kind as "ore_copper" | "ore_iron" | "ore_gold"] || ["#fff", "#fff", "#fff"];
+
+        const crystals = [
+          { dx: -4, dy: -6, size: 4 },
+          { dx: 4, dy: -2, size: 5 },
+          { dx: 0, dy: 4, size: 4 }
+        ];
+
+        crystals.forEach((c) => {
+          const cx = px + 16 + c.dx + debrisShake;
+          const cy = py + 14 + c.dy;
+          const s = c.size;
+
+          ctx.fillStyle = gemColors[1];
+          ctx.beginPath();
+          ctx.moveTo(cx, cy - s);
+          ctx.lineTo(cx + s / 1.5, cy);
+          ctx.lineTo(cx, cy + s);
+          ctx.lineTo(cx - s / 1.5, cy);
+          ctx.closePath();
+          ctx.fill();
+
+          ctx.fillStyle = gemColors[2];
+          ctx.beginPath();
+          ctx.moveTo(cx, cy - s);
+          ctx.lineTo(cx + s / 1.5, cy);
+          ctx.lineTo(cx, cy);
+          ctx.closePath();
+          ctx.fill();
+
+          // Sparkle glisten dot
+          if (Math.sin(Date.now() / 150 + c.dx) > 0.8) {
+            ctx.fillStyle = "#ffffff";
+            ctx.fillRect(cx - 1, cy - s - 1, 2, 2);
+          }
+        });
       }
 
-      // Draw placed objects (Basic/Quality Sprinklers, Fences, Torches)
+      // Render Placed Items
       if (t.kind === "placed_item" && t.placedItemId) {
         const id = t.placedItemId;
         if (id === "chest") {
@@ -2473,18 +2806,16 @@ export function draw(
           ctx.fillStyle = "#eb984e";
           ctx.fillRect(px + 8, py + 12, 16, 12);
           ctx.fillStyle = "#873600";
-          ctx.fillRect(px + 4, py + 8, 24, 4); // hat rim
+          ctx.fillRect(px + 4, py + 8, 24, 4);
           ctx.fillRect(px + 10, py + 2, 12, 6);
           ctx.fillStyle = "#5c3a21";
           ctx.fillRect(px + 15, py + 24, 2, 8);
         } else if (id === "sprinkler_basic" || id === "sprinkler_quality") {
-          // Sprinkler render
           ctx.fillStyle = id === "sprinkler_basic" ? "#2980b9" : "#f1c40f";
-          ctx.fillRect(px + 10, py + 18, 12, 8); // base
+          ctx.fillRect(px + 10, py + 18, 12, 8);
           ctx.fillStyle = "#7f8c8d";
-          ctx.fillRect(px + 15, py + 8, 2, 10); // rod
+          ctx.fillRect(px + 15, py + 8, 2, 10);
 
-          // Draw spinning sprinkler arms based on time rotation
           ctx.save();
           ctx.translate(px + 16, py + 8);
           ctx.rotate(Date.now() / 150);
@@ -2492,57 +2823,72 @@ export function draw(
           ctx.fillRect(-6, -1, 12, 2);
           ctx.restore();
         } else if (id === "chicken_egg") {
-          // Egg dropped on ground
           ctx.fillStyle = "#f9e79f";
           ctx.beginPath();
           ctx.arc(px + 16, py + 20, 5, 0, Math.PI * 2);
           ctx.fill();
         } else if (id === "mailbox") {
-          // Mailbox next to player house
           ctx.fillStyle = "#7f8c8d";
           ctx.fillRect(px + 10, py + 16, 12, 12);
           ctx.fillStyle = "#2c3e50";
-          ctx.fillRect(px + 14, py + 28, 4, 4); // stand
+          ctx.fillRect(px + 14, py + 28, 4, 4);
 
-          // Unread mail flag indicator
           if (state.hasUnreadMail) {
             ctx.fillStyle = "#e74c3c";
-            ctx.fillRect(px + 20, py + 10, 4, 6); // red flag up
+            ctx.fillRect(px + 20, py + 10, 4, 6);
           } else {
             ctx.fillStyle = "#7f8c8d";
-            ctx.fillRect(px + 20, py + 22, 6, 2); // flag down
+            ctx.fillRect(px + 20, py + 22, 6, 2);
           }
         } else if (id === "pet_bowl_dog" || id === "pet_bowl_cat") {
-          ctx.fillStyle = "#8d6e63"; // brown clay bowl
+          ctx.fillStyle = "#8d6e63";
           ctx.beginPath();
           ctx.ellipse(px + 16, py + 22, 9, 5, 0, 0, Math.PI * 2);
           ctx.fill();
           if (t.watered) {
-            ctx.fillStyle = "#3498db"; // blue water
+            ctx.fillStyle = "#3498db";
             ctx.beginPath();
             ctx.ellipse(px + 16, py + 21, 6, 3, 0, 0, Math.PI * 2);
             ctx.fill();
           }
         } else if (id === "worker_cabin") {
-          ctx.fillStyle = "#795548"; // brown log walls
-          ctx.fillRect(px + 2, py + 10, TILE - 4, TILE - 10);
+          // Premium cabin with shadow base and chimneys smoke trigger in app
+          ctx.fillStyle = "rgba(0, 0, 0, 0.2)";
+          ctx.beginPath();
+          ctx.ellipse(px + 16, py + 28, 14, 4, 0, 0, Math.PI * 2);
+          ctx.fill();
+
+          ctx.fillStyle = "#8d6e63";
+          ctx.fillRect(px + 4, py + 12, TILE - 8, TILE - 12);
           ctx.fillStyle = "#5d4037";
-          ctx.fillRect(px + 2, py + 14, TILE - 4, 2);
-          ctx.fillRect(px + 2, py + 20, TILE - 4, 2);
-          ctx.fillRect(px + 2, py + 26, TILE - 4, 2);
-          ctx.fillStyle = "#c62828";
+          ctx.fillRect(px + 4, py + 16, TILE - 8, 2);
+          ctx.fillRect(px + 4, py + 22, TILE - 8, 2);
+
+          ctx.fillStyle = "#c62828"; // roof
           ctx.beginPath();
           ctx.moveTo(px + 16, py + 2);
-          ctx.lineTo(px + 0, py + 10);
-          ctx.lineTo(px + TILE, py + 10);
+          ctx.lineTo(px, py + 12);
+          ctx.lineTo(px + TILE, py + 12);
           ctx.closePath();
           ctx.fill();
-          ctx.fillStyle = "#3e2723";
-          ctx.fillRect(px + 12, py + 20, 8, 12);
+
+          ctx.fillStyle = "#b71c1c";
+          ctx.fillRect(px + 4, py + 10, TILE - 8, 2);
+
+          ctx.fillStyle = "#d84315"; // door
+          ctx.fillRect(px + 12, py + 18, 8, 14);
+          ctx.fillStyle = "#fdd835";
+          ctx.fillRect(px + 13, py + 19, 6, 13);
+
+          ctx.fillStyle = "#3e2723"; // window
+          ctx.fillRect(px + 22, py + 16, 6, 6);
+          const glow = (phase === "night" || phase === "evening") ? "#f1c40f" : "#85c1e9";
+          ctx.fillStyle = glow;
+          ctx.fillRect(px + 23, py + 17, 4, 4);
         }
       }
 
-      // 2. Draw Growing Crops Layer
+      // Render Growing Crops
       if (t.cropId) {
         const def = CROPS[t.cropId];
         const days = def.growDays;
@@ -2552,7 +2898,6 @@ export function draw(
         const cropPx = px + TILE / 2;
         const cropPy = py + TILE - 6;
 
-        // Calculate rustle swaying
         let cropSway = 0;
         if (t.lastRustleTime) {
           const elapsed = Date.now() - t.lastRustleTime;
@@ -2560,7 +2905,6 @@ export function draw(
             cropSway = Math.sin(elapsed * 0.05) * 3 * (1 - elapsed / 400);
           }
         }
-        // Add gentle ambient wind sway
         const windSway = Math.sin(Date.now() / 450 + x * 0.5) * 1.2;
         const totalSway = cropSway + windSway;
 
@@ -2588,7 +2932,6 @@ export function draw(
 
         ctx.restore();
 
-        // Glistening effect on watered crops
         if (t.watered || state.weather === "rainy") {
           const cropGlisten = Math.sin(Date.now() / 400 + (x * 13 + y * 7));
           if (cropGlisten > 0.85) {
@@ -2608,7 +2951,12 @@ export function draw(
       const ax = animal.x * TILE;
       const ay = animal.y * TILE;
 
-      // Squish animation on hop
+      // Draw shadow under animal feet
+      ctx.fillStyle = "rgba(0, 0, 0, 0.2)";
+      ctx.beginPath();
+      ctx.ellipse(ax + 16, ay + 24, animal.type === "chick" ? 5 : 8, 3, 0, 0, Math.PI * 2);
+      ctx.fill();
+
       const squish = 1 + Math.sin(Date.now() / 120) * 0.08;
 
       ctx.save();
@@ -2616,33 +2964,26 @@ export function draw(
       ctx.scale(squish, 2 - squish);
 
       if (animal.type === "chick") {
-        // Chick render
-        ctx.fillStyle = "#f1c40f"; // yellow
+        ctx.fillStyle = "#f1c40f";
         ctx.beginPath();
         ctx.arc(0, -6, 6, 0, Math.PI * 2);
         ctx.fill();
-        // Beak
         ctx.fillStyle = "#e67e22";
         ctx.fillRect(3, -8, 3, 2);
-        // Feet
         ctx.fillRect(-4, 0, 2, 2);
         ctx.fillRect(2, 0, 2, 2);
       } else {
-        // Calf / Cow render
-        ctx.fillStyle = "#ba4a00"; // brown calf
+        ctx.fillStyle = "#ba4a00";
         ctx.fillRect(-8, -12, 16, 12);
-        // Spots
         ctx.fillStyle = "#fff";
         ctx.fillRect(-4, -9, 4, 4);
         ctx.fillRect(2, -5, 3, 3);
-        // Head bobbing
         ctx.fillStyle = "#ba4a00";
         ctx.fillRect(4, -15, 6, 6);
       }
 
       ctx.restore();
 
-      // Show milk drops if ready to milk
       if (animal.hasProduce && animal.type === "calf") {
         ctx.fillStyle = "#fff";
         ctx.font = "bold 9px monospace";
@@ -2658,6 +2999,12 @@ export function draw(
       const px = pet.subX * TILE;
       const py = pet.subY * TILE;
 
+      // Draw shadow under pet feet
+      ctx.fillStyle = "rgba(0, 0, 0, 0.25)";
+      ctx.beginPath();
+      ctx.ellipse(px + 16, py + 23, 7, 3, 0, 0, Math.PI * 2);
+      ctx.fill();
+
       const squish = 1 + Math.sin(Date.now() / 150 + pet.friendship) * 0.05;
 
       ctx.save();
@@ -2665,7 +3012,7 @@ export function draw(
       ctx.scale(squish, 2 - squish);
 
       if (pet.type === "dog") {
-        ctx.fillStyle = "#ffb74d"; // golden/orange dog
+        ctx.fillStyle = "#ffb74d";
         ctx.fillRect(-6, -10, 12, 10);
         ctx.fillStyle = "#e65100";
         ctx.fillRect(-8, -12, 4, 5);
@@ -2679,7 +3026,7 @@ export function draw(
         ctx.fillRect(-4, -2, 4, 3);
         ctx.restore();
       } else {
-        ctx.fillStyle = "#b0bec5"; // grey cat
+        ctx.fillStyle = "#b0bec5";
         ctx.fillRect(-5, -9, 10, 9);
         ctx.fillStyle = "#37474f";
         ctx.beginPath();
@@ -2712,18 +3059,24 @@ export function draw(
       const wx = worker.subX * TILE;
       const wy = worker.subY * TILE;
 
-      // Draw worker avatar
-      ctx.fillStyle = "#2196f3"; // shirt
+      // Draw shadow under worker feet
+      ctx.fillStyle = "rgba(0, 0, 0, 0.25)";
+      ctx.beginPath();
+      ctx.ellipse(wx + 16, wy + 26, 8, 3.5, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Shirt + overalls
+      ctx.fillStyle = "#2196f3";
       ctx.fillRect(wx + 8, wy + 14, 16, 14);
-      ctx.fillStyle = "#8d6e63"; // overalls
+      ctx.fillStyle = "#8d6e63";
       ctx.fillRect(wx + 10, wy + 24, 12, 8);
-      ctx.fillStyle = "#ffdbac"; // skin
+      ctx.fillStyle = "#ffdbac";
       ctx.fillRect(wx + 10, wy + 4, 12, 10);
-      ctx.fillStyle = "#f4d03f"; // hat
+      ctx.fillStyle = "#f4d03f";
       ctx.fillRect(wx + 6, wy + 4, 20, 2);
       ctx.fillRect(wx + 11, wy, 10, 4);
 
-      // Draw status banner
+      // Status text banner
       ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
       ctx.fillRect(wx - 24, wy - 18, TILE + 48, 11);
       ctx.fillStyle = "#fff";
@@ -2741,6 +3094,12 @@ export function draw(
       const nx = target.x * TILE;
       const ny = target.y * TILE;
 
+      // Shadow under NPC
+      ctx.fillStyle = "rgba(0, 0, 0, 0.25)";
+      ctx.beginPath();
+      ctx.ellipse(nx + 16, ny + 22, 8, 3.5, 0, 0, Math.PI * 2);
+      ctx.fill();
+
       ctx.fillStyle = npc.color;
       ctx.fillRect(nx + 8, ny + 8, 16, 16);
       ctx.fillStyle = "#f5d0a9";
@@ -2757,11 +3116,18 @@ export function draw(
     });
   }
 
-  // 5. Draw Mine Enemies
+  // 5. Draw Mine Enemies (Slimes)
   if (state.inMine) {
     state.mineEnemies.forEach((slime) => {
       const sx = slime.x * TILE;
       const sy = slime.y * TILE;
+
+      // Draw shadow under slime
+      ctx.fillStyle = "rgba(0, 0, 0, 0.3)";
+      ctx.beginPath();
+      ctx.ellipse(sx + 16, sy + 24, 9, 3.5, 0, 0, Math.PI * 2);
+      ctx.fill();
+
       const squishX = 1 + Math.sin(Date.now() / 150) * 0.15;
       const squishY = 1 - Math.sin(Date.now() / 150) * 0.15;
 
@@ -2794,44 +3160,47 @@ export function draw(
   const isMoving = Math.abs(p.x - (p.subX ?? p.x)) > 0.01 || Math.abs(p.y - (p.subY ?? p.y)) > 0.01;
   const walkTime = isMoving ? Date.now() / 80 : 0;
   const walkBob = isMoving ? Math.sin(walkTime * 2) * 2 : 0;
-
-  // Left and Right leg height offsets to simulate stepping
   const leftLegOffset = isMoving ? Math.sin(walkTime) * 3 : 0;
   const rightLegOffset = isMoving ? -Math.sin(walkTime) * 3 : 0;
 
-  // Draw Legs (pants / shoes)
-  ctx.fillStyle = "#2c3e50"; // dark blue pants
+  // Draw shadow under player
+  ctx.fillStyle = "rgba(0, 0, 0, 0.25)";
+  ctx.beginPath();
+  ctx.ellipse(playerPx, playerPy + 16, 9, 3.5, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Draw legs
+  ctx.fillStyle = "#2c3e50";
   ctx.fillRect(playerPx - 7, playerPy + 10 + leftLegOffset, 6, 8 - leftLegOffset);
   ctx.fillRect(playerPx + 1, playerPy + 10 + rightLegOffset, 6, 8 - rightLegOffset);
 
-  // Body / Shirt (Red)
+  // Body / Shirt
   ctx.fillStyle = "#e74c3c";
   ctx.fillRect(playerPx - 8, playerPy - 4 + walkBob, 16, 14);
 
-  // Head / Skin (Peach)
+  // Head / Skin
   ctx.fillStyle = "#f5d0a9";
   ctx.fillRect(playerPx - 6, playerPy - 14 + walkBob, 12, 10);
 
   // Hair
-  ctx.fillStyle = "#5c3a21"; // brown hair
-  ctx.fillRect(playerPx - 6, playerPy - 12 + walkBob, 2, 8); // sideburn left
-  ctx.fillRect(playerPx + 4, playerPy - 12 + walkBob, 2, 8); // sideburn right
+  ctx.fillStyle = "#5c3a21";
+  ctx.fillRect(playerPx - 6, playerPy - 12 + walkBob, 2, 8);
+  ctx.fillRect(playerPx + 4, playerPy - 12 + walkBob, 2, 8);
 
-  // Hat (Straw hat / Blacksmith cap)
-  ctx.fillStyle = "#d2b48c"; // tan/straw color hat
-  ctx.fillRect(playerPx - 9, playerPy - 15 + walkBob, 18, 2); // wider brim
-  ctx.fillStyle = "#a0522d"; // brown band
+  // Straw Hat
+  ctx.fillStyle = "#d2b48c";
+  ctx.fillRect(playerPx - 9, playerPy - 15 + walkBob, 18, 2);
+  ctx.fillStyle = "#a0522d";
   ctx.fillRect(playerPx - 6, playerPy - 17 + walkBob, 12, 2);
-  ctx.fillStyle = "#d2b48c"; // top
+  ctx.fillStyle = "#d2b48c";
   ctx.fillRect(playerPx - 5, playerPy - 21 + walkBob, 10, 4);
 
-  // Face / direction eyes
+  // Eyes
   ctx.fillStyle = "#000";
   if (p.dir === "down") {
     ctx.fillRect(playerPx - 3, playerPy - 9 + walkBob, 2, 2);
     ctx.fillRect(playerPx + 1, playerPy - 9 + walkBob, 2, 2);
   } else if (p.dir === "up") {
-    // back of head - show hair only
     ctx.fillStyle = "#5c3a21";
     ctx.fillRect(playerPx - 6, playerPy - 14 + walkBob, 12, 8);
   } else if (p.dir === "left") {
@@ -2840,7 +3209,7 @@ export function draw(
     ctx.fillRect(playerPx + 2, playerPy - 9 + walkBob, 2, 2);
   }
 
-  // 7. Draw carry item above head (Lifting animation)
+  // 7. Draw carry item above head
   if (state.harvestLiftingTimer > 0 && state.carryItem) {
     ctx.fillStyle = state.carryItem.iconColor;
     ctx.font = "20px monospace";
@@ -2852,7 +3221,7 @@ export function draw(
     );
   }
 
-  // Active Tool Swipe arc
+  // Active Tool Swipe indicator
   const f = frontTile(state);
   if (f && state.harvestLiftingTimer <= 0) {
     ctx.strokeStyle = "rgba(255, 255, 255, 0.4)";
@@ -2905,8 +3274,7 @@ export function draw(
 
   ctx.restore(); // restore viewport transform
 
-  // 9. Ambient Lighting filter
-  const phase = getTimePhase(state.time);
+  // 9. Ambient Night/Evening Lighting filter
   if (phase !== "morning") {
     const tempCanvas = document.createElement("canvas");
     tempCanvas.width = viewWidth;
@@ -2919,7 +3287,7 @@ export function draw(
 
       tCtx.globalCompositeOperation = "destination-out";
 
-      // player lighting radius
+      // Player light radius
       const plViewX = playerPx - cameraX;
       const plViewY = playerPy - cameraY;
       const rad = phase === "night" ? 75 : 120;
@@ -2931,7 +3299,7 @@ export function draw(
       tCtx.arc(plViewX, plViewY, rad, 0, Math.PI * 2);
       tCtx.fill();
 
-      // Placed torches radius
+      // Placed torches light radius
       for (let y = startRow; y < endRow; y++) {
         for (let x = startCol; x < endCol; x++) {
           const t = currentGrid[y][x];

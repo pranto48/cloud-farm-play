@@ -677,35 +677,61 @@ export class WorkerSystem extends System {
       return;
     }
 
-    const targetNode = wComp.path[wComp.pathIndex];
-    const targetX = targetNode[1] * ts + ts / 2;
-    const targetY = targetNode[0] * ts + ts / 2;
+    let targetNode = wComp.path[wComp.pathIndex];
+    let targetX = targetNode[1] * ts + ts / 2;
+    let targetY = targetNode[0] * ts + ts / 2;
 
-    const dx = targetX - pos.x;
-    const dy = targetY - pos.y;
-    const dist = Math.sqrt(dx * dx + dy * dy);
+    let isMoving = pos.moveDuration && pos.moveDuration > 0;
 
-    if (dist < 5) {
-      wComp.pathIndex++;
-      if (wComp.pathIndex >= wComp.path.length) {
-        onReach();
+    if (!isMoving) {
+      if (pos.x === targetX && pos.y === targetY) {
+        // Already visually arrived at current target node, advance to next
+        wComp.pathIndex++;
+        if (wComp.pathIndex >= wComp.path.length) {
+          vel.vx = 0;
+          vel.vy = 0;
+          onReach();
+          return;
+        }
+        targetNode = wComp.path[wComp.pathIndex];
+        targetX = targetNode[1] * ts + ts / 2;
+        targetY = targetNode[0] * ts + ts / 2;
       }
-    } else {
+
+      if (pos.x !== targetX || pos.y !== targetY) {
+        // Calculate speed based on target tile
+        const col = targetNode[1];
+        const row = targetNode[0];
+        const currentCellWeight = map.weights[row]?.[col] || 3.0;
+        const baseSpeed = 100;
+        const currentSpeed = baseSpeed / currentCellWeight;
+        const duration = ts / currentSpeed;
+
+        // Decoupled logical grid movement: update logical position immediately and start visual lerp
+        pos.startX = pos.renderX;
+        pos.startY = pos.renderY;
+        pos.x = targetX;
+        pos.y = targetY;
+        pos.moveTimer = 0;
+        pos.moveDuration = duration;
+        isMoving = true;
+      }
+    }
+
+    if (isMoving) {
+      // Set velocity based on current step vector to support walking animations and logic
+      const dx = pos.x - pos.startX;
+      const dy = pos.y - pos.startY;
+      const dist = Math.sqrt(dx * dx + dy * dy) || 1.0;
+
       const col = Math.floor(pos.x / ts);
       const row = Math.floor(pos.y / ts);
       const currentCellWeight = map.weights[row]?.[col] || 3.0;
-      
       const baseSpeed = 100;
       const currentSpeed = baseSpeed / currentCellWeight;
 
-      const dirX = dx / dist;
-      const dirY = dy / dist;
-
-      vel.vx = dirX * currentSpeed;
-      vel.vy = dirY * currentSpeed;
-
-      pos.x += vel.vx * dt;
-      pos.y += vel.vy * dt;
+      vel.vx = (dx / dist) * currentSpeed;
+      vel.vy = (dy / dist) * currentSpeed;
     }
   }
 

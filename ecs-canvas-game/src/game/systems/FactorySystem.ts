@@ -139,77 +139,65 @@ export class FactorySystem extends System {
       if (item.isHeld) {
         vel.vx = 0;
         vel.vy = 0;
+        pos.moveDuration = 0; // stop any conveyor interpolation
         continue; // handled by Inserter swing
       }
 
-      const col = Math.floor(pos.x / ts);
-      const row = Math.floor(pos.y / ts);
-      const belt = beltMap.get(`${col},${row}`);
+      const isMoving = pos.moveDuration && pos.moveDuration > 0;
 
-      if (belt) {
-        let bdx = 0;
-        let bdy = 0;
-        if (belt.rotation === 0) bdy = -1;
-        else if (belt.rotation === 90) bdx = 1;
-        else if (belt.rotation === 180) bdy = 1;
-        else if (belt.rotation === 270) bdx = -1;
+      if (!isMoving) {
+        const col = Math.floor(pos.x / ts);
+        const row = Math.floor(pos.y / ts);
+        const belt = beltMap.get(`${col},${row}`);
 
-        // Check if blocked by another item entity ahead
-        let isBlocked = false;
-        for (const otherEnt of items) {
-          if (otherEnt === itemEnt) continue;
-          const otherItem = world.getComponent(otherEnt, ItemComponent)!;
-          if (otherItem.isHeld) continue;
-          const otherPos = world.getComponent(otherEnt, PositionComponent)!;
+        if (belt) {
+          let bdx = 0;
+          let bdy = 0;
+          if (belt.rotation === 0) bdy = -1;
+          else if (belt.rotation === 90) bdx = 1;
+          else if (belt.rotation === 180) bdy = 1;
+          else if (belt.rotation === 270) bdx = -1;
 
-          const dx = otherPos.x - pos.x;
-          const dy = otherPos.y - pos.y;
-          
-          if (bdx !== 0) {
-            // Horizontal check
-            if (Math.abs(dy) < 8 && dx * bdx > 0 && Math.abs(dx) < 22) {
-              isBlocked = true;
-              break;
-            }
-          } else if (bdy !== 0) {
-            // Vertical check
-            if (Math.abs(dx) < 8 && dy * bdy > 0 && Math.abs(dy) < 22) {
+          const nextCol = col + bdx;
+          const nextRow = row + bdy;
+          const targetX = nextCol * ts + ts / 2;
+          const targetY = nextRow * ts + ts / 2;
+
+          // Check if target tile is blocked logically
+          let isBlocked = false;
+          for (const otherEnt of items) {
+            if (otherEnt === itemEnt) continue;
+            const otherPos = world.getComponent(otherEnt, PositionComponent)!;
+            if (Math.abs(otherPos.x - targetX) < 5 && Math.abs(otherPos.y - targetY) < 5) {
               isBlocked = true;
               break;
             }
           }
-        }
 
-        if (!isBlocked) {
-          // Slowly align item to centerline of the belt
-          const tileCenter = {
-            x: col * ts + ts / 2,
-            y: row * ts + ts / 2
-          };
+          if (!isBlocked) {
+            // Update logical position immediately & start linear interpolation!
+            pos.startX = pos.renderX;
+            pos.startY = pos.renderY;
+            pos.x = targetX;
+            pos.y = targetY;
+            pos.moveTimer = 0;
+            pos.moveDuration = ts / beltSpeed; // 64 / 64 = 1.0s
 
-          if (bdx !== 0) {
-            pos.y += (tileCenter.y - pos.y) * 0.15; // align vertical
-          } else if (bdy !== 0) {
-            pos.x += (tileCenter.x - pos.x) * 0.15; // align horizontal
+            vel.vx = bdx * beltSpeed;
+            vel.vy = bdy * beltSpeed;
+          } else {
+            vel.vx = 0;
+            vel.vy = 0;
+            pos.moveDuration = 0;
           }
-
-          vel.vx = bdx * beltSpeed;
-          vel.vy = bdy * beltSpeed;
         } else {
           vel.vx = 0;
           vel.vy = 0;
+          pos.moveDuration = 0;
         }
-      } else {
-        // Items on normal grass just stop
-        vel.vx = 0;
-        vel.vy = 0;
       }
 
-      // Apply velocity updates
-      pos.x += vel.vx * dt;
-      pos.y += vel.vy * dt;
-
-      // Clamp items inside map boundaries
+      // Clamp items inside map boundaries logically
       pos.x = Math.max(8, Math.min(mapComp.width * ts - 8, pos.x));
       pos.y = Math.max(8, Math.min(mapComp.height * ts - 8, pos.y));
     }

@@ -5,6 +5,7 @@ import {
   VelocityComponent,
   BoxColliderComponent,
   MapComponent,
+  PlayerComponent,
 } from "../components/GameComponents";
 
 export class TileCollisionSystem extends System {
@@ -20,6 +21,8 @@ export class TileCollisionSystem extends System {
     const entities = world.getEntitiesWith(this.requiredComponents);
 
     for (const entity of entities) {
+      if (world.hasComponent(entity, PlayerComponent)) continue;
+
       const pos = world.getComponent(entity, PositionComponent)!;
       const vel = world.getComponent(entity, VelocityComponent)!;
       const box = world.getComponent(entity, BoxColliderComponent)!;

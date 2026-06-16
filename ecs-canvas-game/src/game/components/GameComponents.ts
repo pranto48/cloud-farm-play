@@ -7,12 +7,20 @@ export class PositionComponent extends Component {
   public renderX: number;
   public renderY: number;
 
+  // Linear interpolation fields for grid-decoupled visual movement
+  public startX: number;
+  public startY: number;
+  public moveTimer: number = 0;
+  public moveDuration: number = 0;
+
   constructor(x: number = 0, y: number = 0) {
     super();
     this.x = x;
     this.y = y;
     this.renderX = x;
     this.renderY = y;
+    this.startX = x;
+    this.startY = y;
   }
 }
 

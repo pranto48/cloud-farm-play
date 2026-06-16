@@ -143,10 +143,31 @@ export class RenderSystem extends System {
       if (pos.renderX === undefined || isNaN(pos.renderX)) pos.renderX = pos.x;
       if (pos.renderY === undefined || isNaN(pos.renderY)) pos.renderY = pos.y;
       
-      const lerpSpeed = 15.0; // Stardew-grade smooth glide
-      const lerpFactor = Math.min(1.0, lerpSpeed * dt);
-      pos.renderX += (pos.x - pos.renderX) * lerpFactor;
-      pos.renderY += (pos.y - pos.renderY) * lerpFactor;
+      if (pos.startX === undefined || isNaN(pos.startX)) pos.startX = pos.renderX;
+      if (pos.startY === undefined || isNaN(pos.startY)) pos.startY = pos.renderY;
+
+      if (pos.moveDuration && pos.moveDuration > 0) {
+        pos.moveTimer += dt;
+        const progress = Math.min(1.0, pos.moveTimer / pos.moveDuration);
+        pos.renderX = pos.startX + (pos.x - pos.startX) * progress;
+        pos.renderY = pos.startY + (pos.y - pos.startY) * progress;
+        
+        if (progress >= 1.0) {
+          pos.moveDuration = 0;
+          pos.moveTimer = 0;
+          pos.startX = pos.x;
+          pos.startY = pos.y;
+        }
+      } else {
+        // Fallback: standard smooth exponential lerp
+        const lerpSpeed = 15.0; // Stardew-grade smooth glide
+        const lerpFactor = Math.min(1.0, lerpSpeed * dt);
+        pos.renderX += (pos.x - pos.renderX) * lerpFactor;
+        pos.renderY += (pos.y - pos.renderY) * lerpFactor;
+        
+        pos.startX = pos.renderX;
+        pos.startY = pos.renderY;
+      }
     }
 
     // 1. Locate player to focus camera

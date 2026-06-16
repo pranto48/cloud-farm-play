@@ -49,24 +49,65 @@ export class InputSystem extends System {
       this.placementDebounceTimer -= dt;
     }
 
-    // 1. WASD 8-Directional Movement
-    let dx = 0;
-    let dy = 0;
+    // 1. Decoupled WASD Grid-Locked Movement
+    const isMoving = pos.moveDuration && pos.moveDuration > 0;
 
-    if (input.keys["w"] || input.keys["W"] || input.keys["arrowup"]) dy -= 1;
-    if (input.keys["s"] || input.keys["S"] || input.keys["arrowdown"]) dy += 1;
-    if (input.keys["a"] || input.keys["A"] || input.keys["arrowleft"]) dx -= 1;
-    if (input.keys["d"] || input.keys["D"] || input.keys["arrowright"]) dx += 1;
+    if (!isMoving) {
+      let targetRow = Math.floor(pos.y / 64);
+      let targetCol = Math.floor(pos.x / 64);
+      let moved = false;
 
-    const playerSpeed = 180;
-    if (dx !== 0 && dy !== 0) {
-      const length = Math.sqrt(dx * dx + dy * dy);
-      dx /= length;
-      dy /= length;
+      if (input.keys["w"] || input.keys["W"] || input.keys["arrowup"]) {
+        targetRow -= 1;
+        moved = true;
+      } else if (input.keys["s"] || input.keys["S"] || input.keys["arrowdown"]) {
+        targetRow += 1;
+        moved = true;
+      } else if (input.keys["a"] || input.keys["A"] || input.keys["arrowleft"]) {
+        targetCol -= 1;
+        moved = true;
+      } else if (input.keys["d"] || input.keys["D"] || input.keys["arrowright"]) {
+        targetCol += 1;
+        moved = true;
+      }
+
+      if (moved) {
+        const maps = world.getEntitiesWith([MapComponent]);
+        if (maps.length > 0) {
+          const mapComp = world.getComponent(maps[0], MapComponent)!;
+          if (targetRow >= 0 && targetRow < mapComp.height && targetCol >= 0 && targetCol < mapComp.width) {
+            const tileType = mapComp.tiles[targetRow][targetCol];
+            const isWalkable = tileType !== "water" && tileType !== "stone";
+            if (isWalkable) {
+              const targetX = targetCol * 64 + 32;
+              const targetY = targetRow * 64 + 32;
+
+              // Calculate movement duration based on the tile type weight
+              const tileWeight = mapComp.getTileWeight(tileType);
+              const baseSpeed = 180; // Player base walking speed in px/s
+              const speed = baseSpeed / tileWeight;
+              const duration = 64 / speed;
+
+              // Update logical position immediately & start visual linear interpolation
+              pos.startX = pos.renderX;
+              pos.startY = pos.renderY;
+              pos.x = targetX;
+              pos.y = targetY;
+              pos.moveTimer = 0;
+              pos.moveDuration = duration;
+            }
+          }
+        }
+      }
+      vel.vx = 0;
+      vel.vy = 0;
+    } else {
+      // Set velocity for orientation animations based on visual direction
+      const dx = pos.x - pos.startX;
+      const dy = pos.y - pos.startY;
+      vel.vx = dx > 0 ? 180 : (dx < 0 ? -180 : 0);
+      vel.vy = dy > 0 ? 180 : (dy < 0 ? -180 : 0);
     }
-
-    vel.vx = dx * playerSpeed;
-    vel.vy = dy * playerSpeed;
 
     // 2. Rotate Placement with R key (one-shot detection)
     if (input.keys["r"] || input.keys["R"]) {

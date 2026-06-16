@@ -13,6 +13,7 @@ import {
   ItemType,
   TileType,
   WorkerComponent,
+  AnimationComponent,
 } from "../components/GameComponents";
 
 export class CharacterTextureLoader {
@@ -1490,9 +1491,10 @@ export class RenderSystem extends System {
     toolType: string | null,
     isWalking: boolean,
     isWorking: boolean,
-    direction: "down" | "up" | "left" | "right"
+    direction: "down" | "up" | "left" | "right",
+    anim?: AnimationComponent
   ): void {
-    // 1. Ground Shadow (vector)
+    // 1. Ground Shadow
     ctx.save();
     ctx.fillStyle = "rgba(0,0,0,0.25)";
     ctx.beginPath();
@@ -1500,28 +1502,40 @@ export class RenderSystem extends System {
     ctx.fill();
     ctx.restore();
 
-    // Determine frame column
-    let frameCol = 0;
-    if (isWalking) {
-      frameCol = 1 + Math.floor((this.time * 8) % 2); // alternates between Walk 1 (1) and Walk 2 (2)
-    } else if (isWorking) {
-      frameCol = 3 + Math.floor((this.time * 6) % 2); // alternates between Work 1 (3) and Work 2 (4)
+    // Determine frame column and direction row
+    // Priority: use per-entity AnimationComponent data if available (driven by AnimationSystem);
+    // fall back to the legacy time-based approach so the player entity still animates
+    // before AnimationComponent is wired to it.
+    let frameCol: number;
+    let frameRow: number;
+
+    if (anim) {
+      // AnimationSystem has already resolved the correct row and col
+      frameCol = anim.col;
+      frameRow = anim.row;
+    } else {
+      // Legacy time-based fallback (used for player entity or when no AnimationComponent)
+      if (isWalking) {
+        frameCol = 1 + Math.floor((this.time * 8) % 2);
+      } else if (isWorking) {
+        frameCol = 3 + Math.floor((this.time * 6) % 2);
+      } else {
+        frameCol = 0;
+      }
+      if (direction === "up") frameRow = 1;
+      else if (direction === "left") frameRow = 2;
+      else if (direction === "right") frameRow = 3;
+      else frameRow = 0;
     }
 
-    // Determine direction row
-    let frameRow = 0; // Down
-    if (direction === "up") frameRow = 1;
-    else if (direction === "left") frameRow = 2;
-    else if (direction === "right") frameRow = 3;
-
     // Get layers from loader
-    const bodyTex = this.textureLoader.getTexture("body", skinColor, "", "");
-    const outfitTex = this.textureLoader.getTexture("outfit", clothingStyle, clothingColor, shirtColor);
-    const hairTex = this.textureLoader.getTexture("hair", hairStyle, hairColor, "");
+    const bodyTex      = this.textureLoader.getTexture("body", skinColor, "", "");
+    const outfitTex    = this.textureLoader.getTexture("outfit", clothingStyle, clothingColor, shirtColor);
+    const hairTex      = this.textureLoader.getTexture("hair", hairStyle, hairColor, "");
     const accessoryTex = this.textureLoader.getTexture("accessory", accessoryStyle, accessoryColor, "");
-    const toolTex = toolType ? this.textureLoader.getTexture("tool", toolType, "", "") : null;
+    const toolTex      = toolType ? this.textureLoader.getTexture("tool", toolType, "", "") : null;
 
-    // Draw in Z-index order: Base Body -> Outfit -> Hair -> Accessory -> Held Tool
+    // Draw in Z-index order: Base Body → Outfit → Hair → Accessory → Held Tool
     const drawLayer = (tex: HTMLCanvasElement | HTMLImageElement | null) => {
       if (!tex) return;
       ctx.drawImage(
@@ -2311,12 +2325,12 @@ export class RenderSystem extends System {
     pos: PositionComponent,
     vel: VelocityComponent
   ): void {
-    const skinColor = w.skinColor || "pale";
-    const hairStyle = w.hairStyle || "short";
-    const hairColor = w.hairColor || "#34495e";
+    const skinColor    = w.skinColor    || "pale";
+    const hairStyle    = w.hairStyle    || "short";
+    const hairColor    = w.hairColor    || "#34495e";
     const clothingStyle = w.clothingStyle || "shirt";
     const clothingColor = w.clothingColor || "#e67e22";
-    const shirtColor = w.shirtColor || "#2c3e50";
+    const shirtColor   = w.shirtColor   || "#2c3e50";
     const accessoryStyle = w.accessoryStyle || "none";
     const accessoryColor = w.accessoryColor || "#e74c3c";
 
@@ -2334,6 +2348,9 @@ export class RenderSystem extends System {
     const isWalking = pos.moveDuration !== undefined && pos.moveDuration > 0;
     const isWorking = w.state === "working";
 
+    // Retrieve per-entity AnimationComponent (set by AnimationSystem)
+    const anim = world_getAnimFor(entId);
+
     this.drawLayeredCharacter(
       ctx,
       px,
@@ -2349,7 +2366,8 @@ export class RenderSystem extends System {
       w.role,
       isWalking,
       isWorking,
-      direction
+      direction,
+      anim ?? undefined
     );
 
     ctx.save();

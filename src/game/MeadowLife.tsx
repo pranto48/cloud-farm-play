@@ -601,6 +601,15 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
         ctx.restore();
       }
 
+      // Draw minimap on minimap canvas
+      const miniCanvas = minimapRef.current;
+      if (miniCanvas) {
+        const miniCtx = miniCanvas.getContext("2d");
+        if (miniCtx) {
+          drawMinimap(miniCtx, stateRef.current, canvasSize.width, canvasSize.height);
+        }
+      }
+
       raf = requestAnimationFrame(loop);
     };
 
@@ -908,8 +917,8 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
         });
       }
       // Hotbar selection numbers
-      else if (["1", "2", "3", "4", "5", "6", "7", "8"].includes(k)) {
-        const idx = parseInt(k) - 1;
+      else if (["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"].includes(k)) {
+        const idx = k === "0" ? 9 : parseInt(k) - 1;
         setState((prev) => ({ ...prev, hotbarIndex: idx }));
       }
       // Dialogue talk
@@ -1450,258 +1459,259 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
   return (
     <div 
       ref={mainContainerRef} 
-      className={`flex flex-col items-center gap-4 w-full px-2 transition-all duration-300 ${
+      className={`flex flex-col items-center justify-center w-full px-2 transition-all duration-300 ${
         isFullscreen 
-          ? "bg-[#18110e] p-6 justify-center min-h-screen text-stone-200" 
+          ? "bg-[#18110e] p-0 min-h-screen text-slate-200" 
           : "max-w-4xl"
       }`}
     >
-      {/* 1. STARDEW-STYLE WATCH CLOCK HUD & WEATHER DIAL (TOP RIGHT STYLING) */}
-      <div className={`flex flex-wrap items-center justify-between w-full p-4 bg-[#3e2723] rounded-lg border-4 border-[#5d4037] shadow-xl gap-3 text-white ${isFullscreen ? "max-w-none" : ""}`}>
-        <div className="flex items-center gap-3">
-          {/* Classic circular weather/watch face dial */}
-          <div className="flex h-14 w-14 items-center justify-center rounded-full border-4 border-amber-400 bg-cyan-900 shadow-inner text-2xl font-bold animate-pulse">
-            {state.weather === "rainy" ? "🌧" : "☀️"}
-          </div>
-          <div>
-            <div className="text-base font-extrabold text-amber-400 capitalize flex items-center gap-1.5 font-mono">
-              <Calendar className="h-4 w-4 shrink-0 text-amber-500" />
-              <span>{state.season}</span> • <span>Day {state.day}</span>
-            </div>
-            <div className="text-sm font-bold text-stone-200 flex items-center gap-1.5 font-mono mt-0.5">
-              <Compass className="h-4 w-4 text-emerald-400" />
-              <span>{formatTime(state.time)}</span>
-            </div>
-          </div>
+      {/* Game Screen Frame */}
+      <div 
+        className={`relative overflow-hidden bg-black transition-all duration-300 ${
+          isFullscreen 
+            ? "border-0 rounded-none w-screen h-screen" 
+            : "rounded-xl border-4 border-[#2d3033] bg-[#141517] shadow-2xl"
+        }`} 
+        style={{ 
+          height: isFullscreen ? "100vh" : `${canvasSize.height}px`,
+          width: isFullscreen ? "100vw" : "704px",
+          maxWidth: isFullscreen ? "none" : "704px" 
+        }}
+      >
+        <canvas
+          ref={canvasRef}
+          width={canvasSize.width}
+          height={canvasSize.height}
+          onContextMenu={handleCanvasContextMenu}
+          style={{ width: "100%", height: "100%", display: "block", imageRendering: "pixelated" }}
+        />
+
+        {/* Floating Top-Left Action Bar */}
+        <div className="absolute top-3 left-3 z-20 flex items-center gap-1.5 bg-[#202224]/80 border border-slate-700 p-1 font-mono shadow-md">
+          {/* Backpack Journal Button */}
+          <button
+            onClick={() => { setInventoryOpen(true); setActiveTab("inventory"); }}
+            title="Backpack Journal (I)"
+            className="w-8 h-8 flex items-center justify-center bg-[#2a2c2e] hover:bg-[#ff9200]/20 border border-slate-600 hover:border-[#ff9200] text-slate-100 transition-all cursor-pointer font-bold text-xs"
+          >
+            <Backpack className="h-4 w-4 text-[#ff9200]" />
+          </button>
+          
+          {/* Pierre's Shop Button */}
+          <button
+            onClick={() => setShopOpen(true)}
+            title="Pierre's Shop"
+            className="w-8 h-8 flex items-center justify-center bg-[#2a2c2e] hover:bg-[#ff9200]/20 border border-slate-600 hover:border-[#ff9200] text-slate-100 transition-all cursor-pointer font-bold text-xs"
+          >
+            <Coins className="h-4 w-4 text-yellow-500" />
+          </button>
+
+          {/* Mailbox Button (shown if letters exist) */}
+          {state.mailboxLetters.length > 0 && (
+            <button
+              onClick={() => setMailboxOpen(true)}
+              title={`Mailbox (${state.mailboxLetters.filter(l => !l.claimed).length} unread)`}
+              className={`w-8 h-8 flex items-center justify-center bg-[#2a2c2e] hover:bg-[#ff9200]/20 border border-slate-600 hover:border-[#ff9200] text-slate-100 transition-all cursor-pointer font-bold text-xs ${
+                state.hasUnreadMail ? "animate-pulse border-red-500 text-red-500 bg-red-500/10" : ""
+              }`}
+            >
+              <Mail className="h-4 w-4" />
+            </button>
+          )}
+
+          {/* Sleep (Save & Grow) Button */}
+          <button
+            onClick={handleManualSleep}
+            title="Sleep (Save & Grow)"
+            className="w-8 h-8 flex items-center justify-center bg-[#2a2c2e] hover:bg-[#ff9200]/20 border border-slate-600 hover:border-[#ff9200] text-slate-100 transition-all cursor-pointer font-bold text-xs"
+          >
+            <Bed className="h-4 w-4 text-emerald-400" />
+          </button>
+
+          <span className="w-[1px] h-5 bg-slate-700 mx-0.5"></span>
+
+          {/* Mute Button */}
+          <button
+            onClick={() => setMuted(gameAudio.toggleMute())}
+            title={muted ? "Unmute Audio" : "Mute Audio"}
+            className="w-8 h-8 flex items-center justify-center bg-[#2a2c2e] hover:bg-[#ff9200]/20 border border-slate-600 hover:border-[#ff9200] text-slate-100 transition-all cursor-pointer"
+          >
+            {muted ? <VolumeX className="h-4 w-4 text-red-400" /> : <Volume2 className="h-4 w-4 text-emerald-400" />}
+          </button>
+
+          {/* Fullscreen Button */}
+          <button
+            onClick={toggleFullscreen}
+            title="Toggle Fullscreen"
+            className="w-8 h-8 flex items-center justify-center bg-[#2a2c2e] hover:bg-[#ff9200]/20 border border-slate-600 hover:border-[#ff9200] text-slate-100 transition-all cursor-pointer"
+          >
+            {isFullscreen ? <Minimize className="h-4 w-4" /> : <Maximize className="h-4 w-4" />}
+          </button>
         </div>
 
-        {/* Quest status */}
-        {state.quest && (
-          <div className="hidden md:flex items-center gap-2 p-2 bg-[#2d1e18] rounded-md border border-[#5d4037] text-xs max-w-sm">
-            <Trophy className="h-4 w-4 text-amber-400 shrink-0" />
-            <div>
-              <span className="font-bold text-amber-400">Quest: </span>
-              <span className="text-stone-300">{state.quest.description}</span>
-            </div>
+        {/* Mine Depth label */}
+        {state.inMine && (
+          <div className="absolute top-[52px] left-3 px-2 py-1 bg-[#202224]/80 border border-slate-700 text-red-400 rounded-none text-[10px] font-mono flex items-center gap-1 z-20 shadow-md">
+            <Shield className="h-3 w-3 text-red-400 animate-bounce" />
+            <span>MINE LEVEL: {state.mineDepth}</span>
           </div>
         )}
 
-        <div className="flex items-center gap-2">
-          {/* Fullscreen toggle */}
-          <Button size="icon" variant="outline" className="bg-[#5d4037] border-stone-800 text-stone-100 hover:bg-[#7c5a3c]" onClick={toggleFullscreen}>
-            {isFullscreen ? <Minimize className="h-4 w-4" /> : <Maximize className="h-4 w-4" />}
-          </Button>
+        {/* Floating Top-Right Radar / Minimap & Info Panel */}
+        <div className="absolute top-3 right-3 z-20 flex flex-col gap-1.5 w-[160px] bg-[#202224]/90 border border-slate-700 p-1 font-mono text-[9px] text-slate-200 shadow-xl select-none">
+          {/* Header Title */}
+          <div className="flex justify-between items-center px-1 text-slate-400 border-b border-slate-700/80 pb-0.5">
+            <span className="font-bold tracking-wider text-[#ff9200]">RADAR COMPASS</span>
+            <span>{state.weather === "rainy" ? "🌧" : "☀️"}</span>
+          </div>
 
-          {/* Mute toggle */}
-          <Button size="icon" variant="outline" className="bg-[#5d4037] border-stone-800 text-stone-100 hover:bg-[#7c5a3c]" onClick={() => setMuted(gameAudio.toggleMute())}>
-            {muted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
-          </Button>
+          {/* Minimap Canvas Container */}
+          <div className="w-[150px] h-[150px] bg-[#141517] border border-slate-800 relative mx-auto flex items-center justify-center">
+            <canvas
+              ref={minimapRef}
+              width={148}
+              height={148}
+              className="block"
+              style={{ imageRendering: "pixelated" }}
+            />
+          </div>
 
-          {/* Money Bag dial */}
-          <Badge variant="secondary" className="gap-1.5 px-3 py-2 text-base font-extrabold shadow-md bg-stone-900 border-2 border-amber-400 text-amber-400 font-mono">
-            <Coins className="h-5 w-5 text-yellow-500 fill-yellow-500" />
-            <span>{state.coins}g</span>
-          </Badge>
+          {/* Dashboard stats */}
+          <div className="flex flex-col gap-0.5 px-1 py-0.5 leading-normal text-slate-300">
+            <div className="flex justify-between">
+              <span>LOC:</span>
+              <span className="font-bold text-slate-100 truncate max-w-[100px]">
+                {state.inMine ? `MINES (L${state.mineDepth})` : "MEADOW FARM"}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span>DATE:</span>
+              <span className="font-bold text-slate-100 capitalize">
+                {state.season} D{state.day}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span>TIME:</span>
+              <span className="font-bold text-slate-100">{formatTime(state.time)}</span>
+            </div>
+            <div className="flex justify-between border-t border-slate-700/50 mt-0.5 pt-0.5 font-bold text-yellow-450">
+              <span>GOLD:</span>
+              <span>{state.coins}G</span>
+            </div>
+          </div>
         </div>
-      </div>
 
-      {/* 2. MAIN LAYOUT: VERTICAL SIDEBAR TOOL BELT + CANVAS FRAME CONTAINER */}
-      <div className="flex flex-row items-start justify-center gap-3 w-full" style={{ maxWidth: isFullscreen ? "none" : "760px" }}>
-        {/* Left vertical Stardew tool-belt sidebar */}
-        {useSidebar && (
-          <div className="flex flex-col gap-1.5 bg-[#3e2723] p-2 rounded-xl border-4 border-[#5d4037] shadow-xl w-16 shrink-0">
-            {state.inventory.slice(0, 8).map((item, idx) => {
+        {/* Bottom-Center Factorio Hotbar */}
+        <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-20 flex flex-col items-center gap-1">
+          <div className="flex items-center gap-1 bg-[#202224]/90 border border-slate-700 p-1 shadow-2xl">
+            {state.inventory.slice(0, 10).map((item, idx) => {
               const selected = state.hotbarIndex === idx;
+              const slotKey = idx === 9 ? "0" : (idx + 1).toString();
               return (
                 <button
                   key={idx}
                   onClick={() => setState((prev) => ({ ...prev, hotbarIndex: idx }))}
-                  className={`relative flex flex-col items-center justify-center h-14 w-10 mx-auto rounded border-2 transition-all ${
+                  className={`relative flex flex-col items-center justify-center w-[46px] h-[46px] transition-all cursor-pointer select-none rounded-none ${
                     selected
-                      ? "border-amber-400 bg-amber-500/25 scale-[1.08] shadow-[0_0_10px_rgba(241,196,15,0.7)]"
-                      : "border-stone-850 bg-[#7c5a3c]/20 hover:bg-[#7c5a3c]/40"
+                      ? "border-2 border-[#ff9200] bg-[#ff9200]/15 scale-[1.08] shadow-[0_0_8px_rgba(255,146,0,0.5)] z-10"
+                      : "border border-slate-700 bg-[#141517] hover:bg-slate-800"
                   }`}
                 >
-                  <span className="absolute top-0.5 left-1 text-[8px] font-extrabold text-white/50 leading-none">
-                    {idx + 1}
+                  {/* Slot numeric shortcut overlay */}
+                  <span className="absolute top-0.5 left-1 text-[8px] font-bold text-slate-500 leading-none">
+                    {slotKey}
                   </span>
+                  
                   {item ? (
                     <>
-                      <span className="text-xl" style={{ textShadow: "1px 1px 0px rgba(0,0,0,0.5)" }}>
+                      <span className="text-2xl mt-1 select-none" style={{ textShadow: "1px 1px 0px rgba(0,0,0,0.5)" }}>
                         {item.iconSymbol || "🎁"}
                       </span>
                       {item.count > 1 && (
-                        <span className="absolute bottom-0.5 right-1 px-1 bg-black/60 rounded text-[9px] font-bold text-white leading-none font-mono">
+                        <span className="absolute bottom-0.5 right-1 px-0.5 bg-black/75 text-[8px] font-bold text-white font-mono leading-none">
                           {item.count}
                         </span>
                       )}
                     </>
                   ) : (
-                    <span className="text-xs opacity-15 text-stone-100 font-mono">-</span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-        )}
-
-        {/* Game Screen Frame */}
-        <div 
-          className="relative overflow-hidden rounded-xl border-4 border-[#3e2723] bg-black shadow-2xl flex-1" 
-          style={{ 
-            height: `${canvasSize.height}px`,
-            maxWidth: isFullscreen ? "none" : "704px" 
-          }}
-        >
-          <canvas
-            ref={canvasRef}
-            width={canvasSize.width}
-            height={canvasSize.height}
-            onContextMenu={handleCanvasContextMenu}
-            style={{ width: "100%", height: "100%", display: "block", imageRendering: "pixelated" }}
-          />
-
-          {/* Mine Depth label */}
-          {state.inMine && (
-            <div className="absolute top-3 left-3 px-2.5 py-1 bg-black/60 border border-white/20 text-white rounded text-xs font-mono flex items-center gap-1.5">
-              <Shield className="h-3.5 w-3.5 text-red-400 animate-bounce" />
-              <span>MINE LEVEL: {state.mineDepth}</span>
-            </div>
-          )}
-
-          {/* HP and energy bars */}
-          <div className="absolute bottom-3 right-3 flex flex-col gap-2 pointer-events-none">
-            {/* Health Bar */}
-            <div className="flex flex-col items-end">
-              <div className="flex items-center gap-1 bg-black/60 px-1.5 py-0.5 rounded text-[10px] font-bold text-red-400 font-mono">
-                <Swords className="h-3 w-3" />
-                <span>HP {state.player.health}</span>
-              </div>
-              <div className="w-24 h-2.5 bg-black/80 border border-white/10 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-red-500 transition-all duration-300"
-                  style={{ width: `${(state.player.health / state.player.maxHealth) * 100}%` }}
-                />
-              </div>
-            </div>
-
-            {/* Energy Bar */}
-            <div className="flex flex-col items-end">
-              <div className="flex items-center gap-1 bg-black/60 px-1.5 py-0.5 rounded text-[10px] font-bold text-green-400 font-mono">
-                <Droplets className="h-3 w-3" />
-                <span>NRG {state.energy}</span>
-              </div>
-              <div className="w-24 h-2.5 bg-black/80 border border-white/10 rounded-full overflow-hidden">
-                <div
-                  className={`h-full transition-all duration-300 ${state.energy <= 40 ? "bg-amber-500 animate-pulse" : "bg-green-500"}`}
-                  style={{ width: `${(state.energy / state.maxEnergy) * 100}%` }}
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Hand carrying popup */}
-          {heldItem && (
-            <div className="absolute bottom-3 left-3 px-2 py-1 bg-black/60 border border-white/20 text-white rounded text-xs flex items-center gap-1.5 font-mono">
-              <Backpack className="h-3.5 w-3.5 text-amber-300 animate-bounce" />
-              <span>Holding: {heldItem.item.name}</span>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Layout Bottom controls / hotbar toggle options */}
-      <div className="flex flex-wrap items-center justify-between w-full max-w-[760px] text-xs text-muted-foreground font-mono px-1">
-        <div>
-          <span>Press 1–8 to change tool. Space to use. F to interact.</span>
-        </div>
-        <button
-          onClick={() => setUseSidebar((s) => !s)}
-          className="hover:text-amber-500 underline transition-all"
-        >
-          Toggle {useSidebar ? "Bottom Hotbar" : "Sidebar Toolbelt"}
-        </button>
-      </div>
-
-      {/* If bottom hotbar chosen instead */}
-      {!useSidebar && (
-        <div className="flex flex-col items-center gap-1.5 w-full" style={{ maxWidth: isFullscreen ? "none" : "704px" }}>
-          <div className="grid grid-cols-8 gap-1 w-full bg-[#3e2723] p-1.5 rounded-lg border-2 border-[#5d4037]">
-            {state.inventory.slice(0, 8).map((item, idx) => {
-              const selected = state.hotbarIndex === idx;
-              return (
-                <button
-                  key={idx}
-                  onClick={() => setState((prev) => ({ ...prev, hotbarIndex: idx }))}
-                  className={`relative flex flex-col items-center justify-center h-14 rounded border-2 transition-all ${
-                    selected
-                      ? "border-amber-400 bg-amber-500/20 scale-[1.05]"
-                      : "border-stone-800 bg-[#7c5a3c]/30 hover:bg-[#7c5a3c]/50"
-                  }`}
-                >
-                  <span className="absolute top-0.5 left-1 text-[9px] font-bold text-white/50 leading-none">
-                    {idx + 1}
-                  </span>
-                  {item ? (
-                    <>
-                      <span className="text-xl">{item.iconSymbol || "🎁"}</span>
-                      {item.count > 1 && (
-                        <span className="absolute bottom-0.5 right-1 px-1 bg-black/60 rounded text-[9px] font-bold text-white">
-                          {item.count}
-                        </span>
-                      )}
-                    </>
-                  ) : (
-                    <span className="text-xs opacity-10 text-white">-</span>
+                    <span className="text-[10px] opacity-10 text-white font-mono">-</span>
                   )}
                 </button>
               );
             })}
           </div>
         </div>
-      )}
 
-      {/* 4. UTILITY OVERLAYS TOGGLERS */}
-      <div className="flex flex-wrap items-center justify-center gap-2 mt-1">
-        <Button size="sm" variant="outline" onClick={() => setInventoryOpen(true)}>
-          <Backpack className="mr-1.5 h-4 w-4 text-amber-500" /> Journal Backpack (I)
-        </Button>
-        <Button size="sm" variant="outline" onClick={() => setShopOpen(true)}>
-          <Coins className="mr-1.5 h-4 w-4 text-yellow-500" /> Pierre's Shop
-        </Button>
-        {state.mailboxLetters.length > 0 && (
-          <Button size="sm" variant="outline" onClick={() => setMailboxOpen(true)}>
-            <Mail className={`mr-1.5 h-4 w-4 ${state.hasUnreadMail ? "text-red-400 animate-bounce" : "text-stone-400"}`} />
-            <span>Mailbox ({state.mailboxLetters.filter(l => !l.claimed).length} unread)</span>
-          </Button>
+        {/* Floating monospaced guide helper in bottom left */}
+        <div className="absolute bottom-3 left-3 z-20 flex flex-col text-[8px] font-mono text-slate-500 leading-normal bg-black/30 p-1 pointer-events-none select-none">
+          <span>KEYS 1-0: SELECT SLOT</span>
+          <span>SPACE / E: USE ITEM</span>
+          <span>F: TALK / SHOP / MAIL</span>
+          <span>I: BACKPACK JOURNAL</span>
+        </div>
+
+        {/* Floating HP & Energy Bars in Bottom Right */}
+        <div className="absolute bottom-3 right-3 z-20 flex flex-col gap-1.5 bg-[#202224]/80 border border-slate-700 p-1.5 font-mono text-[9px] shadow-lg select-none w-28">
+          {/* Health Bar */}
+          <div className="flex flex-col gap-0.5">
+            <div className="flex justify-between items-center text-red-400 font-bold">
+              <span>HP</span>
+              <span>{state.player.health}/{state.player.maxHealth}</span>
+            </div>
+            <div className="w-full h-2 bg-slate-950 border border-slate-800 rounded-none overflow-hidden">
+              <div
+                className="h-full bg-red-600 transition-all duration-200"
+                style={{ width: `${(state.player.health / state.player.maxHealth) * 100}%` }}
+              />
+            </div>
+          </div>
+
+          {/* Energy Bar */}
+          <div className="flex flex-col gap-0.5">
+            <div className="flex justify-between items-center text-green-400 font-bold">
+              <span>NRG</span>
+              <span>{state.energy}/{state.maxEnergy}</span>
+            </div>
+            <div className="w-full h-2 bg-slate-950 border border-slate-800 rounded-none overflow-hidden">
+              <div
+                className={`h-full transition-all duration-200 ${state.energy <= 40 ? "bg-amber-500 animate-pulse" : "bg-green-600"}`}
+                style={{ width: `${(state.energy / state.maxEnergy) * 100}%` }}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Floating Carry/Hold info */}
+        {heldItem && (
+          <div className="absolute bottom-[72px] left-1/2 -translate-x-1/2 z-20 px-2.5 py-1 bg-[#202224]/90 border border-slate-700 text-amber-400 rounded-none text-[10px] flex items-center gap-1.5 font-mono shadow-md animate-bounce">
+            <Backpack className="h-3 w-3 text-amber-400" />
+            <span>Holding: {heldItem.item.name} ({heldItem.item.count}x)</span>
+          </div>
         )}
-        <Button size="sm" variant="outline" onClick={handleManualSleep}>
-          <Bed className="mr-1.5 h-4 w-4 text-emerald-500" /> Sleep (Save & Grow)
-        </Button>
       </div>
 
       {/* 5. COZY DIALOG INTERFACES */}
 
       {/* A. PIERRE'S OVERHAULED SHOP MODAL */}
       <Dialog open={shopOpen} onOpenChange={setShopOpen}>
-        <DialogContent className="max-w-xl bg-stone-900 border-stone-850 text-stone-100">
+        <DialogContent className="max-w-xl bg-[#242628] border-2 border-slate-700 text-slate-100 rounded-none font-mono">
           <DialogHeader>
-            <DialogTitle className="text-lg font-bold flex items-center gap-2 text-amber-400 border-b border-stone-800 pb-2">
-              <Coins className="h-5 w-5 text-amber-500" />
+            <DialogTitle className="text-lg font-bold flex items-center gap-2 text-[#ff9200] border-b border-slate-800 pb-2">
+              <Coins className="h-5 w-5 text-yellow-500" />
               <span>Pierre's Village Depot</span>
             </DialogTitle>
           </DialogHeader>
 
           {/* Tab buttons */}
-          <div className="flex border-b border-stone-800 gap-1 my-2">
+          <div className="flex border-b border-slate-800 gap-1 my-2">
             {(["seeds", "animals", "upgrades"] as const).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setShopTab(tab)}
-                className={`px-4 py-2 text-xs font-bold uppercase transition-all rounded-t ${
+                className={`px-4 py-1.5 text-xs font-bold uppercase transition-all rounded-none ${
                   shopTab === tab
-                    ? "bg-[#3e2723] text-amber-400 border-t-2 border-amber-500"
-                    : "text-stone-400 hover:text-stone-200"
+                    ? "bg-[#141517] text-[#ff9200] border-t-2 border-[#ff9200]"
+                    : "bg-[#2f3136] text-slate-400 hover:text-slate-200 border-t-2 border-transparent"
                 }`}
               >
                 {tab}
@@ -1719,23 +1729,23 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                   return (
                     <div
                       key={crop.id}
-                      className="p-3 bg-stone-950/65 rounded-lg border border-stone-800 flex justify-between items-center"
+                      className="p-2.5 bg-[#181a1c] border border-slate-800 flex justify-between items-center rounded-none"
                     >
                       <div className="flex items-center gap-2">
                         <span
-                          className="w-8 h-8 rounded flex items-center justify-center font-bold text-sm"
+                          className="w-8 h-8 flex items-center justify-center font-bold text-sm rounded-none text-white"
                           style={{ backgroundColor: crop.accent }}
                         >
                           {seedDef?.iconSymbol || "⁘"}
                         </span>
                         <div>
                           <div className="font-bold text-xs">{crop.name} Seed</div>
-                          <div className="text-[9px] text-stone-400">Yield: {crop.growDays} days</div>
+                          <div className="text-[9px] text-slate-400">Yield: {crop.growDays} days</div>
                         </div>
                       </div>
                       <Button
                         size="xs"
-                        className="text-xs"
+                        className="text-xs bg-[#3a3f44] border border-slate-700 text-slate-200 hover:bg-[#ff9200]/25 hover:border-[#ff9200] rounded-none font-mono"
                         onClick={() => handleBuy(seedId, crop.seedPrice)}
                       >
                         Buy: {crop.seedPrice}g
@@ -1759,19 +1769,20 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                 ].map((item) => (
                   <div
                     key={item.id}
-                    className="p-3 bg-stone-950/60 rounded-lg border border-stone-800 flex justify-between items-center"
+                    className="p-2.5 bg-[#181a1c] border border-slate-805 flex justify-between items-center rounded-none"
                   >
                     <div className="flex items-center gap-3">
                       <span className="text-2xl">{item.symbol}</span>
                       <div>
                         <div className="font-bold text-xs">{item.name}</div>
-                        <div className="text-[9px] text-stone-400">
+                        <div className="text-[9px] text-slate-400">
                           {ITEM_DEFS[item.id]?.description}
                         </div>
                       </div>
                     </div>
                     <Button
                       size="xs"
+                      className="bg-[#3a3f44] border border-slate-700 text-slate-200 hover:bg-[#ff9200]/25 hover:border-[#ff9200] rounded-none font-mono"
                       onClick={() => handleBuy(item.id, item.price)}
                     >
                       Buy: {item.price}g
@@ -1790,29 +1801,29 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                   return (
                     <div
                       key={tId}
-                      className="p-3 bg-stone-950/65 rounded-lg border border-stone-850 flex flex-col justify-between text-xs"
+                      className="p-3 bg-[#181a1c] border border-slate-805 flex flex-col justify-between text-xs rounded-none"
                     >
                       <div className="flex justify-between items-center mb-1">
-                        <span className="capitalize font-extrabold text-amber-400">
+                        <span className="capitalize font-extrabold text-[#ff9200]">
                           {tId === "watering" ? "Watering Can" : tId}
                         </span>
-                        <span className="text-stone-400 font-bold font-mono">Level {lvl}</span>
+                        <span className="text-slate-400 font-bold font-mono">Level {lvl}</span>
                       </div>
                       
                       {cost ? (
-                        <div className="text-[10px] text-stone-300 font-mono mb-2 flex flex-col gap-0.5">
-                          <span className="text-stone-500">Requires:</span>
-                          <span className="text-amber-300 font-bold">{cost.label}</span>
+                        <div className="text-[10px] text-slate-350 font-mono mb-2 flex flex-col gap-0.5">
+                          <span className="text-slate-500">Requires:</span>
+                          <span className="text-amber-400 font-bold">{cost.label}</span>
                         </div>
                       ) : (
-                        <span className="text-[10px] text-emerald-400 font-bold font-mono mb-2">MAX LEVEL (Lv.4) REACHED</span>
+                        <span className="text-[10px] text-emerald-450 font-bold font-mono mb-2">MAX LEVEL REACHED</span>
                       )}
 
                       <Button
                         size="xs"
                         variant="outline"
                         disabled={lvl >= 4}
-                        className="w-full text-xs bg-[#5d4037]/20 border-stone-850 hover:bg-[#5d4037]/40 font-mono mt-auto"
+                        className="w-full text-xs bg-[#3a3f44] border-slate-750 text-slate-200 hover:bg-[#ff9200]/25 hover:border-[#ff9200] font-mono mt-auto rounded-none"
                         onClick={() => handleUpgrade(tId)}
                       >
                         {lvl >= 4 ? "MAX" : `Upgrade to Lv.${lvl + 1}`}
@@ -1824,11 +1835,11 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
             )}
           </div>
 
-          <div className="flex gap-2 mt-4 pt-3 border-t border-stone-800">
-            <Button size="sm" variant="outline" className="flex-1 text-xs text-stone-300" onClick={handleSellAllCrops}>
+          <div className="flex gap-2 mt-4 pt-3 border-t border-slate-800">
+            <Button size="sm" variant="outline" className="flex-1 text-xs text-slate-300 border-slate-700 hover:bg-slate-800 rounded-none" onClick={handleSellAllCrops}>
               Sell All Crops, Eggs, & Milk in Bag
             </Button>
-            <Button size="sm" className="text-xs" onClick={() => setShopOpen(false)}>
+            <Button size="sm" className="text-xs bg-[#ff9200] hover:bg-[#ff9200]/80 text-[#141517] font-bold rounded-none" onClick={() => setShopOpen(false)}>
               Close Shop
             </Button>
           </div>
@@ -1967,23 +1978,23 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
 
       {/* D. TABBED JOURNAL / BACKPACK */}
       <Dialog open={inventoryOpen} onOpenChange={setInventoryOpen}>
-        <DialogContent className="max-w-xl bg-stone-900 border-stone-850 text-stone-100">
+        <DialogContent className="max-w-xl bg-[#242628] border-2 border-slate-700 text-slate-100 rounded-none font-mono">
           <DialogHeader>
-            <DialogTitle className="text-lg font-bold flex items-center gap-2 text-amber-400 border-b border-stone-800 pb-2">
-              <Backpack className="h-5 w-5 text-amber-500" />
+            <DialogTitle className="text-lg font-bold flex items-center gap-2 text-[#ff9200] border-b border-slate-800 pb-2">
+              <Backpack className="h-5 w-5 text-[#ff9200]" />
               <span>Backpack Journal</span>
             </DialogTitle>
           </DialogHeader>
 
-          <div className="flex border-b border-stone-800 gap-1 my-1">
+          <div className="flex border-b border-slate-800 gap-1 my-1">
             {(["inventory", "crafting", "social", "skills"] as const).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
-                className={`px-4 py-2 text-xs font-bold uppercase transition-all rounded-t ${
+                className={`px-4 py-1.5 text-xs font-bold uppercase transition-all rounded-none ${
                   activeTab === tab
-                    ? "bg-[#3e2723] text-amber-400 border-t-2 border-amber-500"
-                    : "text-stone-400 hover:text-stone-200"
+                    ? "bg-[#141517] text-[#ff9200] border-t-2 border-[#ff9200]"
+                    : "bg-[#2f3136] text-slate-400 hover:text-slate-200 border-t-2 border-transparent"
                 }`}
               >
                 {tab}
@@ -1998,13 +2009,13 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                   <Button 
                     size="xs" 
                     variant="outline" 
-                    className="text-[10px] h-6 px-2.5 bg-[#5d4037]/20 border-stone-850 text-stone-300 hover:bg-[#5d4037]/40 font-mono" 
+                    className="text-[10px] h-6 px-2.5 bg-[#3a3f44] border-slate-700 text-slate-200 hover:bg-[#ff9200]/25 hover:border-[#ff9200] rounded-none font-mono" 
                     onClick={handleSortInventory}
                   >
                     Sort Inventory
                   </Button>
                 </div>
-                <div className="grid grid-cols-6 gap-2 bg-[#2d1e18] p-3 rounded-lg border border-stone-800">
+                <div className="grid grid-cols-10 gap-1 bg-[#141517] p-2 border border-slate-800 rounded-none">
                   {state.inventory.map((item, idx) => (
                     <button
                       key={idx}
@@ -2012,15 +2023,20 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                       onContextMenu={(e) => handleSlotRightClick(e, idx, "inventory")}
                       onMouseEnter={() => item && setHoveredItem(item)}
                       onMouseLeave={() => setHoveredItem(null)}
-                      className={`relative flex items-center justify-center h-14 rounded border transition-all ${
+                      className={`relative flex items-center justify-center h-[44px] transition-all rounded-none ${
                         item
-                          ? "bg-[#7c5a3c]/20 hover:bg-[#7c5a3c]/40 border-stone-700"
-                          : "bg-stone-900/60 border-stone-800/80"
+                          ? "bg-[#2f3136] hover:bg-[#3f4248] border border-slate-600 text-slate-100"
+                          : "bg-[#181a1c] border border-slate-800/80 text-slate-600"
                       }`}
                     >
+                      {idx < 10 && (
+                        <span className="absolute top-0.5 left-1 text-[8px] font-bold text-slate-500 leading-none">
+                          {idx === 9 ? "0" : idx + 1}
+                        </span>
+                      )}
                       {item ? (
                         <>
-                          <span className="text-2xl">{item.iconSymbol || "🎁"}</span>
+                          <span className="text-2xl mt-1 select-none">{item.iconSymbol || "🎁"}</span>
                           {item.count > 1 && (
                             <span className="absolute bottom-0.5 right-1 px-1 bg-black/60 rounded text-[9px] font-bold text-white font-mono">
                               {item.count}
@@ -2035,9 +2051,9 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                 </div>
 
                 {heldItem && (
-                  <div className="p-2 bg-amber-500/10 border border-amber-500/20 rounded-md text-[10px] text-amber-400 flex items-center justify-between font-mono">
+                  <div className="p-2 bg-[#ff9200]/10 border border-[#ff9200]/20 rounded-none text-[10px] text-[#ff9200] flex items-center justify-between font-mono">
                     <span>Holding: {heldItem.item.name} ({heldItem.item.count}x)</span>
-                    <Button size="xs" variant="outline" className="text-[10px] h-5 px-1.5" onClick={() => setHeldItem(null)}>
+                    <Button size="xs" variant="outline" className="text-[10px] h-5 px-1.5 rounded-none border-slate-700 hover:bg-slate-800" onClick={() => setHeldItem(null)}>
                       Clear
                     </Button>
                   </div>
@@ -2045,18 +2061,18 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
 
                 {/* Detailed Hover Inspection Tooltip */}
                 {hoveredItem ? (
-                  <div className="p-2.5 bg-stone-950/80 border border-[#5d4037] rounded-lg flex items-start gap-2.5 transition-all">
-                    <span className="text-2xl bg-stone-900 p-1 rounded">{hoveredItem.iconSymbol || "🎁"}</span>
+                  <div className="p-2 bg-[#141517] border border-slate-700 rounded-none flex items-start gap-2.5 transition-all font-mono">
+                    <span className="text-2xl bg-[#1e2022] p-1 rounded-none border border-slate-800">{hoveredItem.iconSymbol || "🎁"}</span>
                     <div className="flex-1 text-[11px] leading-snug">
-                      <div className="flex justify-between items-center font-mono">
-                        <span className="font-extrabold text-amber-400">{hoveredItem.name}</span>
+                      <div className="flex justify-between items-center">
+                        <span className="font-bold text-[#ff9200]">{hoveredItem.name}</span>
                         {hoveredItem.price > 0 && <span className="font-bold text-yellow-500">{hoveredItem.price}g</span>}
                       </div>
-                      <p className="text-stone-300 text-[10px] mt-0.5 font-mono">{hoveredItem.description}</p>
+                      <p className="text-slate-350 text-[10px] mt-0.5">{hoveredItem.description}</p>
                       {(hoveredItem.energyRestore !== undefined || hoveredItem.healthRestore !== undefined) && (
-                        <div className="flex gap-2 mt-1 text-[9px] font-bold font-mono">
+                        <div className="flex gap-2 mt-1 text-[9px] font-bold">
                           {hoveredItem.energyRestore !== undefined && hoveredItem.energyRestore !== 0 && (
-                            <span className="text-emerald-400">⚡ Energy: {hoveredItem.energyRestore > 0 ? "+" : ""}{hoveredItem.energyRestore}</span>
+                            <span className="text-emerald-450">⚡ Energy: {hoveredItem.energyRestore > 0 ? "+" : ""}{hoveredItem.energyRestore}</span>
                           )}
                           {hoveredItem.healthRestore !== undefined && hoveredItem.healthRestore !== 0 && (
                             <span className="text-red-400">❤️ Health: {hoveredItem.healthRestore > 0 ? "+" : ""}{hoveredItem.healthRestore}</span>
@@ -2066,7 +2082,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                     </div>
                   </div>
                 ) : (
-                  <div className="p-2 bg-stone-950/20 border border-dashed border-stone-850 rounded-lg text-center text-stone-500 text-[10px] py-3 font-mono">
+                  <div className="p-2 bg-[#141517]/30 border border-dashed border-slate-800 rounded-none text-center text-slate-500 text-[10px] py-3 font-mono">
                     Hover over an item to inspect details. Right-click to split stacks.
                   </div>
                 )}
@@ -2612,5 +2628,151 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
         </ul>
       </div>
     </div>
+  );
+}
+
+function drawMinimap(
+  ctx: CanvasRenderingContext2D,
+  state: GameState,
+  viewWidth: number,
+  viewHeight: number
+) {
+  const isMine = state.inMine;
+  const grid = isMine ? state.mineGrid : state.tiles;
+  if (!grid || grid.length === 0) return;
+  const rows = grid.length;
+  const cols = grid[0].length;
+
+  const w = ctx.canvas.width;
+  const h = ctx.canvas.height;
+
+  // Clear canvas
+  ctx.fillStyle = "#141517";
+  ctx.fillRect(0, 0, w, h);
+
+  const scaleX = w / cols;
+  const scaleY = h / rows;
+
+  for (let y = 0; y < rows; y++) {
+    for (let x = 0; x < cols; x++) {
+      const tile = grid[y][x];
+      if (!tile) continue;
+
+      let color = "#346933";
+      switch (tile.kind) {
+        case "grass":
+          color = "#346933";
+          break;
+        case "water":
+          color = "#1f5673";
+          break;
+        case "path":
+          color = "#9c8e77";
+          break;
+        case "soil":
+          color = "#6a5247";
+          break;
+        case "watered":
+          color = "#4a3931";
+          break;
+        case "tree":
+          color = "#1e4d2b";
+          break;
+        case "house":
+        case "shop":
+          color = "#8d4536";
+          break;
+        case "mine_cave":
+          color = "#000000";
+          break;
+        case "mine_dirt":
+          color = "#3d312a";
+          break;
+        case "mine_wall":
+          color = "#2b2521";
+          break;
+        case "mine_ladder":
+          color = "#ffd700";
+          break;
+        case "debris_weed":
+          color = "#4c8a48";
+          break;
+        case "debris_branch":
+          color = "#8b7355";
+          break;
+        case "debris_stone":
+          color = "#707070";
+          break;
+        case "ore_copper":
+          color = "#d35400";
+          break;
+        case "ore_iron":
+          color = "#7f8c8d";
+          break;
+        case "ore_gold":
+          color = "#f1c40f";
+          break;
+        case "placed_item":
+          if (tile.placedItemId === "mailbox") color = "#34495e";
+          else if (tile.placedItemId === "chest") color = "#d35400";
+          else if (tile.placedItemId && tile.placedItemId.startsWith("sprinkler")) color = "#3498db";
+          else color = "#ab47bc";
+          break;
+      }
+
+      ctx.fillStyle = color;
+      ctx.fillRect(x * scaleX, y * scaleY, Math.ceil(scaleX), Math.ceil(scaleY));
+    }
+  }
+
+  if (state.workers) {
+    ctx.fillStyle = "#f39c12";
+    state.workers.forEach((w) => {
+      ctx.fillRect(w.x * scaleX, w.y * scaleY, Math.max(2, scaleX * 1.2), Math.max(2, scaleY * 1.2));
+    });
+  }
+
+  if (state.animals) {
+    ctx.fillStyle = "#f1f1f1";
+    state.animals.forEach((a) => {
+      ctx.fillRect(a.x * scaleX, a.y * scaleY, Math.max(2, scaleX * 1.2), Math.max(2, scaleY * 1.2));
+    });
+  }
+
+  const flash = Math.floor(Date.now() / 250) % 2 === 0;
+  ctx.fillStyle = flash ? "#ff3d00" : "#ffeb3b";
+  const px = state.player.x;
+  const py = state.player.y;
+  ctx.beginPath();
+  ctx.arc((px + 0.5) * scaleX, (py + 0.5) * scaleY, Math.max(3, scaleX * 1.5), 0, Math.PI * 2);
+  ctx.fill();
+
+  const TILE = 32;
+  const gridCols = isMine ? 24 : COLS;
+  const gridRows = isMine ? 24 : ROWS;
+  const p = state.player;
+  const pSubX = p.subX !== undefined ? p.subX : p.x;
+  const pSubY = p.subY !== undefined ? p.subY : p.y;
+  const cameraX = Math.max(
+    0,
+    Math.min(gridCols * TILE - viewWidth, pSubX * TILE + 16 - viewWidth / 2)
+  );
+  const cameraY = Math.max(
+    0,
+    Math.min(gridRows * TILE - viewHeight, pSubY * TILE + 16 - viewHeight / 2)
+  );
+
+  const startCol = cameraX / TILE;
+  const endCol = (cameraX + viewWidth) / TILE;
+  const startRow = cameraY / TILE;
+  const endRow = (cameraY + viewHeight) / TILE;
+
+  ctx.strokeStyle = "#ffffff";
+  ctx.lineWidth = 1.2;
+  ctx.strokeRect(
+    startCol * scaleX,
+    startRow * scaleY,
+    (endCol - startCol) * scaleX,
+    (endRow - startRow) * scaleY
   );
 }

@@ -52,6 +52,17 @@ function PlayPage() {
   const dirtyRef = useRef(false);
   const [status, setStatus] = useState<SaveStatus>("idle");
   const wrapperRef = useRef<HTMLDivElement | null>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+    return () => {
+      document.removeEventListener("fullscreenchange", handleFullscreenChange);
+    };
+  }, []);
 
   // Decide whether to ask resume vs new
   useEffect(() => {
@@ -167,32 +178,34 @@ function PlayPage() {
 
   return (
     <div ref={wrapperRef} className="flex min-h-screen flex-col bg-background">
-      <header className="sticky top-0 z-10 flex flex-wrap items-center justify-between gap-2 border-b border-border bg-card/80 px-4 py-3 backdrop-blur">
-        <div className="flex items-center gap-2">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => navigate({ to: "/library" })}
-          >
-            <ArrowLeft className="mr-2 h-4 w-4" /> Library
-          </Button>
-          <span className="font-semibold">{game.data.title}</span>
-          <SaveBadge status={status} />
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button size="sm" variant="outline" onClick={loadFromCloud}>
-            <RotateCcw className="mr-1 h-4 w-4" /> Load
-          </Button>
-          <Button size="sm" onClick={manualSave}>
-            <Save className="mr-1 h-4 w-4" /> Save
-          </Button>
-          <Button size="sm" variant="outline" onClick={fullscreen}>
-            <Maximize2 className="mr-1 h-4 w-4" /> Fullscreen
-          </Button>
-        </div>
-      </header>
+      {!isFullscreen && (
+        <header className="sticky top-0 z-10 flex flex-wrap items-center justify-between gap-2 border-b border-border bg-card/80 px-4 py-3 backdrop-blur">
+          <div className="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => navigate({ to: "/library" })}
+            >
+              <ArrowLeft className="mr-2 h-4 w-4" /> Library
+            </Button>
+            <span className="font-semibold">{game.data.title}</span>
+            <SaveBadge status={status} />
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button size="sm" variant="outline" onClick={loadFromCloud}>
+              <RotateCcw className="mr-1 h-4 w-4" /> Load
+            </Button>
+            <Button size="sm" onClick={manualSave}>
+              <Save className="mr-1 h-4 w-4" /> Save
+            </Button>
+            <Button size="sm" variant="outline" onClick={fullscreen}>
+              <Maximize2 className="mr-1 h-4 w-4" /> Fullscreen
+            </Button>
+          </div>
+        </header>
+      )}
 
-      <main className="flex flex-1 items-start justify-center p-4 md:p-8">
+      <main className={`flex flex-1 items-start justify-center ${isFullscreen ? "p-0 w-screen h-screen bg-[#18110e]" : "p-4 md:p-8"}`}>
         {chosen ? (
           slug === "meadow-life" ? (
             <MeadowLife initialState={chosen} onStateChange={handleStateChange} />

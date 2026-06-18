@@ -586,7 +586,7 @@ export function generateMineFloor(depth: number): { grid: Tile[][]; enemies: Ene
 }
 
 export function newGame(): GameState {
-  const inv = Array.from({ length: 24 }, () => null as Item | null);
+  const inv = Array.from({ length: 30 }, () => null as Item | null);
 
   // Equip standard tools
   inv[0] = createItem("hoe");
@@ -692,7 +692,10 @@ export function migrateState(raw: unknown): GameState {
     // Arrays — use saved data or fall back to baseline.
     // Use .filter(Boolean) on entity arrays to strip any null/undefined
     // entries that Firestore may have stored (e.g. from serialization bugs).
-    inventory:    Array.isArray(s.inventory)     ? (s.inventory as (Item | null)[])                     : base.inventory,
+    inventory: (() => {
+      const savedInv = Array.isArray(s.inventory) ? (s.inventory as (Item | null)[]) : base.inventory;
+      return Array.from({ length: 30 }, (_, idx) => savedInv[idx] ?? null);
+    })(),
     shippingBin:  Array.isArray(s.shippingBin)   ? (s.shippingBin as (Item | null)[])                   : base.shippingBin,
     mineEnemies:  Array.isArray(s.mineEnemies)   ? (s.mineEnemies as Enemy[]).filter(Boolean)           : base.mineEnemies,
     mailboxLetters: Array.isArray(s.mailboxLetters) ? (s.mailboxLetters as MailLetter[]).filter(Boolean) : base.mailboxLetters,

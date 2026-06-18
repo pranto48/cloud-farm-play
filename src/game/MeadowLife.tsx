@@ -22,6 +22,8 @@ import {
   hasItems,
   updateEntities,
   migrateState,
+  addItem,
+  deductItems,
   type GameState,
   type Tile,
   type Enemy,
@@ -29,6 +31,7 @@ import {
   type FloatingText,
   type MailLetter,
   type Animal,
+  type Recipe,
 } from "./meadow-life";
 import { shopInventoryForSeason, CROPS } from "./data/crops";
 import { ITEM_DEFS, createItem, type Item } from "./data/items";
@@ -42,7 +45,7 @@ import {
   Coins, Sprout, Wheat, Bed, Hammer, Droplets, Scissors, Pickaxe,
   Heart, ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Hand, Swords,
   Volume2, VolumeX, Backpack, HelpCircle, Compass, Shield, MapPin, X,
-  Mail, Calendar, Trophy, Maximize, Minimize
+  Mail, Calendar, Trophy, Maximize, Minimize, Flame
 } from "lucide-react";
 import {
   Dialog,
@@ -83,7 +86,8 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
   const [shippingBinOpen, setShippingBinOpen] = useState(false);
   const [furnaceOpenTile, setFurnaceOpenTile] = useState<{ x: number; y: number } | null>(null);
   const [craftingCategory, setCraftingCategory] = useState<"logistics" | "production" | "materials">("logistics");
-  const [craftingQueue, setCraftingQueue] = useState<{ id: string; name: string; iconSymbol: string; iconColor: string; progress: number }[]>([]);
+  const [craftingQueue, setCraftingQueue] = useState<{ id: string; recipeId: string; name: string; iconSymbol: string; iconColor: string; progress: number; duration: number; remainingTime: number }[]>([]);
+  const [hoveredRecipe, setHoveredRecipe] = useState<Recipe | null>(null);
   const hoveredTileRef = useRef<{ x: number; y: number } | null>(null);
 
   // Mailbox Mail overlay
@@ -940,7 +944,8 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
         setIsSpacePressed(true);
         setState((prev) => {
           const next = structuredClone(prev);
-          const act = interact(next);
+          const targetCoords = hoveredTileRef.current || frontTile(next) || next.player;
+          const act = interact(next, 1, hoveredTileRef.current || undefined);
 
           if (act.particles.length > 0) {
             particlesRef.current = [...particlesRef.current, ...act.particles];
@@ -949,8 +954,8 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
           if (act.message) {
             toast(act.message);
             floatingTextsRef.current.push({
-              x: next.player.x * TILE + 16,
-              y: next.player.y * TILE - 8,
+              x: targetCoords.x * TILE + 16,
+              y: targetCoords.y * TILE - 8,
               text: act.message,
               color: "#f1c40f",
               age: 0,
@@ -1113,7 +1118,8 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
 
           setState((prev) => {
             const next = structuredClone(prev);
-            const act = interact(next, chargeLevel);
+            const targetCoords = hoveredTileRef.current || frontTile(next) || next.player;
+            const act = interact(next, chargeLevel, hoveredTileRef.current || undefined);
 
             if (act.particles.length > 0) {
               particlesRef.current = [...particlesRef.current, ...act.particles];
@@ -1122,8 +1128,8 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
             if (act.message) {
               toast(act.message);
               floatingTextsRef.current.push({
-                x: next.player.x * TILE + 16,
-                y: next.player.y * TILE - 8,
+                x: targetCoords.x * TILE + 16,
+                y: targetCoords.y * TILE - 8,
                 text: act.message,
                 color: "#f1c40f",
                 age: 0,
@@ -1195,6 +1201,276 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
 
     return () => clearInterval(fInterval);
   }, []);
+
+  // Crafting Queue Progress Tick
+  useEffect(() => {
+    const queueInterval = setInterval(() => {
+      setCraftingQueue((prevQueue) => {
+        if (prevQueue.length === 0) return prevQueue;
+
+        const nextQueue = prevQueue.map((item, idx) => {
+          if (idx === 0) {
+            const timeStep = 0.1; // 100ms
+            const remaining = Math.max(0, item.remainingTime - timeStep);
+            const duration = item.duration || 2;
+            const progress = Math.round(((duration - remaining) / duration) * 100);
+            return { ...item, remainingTime: remaining, progress };
+          }
+          return item;
+        });
+
+        const active = nextQueue[0];
+        if (active.remainingTime <= 0) {
+          setState((prev) => {
+            const next = structuredClone(prev);
+            const recipe = CRAFTING_RECIPES.find((r) => r.id === active.recipeId);
+            if (recipe) {
+              const output = createItem(recipe.outputId, recipe.outputCount);
+              const success = addItem(next.inventory, output);
+              if (success) {
+                toast.success(`Crafted ${recipe.name}! 🛠️`);
+                gameAudio.playCoin();
+              } else {
+                toast.warning(`Inventory full! Added to backpack extra slots.`);
+                next.inventory.push(output);
+              }
+            }
+            return next;
+          });
+          return nextQueue.slice(1);
+        }
+
+        return nextQueue;
+      });
+    }, 100);
+
+    return () => clearInterval(queueInterval);
+  }, []);
+
+  const handleConfirmSleep = () => {
+    setState((prev) => {
+      const next = structuredClone(prev);
+      sleep(next);
+      next.inHouse = true;
+      next.player.x = 3;
+      next.player.y = 2;
+      next.player.subX = 3;
+      next.player.subY = 2;
+      next.player.dir = "down";
+      setSleepSummary(next.dailyEarnings || { items: [], total: 0 });
+      return next;
+    });
+    setSleepConfirmOpen(false);
+  };
+
+  const handleStartCrafting = (recipe: Recipe) => {
+    let hasAll = true;
+    setState((prev) => {
+      const next = structuredClone(prev);
+      for (const input of recipe.inputs) {
+        if (!hasItems(next.inventory, input.itemId, input.count)) {
+          hasAll = false;
+          break;
+        }
+      }
+
+      if (!hasAll) {
+        toast.error(`Not enough ingredients to craft ${recipe.name}!`);
+        return prev;
+      }
+
+      for (const input of recipe.inputs) {
+        deductItems(next.inventory, input.itemId, input.count);
+      }
+
+      const itemDef = ITEM_DEFS[recipe.outputId];
+      const duration = 2.0;
+      setCraftingQueue((prevQueue) => [
+        ...prevQueue,
+        {
+          id: `${recipe.id}_${Date.now()}`,
+          recipeId: recipe.id,
+          name: recipe.name,
+          iconSymbol: itemDef?.iconSymbol || "⚙",
+          iconColor: itemDef?.iconColor || "#94a3b8",
+          progress: 0,
+          duration,
+          remainingTime: duration,
+        },
+      ]);
+
+      toast.info(`Queued ${recipe.name} for crafting...`);
+      return next;
+    });
+  };
+
+  const handleCanvasMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    const coords = getMouseTileCoords(e.clientX, e.clientY);
+    hoveredTileRef.current = coords;
+  };
+
+  const handleCanvasMouseLeave = () => {
+    hoveredTileRef.current = null;
+  };
+
+  const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    const coords = getMouseTileCoords(e.clientX, e.clientY);
+    if (!coords) return;
+
+    const curState = stateRef.current;
+    const p = curState.player;
+    const dist = Math.abs(coords.x - p.x) + Math.abs(coords.y - p.y);
+    if (dist > 5) {
+      toast.error("Target tile is out of reach!");
+      return;
+    }
+
+    const grid = curState.inHouse ? curState.houseGrid! : (curState.inMine ? curState.mineGrid : curState.tiles);
+    const tile = grid[coords.y]?.[coords.x];
+    const held = curState.inventory[curState.hotbarIndex];
+
+    const clickedAnimal = curState.animals.find((a) => a.x === coords.x && a.y === coords.y);
+    const clickedPet = curState.pets?.find((pt) => pt.x === coords.x && pt.y === coords.y);
+    const clickedWorker = curState.workers?.find((w) => w.x === coords.x && w.y === coords.y);
+    
+    let clickedNpc: NPCDef | null = null;
+    let clickedNpcId = "";
+    Object.keys(NPCS).forEach((id) => {
+      const target = getNPCDestination(id, curState.time);
+      if (target.x === coords.x && target.y === coords.y) {
+        clickedNpc = NPCS[id];
+        clickedNpcId = id;
+      }
+    });
+
+    const isInteractive = tile && (
+      tile.kind === "shop" ||
+      tile.kind === "house_bed" ||
+      (tile.kind === "placed_item" && (
+        tile.placedItemId === "furnace" ||
+        tile.placedItemId === "chest" ||
+        tile.placedItemId === "mailbox" ||
+        tile.placedItemId === "worker_cabin" ||
+        tile.placedItemId === "chicken_egg"
+      )) ||
+      (!curState.inMine && !curState.inHouse && coords.x === 18 && coords.y === 29)
+    );
+
+    const hasEntity = clickedAnimal || clickedPet || clickedWorker || clickedNpc;
+    const isTool = held && (held.type === "tool" || held.id === "fishing_rod");
+
+    if ((isInteractive || hasEntity) && !isTool) {
+      if (clickedAnimal) {
+        setState((prev) => {
+          const next = structuredClone(prev);
+          const a = next.animals.find((x) => x.id === clickedAnimal.id);
+          if (a) {
+            a.petCount += 1;
+            gameAudio.playLevelUp();
+            toast.success(`You petted ${a.name}! ❤️`);
+            for (let i = 0; i < 5; i++) {
+              particlesRef.current.push({
+                x: a.x * TILE + 16,
+                y: a.y * TILE + 16,
+                vx: (Math.random() * 2 - 1) * 30,
+                vy: -Math.random() * 40 - 15,
+                color: "#ff3366",
+                age: 0,
+                maxAge: 0.5,
+                type: "heart",
+              });
+            }
+          }
+          return next;
+        });
+      } else if (clickedPet) {
+        setState((prev) => {
+          const next = structuredClone(prev);
+          if (!next.pets) next.pets = [];
+          const pt = next.pets.find((x) => x.id === clickedPet.id);
+          if (pt) {
+            if (!pt.pettedToday) {
+              pt.pettedToday = true;
+              pt.friendship = Math.min(1000, pt.friendship + 10);
+              gameAudio.playLevelUp();
+              toast.success(`You petted ${pt.name}! ❤️`);
+              for (let i = 0; i < 5; i++) {
+                particlesRef.current.push({
+                  x: pt.x * TILE + 16,
+                  y: pt.y * TILE + 16,
+                  vx: (Math.random() * 2 - 1) * 30,
+                  vy: -Math.random() * 40 - 15,
+                  color: "#ff3366",
+                  age: 0,
+                  maxAge: 0.5,
+                  type: "heart",
+                });
+              }
+            } else {
+              toast(`You already petted ${pt.name} today.`);
+            }
+          }
+          return next;
+        });
+      } else if (clickedWorker) {
+        setSelectedWorkerId(clickedWorker.id);
+      } else if (clickedNpc) {
+        const lines = (clickedNpc as NPCDef).defaultDialogue;
+        const choice = lines[Math.floor(Math.random() * lines.length)];
+        setNpcDialogue({ npcId: clickedNpcId, dialogue: choice });
+      } else if (tile) {
+        if (tile.kind === "shop") {
+          setShopOpen(true);
+        } else if (tile.kind === "house_bed") {
+          setSleepConfirmOpen(true);
+        } else if (tile.kind === "placed_item" && tile.placedItemId === "furnace") {
+          setFurnaceOpenTile({ x: coords.x, y: coords.y });
+        } else if (tile.kind === "placed_item" && tile.placedItemId === "mailbox") {
+          setMailboxOpen(true);
+        } else if (tile.kind === "placed_item" && (tile.placedItemId === "chest" || tile.placedItemId === "worker_cabin")) {
+          setChestOpenTile({ x: coords.x, y: coords.y });
+        } else if (!curState.inMine && !curState.inHouse && coords.x === 18 && coords.y === 29) {
+          setShippingBinOpen(true);
+        } else if (tile.kind === "placed_item" && tile.placedItemId === "chicken_egg") {
+          setState((prev) => {
+            const next = structuredClone(prev);
+            const nextGrid = next.inHouse ? next.houseGrid! : (next.inMine ? next.mineGrid : next.tiles);
+            const egg = createItem("chicken_egg", 1);
+            const success = addItem(next.inventory, egg);
+            if (success) {
+              nextGrid[coords.y][coords.x].kind = next.inHouse ? "house_floor" : (next.inMine ? "mine_dirt" : "grass");
+              nextGrid[coords.y][coords.x].placedItemId = undefined;
+              toast.success("Collected a Chicken Egg! 🥚");
+              gameAudio.playCoin();
+            } else {
+              toast.error("Inventory full!");
+            }
+            return next;
+          });
+        }
+      }
+    } else {
+      setState((prev) => {
+        const next = structuredClone(prev);
+        const act = interact(next, 1, coords);
+        if (act.particles.length > 0) {
+          particlesRef.current = [...particlesRef.current, ...act.particles];
+        }
+        if (act.message) {
+          toast(act.message);
+          floatingTextsRef.current.push({
+            x: coords.x * TILE + 16,
+            y: coords.y * TILE - 8,
+            text: act.message,
+            color: "#f1c40f",
+            age: 0,
+            maxAge: 0.8,
+          });
+        }
+        return next;
+      });
+    }
+  };
 
   // Sleep summary close handler
   const handleCloseSleepSummary = () => {
@@ -1539,7 +1815,10 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
           width={canvasSize.width}
           height={canvasSize.height}
           onContextMenu={handleCanvasContextMenu}
-          style={{ width: "100%", height: "100%", display: "block", imageRendering: "pixelated" }}
+          onMouseMove={handleCanvasMouseMove}
+          onMouseLeave={handleCanvasMouseLeave}
+          onClick={handleCanvasClick}
+          style={{ width: "100%", height: "100%", display: "block", imageRendering: "pixelated", cursor: "crosshair" }}
         />
 
         {/* Floating Top-Left Action Bar */}
@@ -1697,6 +1976,41 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
             })}
           </div>
         </div>
+
+        {/* Crafting Queue HUD Overlay */}
+        {craftingQueue.length > 0 && (
+          <div className="absolute bottom-16 left-3 z-20 flex flex-col gap-1.5 bg-zinc-950/90 border border-zinc-705 p-2 font-mono shadow-md text-zinc-100 min-w-[150px] rounded-sm">
+            <div className="text-[9px] text-zinc-400 font-bold uppercase tracking-wider border-b border-zinc-800 pb-1 flex justify-between items-center">
+              <span>Crafting Queue</span>
+              <span className="text-orange-400 bg-orange-950/50 px-1 rounded font-extrabold text-[8px]">
+                {craftingQueue.length} items
+              </span>
+            </div>
+            
+            <div className="flex items-center gap-2">
+              <span className="text-xl bg-zinc-900 p-1 border border-zinc-800 rounded">
+                {craftingQueue[0].iconSymbol}
+              </span>
+              <div className="flex-1 min-w-0">
+                <div className="text-[10px] font-bold text-zinc-200 truncate">
+                  {craftingQueue[0].name}
+                </div>
+                <div className="w-full bg-zinc-800 h-1.5 border border-zinc-750 mt-1 rounded-none overflow-hidden relative">
+                  <div 
+                    className="bg-orange-500 h-full transition-all duration-100"
+                    style={{ width: `${craftingQueue[0].progress}%` }}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {craftingQueue.length > 1 && (
+              <div className="text-[8px] text-zinc-500 font-bold text-right pt-0.5">
+                +{craftingQueue.length - 1} more queued
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Floating monospaced guide helper in bottom left */}
         <div className="absolute bottom-3 left-3 z-20 flex flex-col text-[8px] font-mono text-slate-500 leading-normal bg-black/30 p-1 pointer-events-none select-none">

@@ -65,6 +65,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
   stateRef.current = state;
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const minimapRef = useRef<HTMLCanvasElement | null>(null);
   const particlesRef = useRef<Particle[]>([]);
   const floatingTextsRef = useRef<FloatingText[]>([]);
 
@@ -84,7 +85,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
   const [selectedWorkerId, setSelectedWorkerId] = useState<string | null>(null);
 
   // Layout toggle settings
-  const [useSidebar, setUseSidebar] = useState(true);
+  const [useSidebar, setUseSidebar] = useState(false); // default to false since we use Factorio bottom hotbar
 
   // Audio mute
   const [muted, setMuted] = useState(gameAudio.isMuted());
@@ -116,16 +117,12 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
 
   // Update canvas size dynamically when fullscreen is active
   useEffect(() => {
-    if (!isFullscreen) {
-      setCanvasSize({ width: 704, height: 480 });
-      return;
-    }
-
     const updateSize = () => {
-      const sidebarWidth = useSidebar ? 80 : 0;
-      const w = Math.max(704, window.innerWidth - sidebarWidth - 48);
-      const h = Math.max(480, window.innerHeight - 150);
-      setCanvasSize({ width: w, height: h });
+      if (isFullscreen) {
+        setCanvasSize({ width: window.innerWidth, height: window.innerHeight });
+      } else {
+        setCanvasSize({ width: 704, height: 480 });
+      }
     };
 
     updateSize();
@@ -133,7 +130,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
     return () => {
       window.removeEventListener("resize", updateSize);
     };
-  }, [isFullscreen, useSidebar]);
+  }, [isFullscreen]);
 
   const toggleFullscreen = async () => {
     if (!mainContainerRef.current) return;

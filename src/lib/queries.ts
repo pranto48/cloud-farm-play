@@ -121,7 +121,16 @@ export async function fetchCloudSave(userId: string, gameId: string) {
   if (docs.length === 0) return null;
 
   docs.sort((a: any, b: any) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
-  return docs[0];
+  
+  const save = docs[0];
+  if (save && typeof save.save_data === "string") {
+    try {
+      save.save_data = JSON.parse(save.save_data);
+    } catch (e) {
+      console.error("[Queries] Failed to parse save_data JSON:", e);
+    }
+  }
+  return save;
 }
 
 export async function fetchAllCloudSaves(userId: string) {
@@ -199,12 +208,14 @@ export async function upsertCloudSave(params: {
   const docId = `${params.userId}_${params.gameId}_${slot.replace(/\s+/g, "_")}`;
   const saveRef = doc(db, "cloud_saves", docId);
   
+  const serializedSaveData = JSON.stringify(params.saveData);
+  
   await setDoc(saveRef, {
     id: docId,
     user_id: params.userId,
     game_id: params.gameId,
     slot_name: slot,
-    save_data: params.saveData,
+    save_data: serializedSaveData,
     updated_at: new Date().toISOString()
   }, { merge: true });
 }

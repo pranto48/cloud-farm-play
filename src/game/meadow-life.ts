@@ -5,8 +5,8 @@ import { FISH_TYPES, type FishingState } from "./fishing";
 import { gameAudio } from "./audio";
 
 export const TILE = 32;
-export const COLS = 80;
-export const ROWS = 80;
+export const COLS = 120;
+export const ROWS = 120;
 
 export type TileKind =
   | "grass"
@@ -450,14 +450,20 @@ function makeMap(): Tile[][] {
     }
   });
 
-  // Overgrown debris
-  for (let y = 25; y < 65; y++) {
-    for (let x = 3; x < 35; x++) {
-      if (t[y][x].kind === "grass" && Math.random() < 0.22) {
-        const rand = Math.random();
-        if (rand < 0.5) t[y][x].kind = "debris_weed";
-        else if (rand < 0.78) t[y][x].kind = "debris_branch";
-        else t[y][x].kind = "debris_stone";
+  // Overgrown debris across the whole map
+  for (let y = 1; y < ROWS - 1; y++) {
+    for (let x = 1; x < COLS - 1; x++) {
+      // Avoid spawning debris directly on top of paths, houses, or water
+      if (t[y][x].kind === "grass") {
+        const isStartPlot = (x >= 5 && x <= 25 && y >= 20 && y <= 45);
+        const spawnRate = isStartPlot ? 0.08 : 0.22;
+        if (Math.random() < spawnRate) {
+          const rand = Math.random();
+          if (rand < 0.45) t[y][x].kind = "debris_weed";
+          else if (rand < 0.72) t[y][x].kind = "debris_branch";
+          else if (rand < 0.90) t[y][x].kind = "debris_stone";
+          else t[y][x].kind = "tree";
+        }
       }
     }
   }
@@ -1095,6 +1101,23 @@ export function updateEntities(state: GameState, dt: number): void {
       }
     }
   });
+
+  // Real-time natural resource growth/propagation (Factorio style auto-growth)
+  if (!state.inMine) {
+    // Grow a random weed/sapling/stone/branch on a random grass tile occasionally based on delta time
+    if (Math.random() < 0.08 * dt) {
+      const rx = Math.floor(Math.random() * COLS);
+      const ry = Math.floor(Math.random() * ROWS);
+      const tile = state.tiles[ry]?.[rx];
+      if (tile && tile.kind === "grass") {
+        const rand = Math.random();
+        if (rand < 0.45) tile.kind = "debris_weed";
+        else if (rand < 0.72) tile.kind = "debris_branch";
+        else if (rand < 0.90) tile.kind = "debris_stone";
+        else tile.kind = "tree";
+      }
+    }
+  }
 }
 
 export function frontTile(state: GameState): { x: number; y: number } | null {
@@ -1903,8 +1926,37 @@ export function sleep(state: GameState): void {
     for (let x = 0; x < COLS; x++) {
       const t = state.tiles[y][x];
 
-      if (t.kind === "grass" && Math.random() < 0.005) {
-        t.kind = "debris_weed";
+      // Spreading / growing weeds, branches, stones, and trees overnight
+      if (t.kind === "debris_weed" && Math.random() < 0.08) {
+        const adj = [[0, 1], [0, -1], [1, 0], [-1, 0]];
+        const [dy, dx] = adj[Math.floor(Math.random() * adj.length)];
+        const ny = y + dy;
+        const nx = x + dx;
+        if (ny >= 0 && ny < ROWS && nx >= 0 && nx < COLS) {
+          const target = state.tiles[ny][nx];
+          if (target.kind === "grass") {
+            target.kind = "debris_weed";
+          }
+        }
+      }
+      
+      if (t.kind === "tree" && Math.random() < 0.02) {
+        const range = 3;
+        const rx = x + Math.floor(Math.random() * (range * 2 + 1)) - range;
+        const ry = y + Math.floor(Math.random() * (range * 2 + 1)) - range;
+        if (rx >= 0 && rx < COLS && ry >= 0 && ry < ROWS) {
+          const target = state.tiles[ry][rx];
+          if (target.kind === "grass") {
+            target.kind = "tree";
+          }
+        }
+      }
+
+      if (t.kind === "grass" && Math.random() < 0.004) {
+        const rand = Math.random();
+        if (rand < 0.4) t.kind = "debris_weed";
+        else if (rand < 0.7) t.kind = "debris_branch";
+        else t.kind = "debris_stone";
       }
 
       if (t.kind === "watered") {

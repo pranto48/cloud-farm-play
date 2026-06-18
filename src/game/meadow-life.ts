@@ -28,6 +28,11 @@ export type TileKind =
   | "ore_copper"
   | "ore_iron"
   | "ore_gold"
+  | "ore_uranium"
+  | "house_wall"
+  | "house_floor"
+  | "house_bed"
+  | "house_door"
   | "placed_item";
 
 export interface Tile {
@@ -44,6 +49,10 @@ export interface Tile {
   hitPoints?: number;
   lastHitTime?: number;
   lastRustleTime?: number;
+  smeltTimer?: number;
+  smeltMaxTime?: number;
+  smeltOutputId?: string;
+  smeltActive?: boolean;
 }
 
 export type Tool = "hoe" | "watering_can" | "scythe" | "pickaxe" | "axe" | "sword" | "fishing_rod" | "milk_pail";
@@ -205,6 +214,8 @@ export interface GameState {
   carryItem: Item | null; // visually drawn above head
   pets?: Pet[];
   workers?: FarmWorker[];
+  inHouse?: boolean;
+  houseGrid?: Tile[][];
 }
 
 export const DAY_START_MINUTES = 6 * 60;
@@ -357,6 +368,17 @@ export const CRAFTING_RECIPES: Recipe[] = [
       { itemId: "coal", count: 1 },
     ],
     outputId: "sprinkler_quality",
+    outputCount: 1,
+  },
+  {
+    id: "furnace",
+    name: "Stone Furnace",
+    description: "Smelts raw copper, iron, gold, and uranium ores into bars.",
+    inputs: [
+      { itemId: "stone", count: 20 },
+      { itemId: "coal", count: 5 },
+    ],
+    outputId: "furnace",
     outputCount: 1,
   },
 ];
@@ -528,7 +550,9 @@ export function generateMineFloor(depth: number): { grid: Tile[][]; enemies: Ene
         grid[y][x].kind = "debris_stone";
         rocksToHideLadder.push({ x, y });
       } else if (rand < 0.28) {
-        if (depth >= 9 && Math.random() < 0.4) {
+        if (depth >= 12 && Math.random() < 0.25) {
+          grid[y][x].kind = "ore_uranium";
+        } else if (depth >= 9 && Math.random() < 0.4) {
           grid[y][x].kind = "ore_gold";
         } else if (depth >= 4 && Math.random() < 0.5) {
           grid[y][x].kind = "ore_iron";
@@ -583,6 +607,31 @@ export function generateMineFloor(depth: number): { grid: Tile[][]; enemies: Ene
   }
 
   return { grid, enemies };
+}
+
+export function generateHouseInterior(): Tile[][] {
+  const size = 10;
+  const grid: Tile[][] = Array.from({ length: size }, () =>
+    Array.from({ length: size }, () => ({ kind: "house_floor" as TileKind, age: -1, watered: false }))
+  );
+
+  // Borders
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      if (y === 0 || x === 0 || y === size - 1 || x === size - 1) {
+        grid[y][x].kind = "house_wall";
+      }
+    }
+  }
+
+  // Welcome mat/door at exit: x = 5, y = 9
+  grid[9][5].kind = "house_door";
+
+  // Bed (vertical) at y = 1, x = 1 (head) and y = 2, x = 1 (foot)
+  grid[1][1].kind = "house_bed";
+  grid[2][1].kind = "house_bed";
+
+  return grid;
 }
 
 export function newGame(): GameState {
@@ -655,6 +704,8 @@ export function newGame(): GameState {
     carryItem: null,
     pets: [],
     workers: [],
+    inHouse: false,
+    houseGrid: generateHouseInterior(),
   };
 }
 
@@ -761,6 +812,14 @@ export function migrateState(raw: unknown): GameState {
     quest: s.quest !== undefined ? (s.quest as GameState["quest"]) : base.quest,
     dailyEarnings: s.dailyEarnings as GameState["dailyEarnings"] ?? undefined,
     fishing: s.fishing as GameState["fishing"] ?? undefined,
+    inHouse: typeof s.inHouse === "boolean" ? s.inHouse : false,
+    houseGrid: (() => {
+      if (!Array.isArray(s.houseGrid)) return generateHouseInterior();
+      return (s.houseGrid as Tile[][]).map((row) => {
+        if (!Array.isArray(row)) return Array.from({ length: 10 }, () => ({ kind: "house_floor" as TileKind, age: -1, watered: false }));
+        return row.map((tile) => tile ?? { kind: "house_floor" as TileKind, age: -1, watered: false });
+      });
+    })(),
   };
 
   return merged;
@@ -781,6 +840,9 @@ export function isWalkable(t: Tile): boolean {
     t.kind !== "ore_copper" &&
     t.kind !== "ore_iron" &&
     t.kind !== "ore_gold" &&
+    t.kind !== "ore_uranium" &&
+    t.kind !== "house_wall" &&
+    t.kind !== "house_bed" &&
     t.kind !== "placed_item" // chests & sprinklers block movement
   );
 }
@@ -799,11 +861,98 @@ export function isWorkerWalkable(t: Tile): boolean {
     t.kind !== "ore_copper" &&
     t.kind !== "ore_iron" &&
     t.kind !== "ore_gold" &&
+    t.kind !== "ore_uranium" &&
+    t.kind !== "house_wall" &&
+    t.kind !== "house_bed" &&
     (t.kind !== "placed_item" || t.cropId !== undefined || t.placedItemId === "chicken_egg")
   );
 }
 
+export function tickFurnace(tile: Tile, dt: number): void {
+  if (!tile.chestInventory) {
+    tile.chestInventory = Array.from({ length: 3 }, () => null);
+  }
+
+  const input = tile.chestInventory[0];
+  const fuel = tile.chestInventory[1];
+
+  const smeltRecipes: Record<string, string> = {
+    copper_ore: "copper_bar",
+    iron_ore: "iron_bar",
+    gold_ore: "gold_bar",
+    uranium_ore: "uranium_bar",
+  };
+
+  const currentInputId = input?.id;
+  const targetOutputId = currentInputId ? smeltRecipes[currentInputId] : null;
+
+  if (tile.smeltActive) {
+    if (tile.smeltTimer !== undefined) {
+      tile.smeltTimer -= dt;
+      if (tile.smeltTimer <= 0) {
+        tile.smeltActive = false;
+        tile.smeltTimer = 0;
+
+        if (tile.smeltOutputId) {
+          const outId = tile.smeltOutputId;
+          const outItem = createItem(outId, 1);
+          if (tile.chestInventory[2] === null) {
+            tile.chestInventory[2] = outItem;
+          } else if (tile.chestInventory[2].id === outId) {
+            tile.chestInventory[2].count += 1;
+          }
+        }
+        tile.smeltOutputId = undefined;
+      }
+    }
+  } else {
+    if (input && targetOutputId && input.count >= 3 && fuel && fuel.count >= 1 && (fuel.id === "coal" || fuel.id === "wood")) {
+      const outputSlot = tile.chestInventory[2];
+      if (outputSlot === null || (outputSlot.id === targetOutputId && outputSlot.count < 99)) {
+        if (input.count <= 3) {
+          tile.chestInventory[0] = null;
+        } else {
+          input.count -= 3;
+        }
+
+        if (fuel.count <= 1) {
+          tile.chestInventory[1] = null;
+        } else {
+          fuel.count -= 1;
+        }
+
+        tile.smeltActive = true;
+        tile.smeltTimer = 8;
+        tile.smeltMaxTime = 8;
+        tile.smeltOutputId = targetOutputId;
+      }
+    }
+  }
+}
+
 export function updateEntities(state: GameState, dt: number): void {
+  // Update furnaces on farm
+  for (let y = 0; y < ROWS; y++) {
+    for (let x = 0; x < COLS; x++) {
+      const tile = state.tiles[y]?.[x];
+      if (tile && tile.kind === "placed_item" && tile.placedItemId === "furnace") {
+        tickFurnace(tile, dt);
+      }
+    }
+  }
+
+  // Update furnaces inside house
+  if (state.houseGrid) {
+    for (let y = 0; y < state.houseGrid.length; y++) {
+      for (let x = 0; x < state.houseGrid[y].length; x++) {
+        const tile = state.houseGrid[y]?.[x];
+        if (tile && tile.kind === "placed_item" && tile.placedItemId === "furnace") {
+          tickFurnace(tile, dt);
+        }
+      }
+    }
+  }
+
   if (state.inMine) return; // workers and pets stay on the farm!
 
   const grid = state.tiles;
@@ -1231,18 +1380,24 @@ export function getChargedTargetTiles(
 }
 
 // Interact tool calculations
-export function interact(state: GameState, chargeLevel: number = 1): { message: string | null; particles: Particle[] } {
+export function interact(
+  state: GameState,
+  chargeLevel: number = 1,
+  targetTile?: { x: number; y: number }
+): { message: string | null; particles: Particle[] } {
   const result: { message: string | null; particles: Particle[] } = { message: null, particles: [] };
 
   // Harvest freeze check
   if (state.harvestLiftingTimer > 0) return result;
 
   const isExhausted = state.energy <= 0;
-  const f = frontTile(state);
+  const f = targetTile || frontTile(state);
   if (!f) return result;
 
-  const grid = state.inMine ? state.mineGrid : state.tiles;
-  const tile = grid[f.y][f.x];
+  const grid = state.inHouse ? state.houseGrid! : (state.inMine ? state.mineGrid : state.tiles);
+  const tile = grid[f.y]?.[f.x];
+  if (!tile) return result;
+
   const px = f.x * TILE + TILE / 2;
   const py = f.y * TILE + TILE / 2;
 
@@ -1372,12 +1527,12 @@ export function interact(state: GameState, chargeLevel: number = 1): { message: 
       state.energy -= actionCost;
       gameAudio.playTill();
 
-      const targets = getChargedTargetTiles(state, state.player.x, state.player.y, state.player.dir, chargeLevel);
+      const targets = targetTile ? [f] : getChargedTargetTiles(state, state.player.x, state.player.y, state.player.dir, chargeLevel);
       let tilledCount = 0;
 
       for (const coord of targets) {
-        const t = grid[coord.y][coord.x];
-        if (t.kind === "grass") {
+        const t = grid[coord.y]?.[coord.x];
+        if (t && t.kind === "grass") {
           t.kind = "soil";
           tilledCount++;
 
@@ -1410,7 +1565,7 @@ export function interact(state: GameState, chargeLevel: number = 1): { message: 
       state.energy -= actionCost;
       gameAudio.playWater();
 
-      const targets = getChargedTargetTiles(state, state.player.x, state.player.y, state.player.dir, chargeLevel);
+      const targets = targetTile ? [f] : getChargedTargetTiles(state, state.player.x, state.player.y, state.player.dir, chargeLevel);
       let wateredCount = 0;
 
       for (const coord of targets) {
@@ -1570,12 +1725,13 @@ export function interact(state: GameState, chargeLevel: number = 1): { message: 
             maxAge: 0.3,
           });
         }
-      } else if (tile.kind === "ore_copper" || tile.kind === "ore_iron" || tile.kind === "ore_gold") {
+      } else if (tile.kind === "ore_copper" || tile.kind === "ore_iron" || tile.kind === "ore_gold" || tile.kind === "ore_uranium") {
         tile.lastHitTime = Date.now();
         const oreMap = {
           ore_copper: { item: "copper_ore", xp: 8, color: "#d35400" },
           ore_iron: { item: "iron_ore", xp: 15, color: "#95a5a6" },
           ore_gold: { item: "gold_ore", xp: 30, color: "#f1c40f" },
+          ore_uranium: { item: "uranium_ore", xp: 50, color: "#2ecc71" },
         };
         const config = oreMap[tile.kind as keyof typeof oreMap];
 
@@ -1585,7 +1741,7 @@ export function interact(state: GameState, chargeLevel: number = 1): { message: 
         gameAudio.playMine();
 
         if (tile.hitPoints <= 0) {
-          tile.kind = "mine_dirt";
+          tile.kind = state.inMine ? "mine_dirt" : "grass";
           tile.hitPoints = undefined;
           addItem(state.inventory, createItem(config.item, Math.floor(Math.random() * 2) + 1));
 
@@ -1764,12 +1920,14 @@ export function interact(state: GameState, chargeLevel: number = 1): { message: 
     }
 
     // Regular Placeables
-    if (tile.kind === "grass" || tile.kind === "mine_dirt" || tile.kind === "soil") {
+    if (tile.kind === "grass" || tile.kind === "mine_dirt" || tile.kind === "soil" || tile.kind === "house_floor") {
       tile.kind = "placed_item";
       tile.placedItemId = heldItem.id;
 
       if (heldItem.id === "chest") {
         tile.chestInventory = Array.from({ length: 12 }, () => null);
+      } else if (heldItem.id === "furnace") {
+        tile.chestInventory = Array.from({ length: 3 }, () => null);
       } else if (heldItem.id === "worker_cabin") {
         tile.chestInventory = Array.from({ length: 12 }, () => null);
         if (!state.workers) state.workers = [];
@@ -2251,11 +2409,14 @@ export function draw(
   ctx: CanvasRenderingContext2D,
   state: GameState,
   viewWidth: number,
-  viewHeight: number
+  viewHeight: number,
+  hoveredTile?: { x: number; y: number } | null
 ) {
   ctx.imageSmoothingEnabled = false;
 
-  const currentGrid = state.inMine ? state.mineGrid : state.tiles;
+  const currentGrid = state.inHouse
+    ? state.houseGrid!
+    : (state.inMine ? state.mineGrid : state.tiles);
   const gridRows = currentGrid.length;
   const gridCols = currentGrid[0]?.length || 0;
 
@@ -2263,17 +2424,22 @@ export function draw(
   const playerPx = (p.subX !== undefined ? p.subX : p.x) * TILE + TILE / 2;
   const playerPy = (p.subY !== undefined ? p.subY : p.y) * TILE + TILE / 2;
 
-  const cameraX = Math.max(
-    0,
-    Math.min(gridCols * TILE - viewWidth, playerPx - viewWidth / 2)
-  );
-  const cameraY = Math.max(
-    0,
-    Math.min(gridRows * TILE - viewHeight, playerPy - viewHeight / 2)
-  );
+  let cameraX = 0;
+  if (gridCols * TILE < viewWidth) {
+    cameraX = -(viewWidth - gridCols * TILE) / 2;
+  } else {
+    cameraX = Math.max(0, Math.min(gridCols * TILE - viewWidth, playerPx - viewWidth / 2));
+  }
+
+  let cameraY = 0;
+  if (gridRows * TILE < viewHeight) {
+    cameraY = -(viewHeight - gridRows * TILE) / 2;
+  } else {
+    cameraY = Math.max(0, Math.min(gridRows * TILE - viewHeight, playerPy - viewHeight / 2));
+  }
 
   // Background
-  ctx.fillStyle = state.inMine ? "#231f20" : "#5da859"; // deep forest base grass for outer borders
+  ctx.fillStyle = state.inHouse ? "#100f0f" : (state.inMine ? "#231f20" : "#5da859"); // void background for house interior
   ctx.fillRect(0, 0, viewWidth, viewHeight);
 
   ctx.save();
@@ -2297,7 +2463,11 @@ export function draw(
       const px = x * TILE;
       const py = y * TILE;
 
-      if (!state.inMine) {
+      if (state.inHouse) {
+        // Black void padding
+        ctx.fillStyle = "#110e0c";
+        ctx.fillRect(px, py, TILE, TILE);
+      } else if (!state.inMine) {
         // Smooth noise-based grass color
         const grassColor = getGrassColor(x, y);
         ctx.fillStyle = grassColor;

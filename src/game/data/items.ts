@@ -786,6 +786,33 @@ export const ITEM_DEFS: Record<string, Omit<Item, "count">> = {
     iconColor: "#f4d03f",
     iconSymbol: "🐡",
   },
+  uranium_ore: {
+    id: "uranium_ore",
+    name: "Uranium Ore",
+    type: "resource",
+    description: "A heavy, glowing radioactive mineral. Dangerous raw.",
+    price: 50,
+    iconColor: "#2ecc71",
+    iconSymbol: "☢️",
+  },
+  uranium_bar: {
+    id: "uranium_bar",
+    name: "Uranium Bar",
+    type: "resource",
+    description: "Refined, concentrated uranium. Emits a warm green glow.",
+    price: 250,
+    iconColor: "#27ae60",
+    iconSymbol: "🟢",
+  },
+  furnace: {
+    id: "furnace",
+    name: "Stone Furnace",
+    type: "furniture",
+    description: "Smelts raw copper, iron, gold, and uranium ores into metal bars.",
+    price: 100,
+    iconColor: "#7f8c8d",
+    iconSymbol: "🧱",
+  },
 };
 
 export function createItem(id: string, count = 1): Item {

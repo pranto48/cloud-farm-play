@@ -813,6 +813,24 @@ export const ITEM_DEFS: Record<string, Omit<Item, "count">> = {
     iconColor: "#7f8c8d",
     iconSymbol: "🧱",
   },
+  player_store: {
+    id: "player_store",
+    name: "Player Store",
+    type: "furniture",
+    description: "A shop stand where you can buy items, sell your goods, and hire or sell workers.",
+    price: 0,
+    iconColor: "#e67e22",
+    iconSymbol: "🏪",
+  },
+  research_center: {
+    id: "research_center",
+    name: "Research Center",
+    type: "furniture",
+    description: "A technology lab where workers research new tools, machines, and equipment upgrades.",
+    price: 0,
+    iconColor: "#8e44ad",
+    iconSymbol: "🔬",
+  },
 };
 
 export function createItem(id: string, count = 1): Item {

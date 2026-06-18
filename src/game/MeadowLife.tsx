@@ -2143,6 +2143,25 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
             <Bed className="h-4 w-4 text-emerald-400" />
           </button>
 
+          {/* About / Game Guide Button (H) */}
+          <button
+            onClick={() => setAboutOpen(true)}
+            title="Game Guide (H)"
+            className="w-8 h-8 flex items-center justify-center bg-[#2a2c2e] hover:bg-[#22d3ee]/20 border border-slate-600 hover:border-[#22d3ee] text-slate-100 transition-all cursor-pointer font-bold text-xs"
+          >
+            <HelpCircle className="h-4 w-4 text-[#22d3ee]" />
+          </button>
+
+          {/* Cheat Console Button (/) */}
+          <button
+            onClick={() => { setChatOpen(true); setTimeout(() => chatInputRef.current?.focus(), 50); }}
+            title="Cheat Console (/)"
+            className={`w-8 h-8 flex items-center justify-center bg-[#2a2c2e] hover:bg-[#a78bfa]/20 border transition-all cursor-pointer font-bold text-xs font-mono ${state.godMode ? "border-amber-500 bg-amber-500/10 animate-pulse" : "border-slate-600 hover:border-[#a78bfa]"}`}
+          >
+            <span className={`text-sm font-black ${state.godMode ? "text-amber-400" : "text-[#a78bfa]"}`}>/</span>
+          </button>
+
+
           <span className="w-[1px] h-5 bg-slate-700 mx-0.5"></span>
 
           {/* Mute Button */}
@@ -3640,18 +3659,585 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
         </DialogContent>
       </Dialog>
 
-      {/* 6. TUTORIAL CARD */}
-      <div className="w-full max-w-[704px] p-4 bg-[#2d1e18] border-2 border-[#5d4037] text-xs text-stone-200 leading-relaxed rounded-lg shadow-md font-mono">
-        <p className="font-bold text-amber-400 mb-1">🎮 NEW FEATURES ADDED:</p>
-        <ul className="list-disc list-inside space-y-1 text-stone-300">
-          <li><span className="text-amber-300">Animal Husbandry:</span> Buy chicks or calves from Pierre's. Release them on the farm! Cows produce milk (milk them using the <span className="font-bold">Milk Pail</span> tool), and chickens lay eggs on the floor.</li>
-          <li><span className="text-amber-300">Automatic Sprinklers:</span> Craft basic or quality sprinklers to water adjacent tiles automatically each morning!</li>
-          <li><span className="text-amber-300">Mailbox System:</span> Interact with the mailbox next to your cabin to read letters and claim attachments.</li>
-          <li><span className="text-amber-300">Animations:</span> Tilling, watering, and crop harvesting now freeze the character and show carrying popups above the head!</li>
-        </ul>
+      {/* === CHEAT CONSOLE OVERLAY === */}
+      {chatOpen && (
+        <div className="fixed inset-0 z-[200] flex items-end justify-center pb-8 px-4" onClick={(e) => { if (e.target === e.currentTarget) { setChatOpen(false); setChatInput(""); } }}>
+          <div className="w-full max-w-xl bg-[#0d0e10]/95 border-2 border-[#22d3ee]/60 rounded-lg shadow-2xl backdrop-blur-sm font-mono overflow-hidden"
+            style={{ boxShadow: "0 0 30px rgba(34,211,238,0.15), inset 0 0 60px rgba(0,0,0,0.4)" }}>
+            {/* Console Header */}
+            <div className="flex items-center justify-between px-3 py-2 bg-[#0a0b0c] border-b border-[#22d3ee]/30">
+              <div className="flex items-center gap-2">
+                <div className="w-2.5 h-2.5 rounded-full bg-red-500"></div>
+                <div className="w-2.5 h-2.5 rounded-full bg-yellow-500"></div>
+                <div className="w-2.5 h-2.5 rounded-full bg-green-500"></div>
+                <span className="ml-2 text-[11px] text-[#22d3ee]/70 font-mono">meadow-life ~ cheat console</span>
+              </div>
+              <button onClick={() => { setChatOpen(false); setChatInput(""); }} className="text-slate-500 hover:text-white text-xs px-2">✕</button>
+            </div>
+            {/* Console Output */}
+            <div className="h-40 overflow-y-auto p-3 space-y-1 bg-[#0a0b0c]">
+              {chatHistory.length === 0 && (
+                <p className="text-slate-600 text-xs">Type /help for a list of cheat codes. Press Enter to execute.</p>
+              )}
+              {chatHistory.map((entry, i) => (
+                <p key={i} className="text-xs leading-snug" style={{ color: entry.color }}>{entry.text}</p>
+              ))}
+            </div>
+            {/* Console Input */}
+            <div className="flex items-center gap-2 px-3 py-2 border-t border-[#22d3ee]/20 bg-[#0d0e10]">
+              <span className="text-[#22d3ee] text-sm font-bold">›</span>
+              <input
+                ref={chatInputRef}
+                value={chatInput}
+                onChange={e => setChatInput(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    const cmd = chatInput.trim();
+                    if (cmd) {
+                      setChatHistory(h => [...h.slice(-19), { text: `> ${cmd}`, color: "#94a3b8" }]);
+                      parseCheatCode(cmd);
+                    }
+                    setChatInput("");
+                  } else if (e.key === "Escape") {
+                    setChatOpen(false);
+                    setChatInput("");
+                  }
+                }}
+                placeholder="Type a cheat code (e.g. /god, /gold 1000, /help)..."
+                className="flex-1 bg-transparent text-[#e2e8f0] text-xs outline-none placeholder:text-slate-600 font-mono"
+              />
+              <button onClick={() => {
+                const cmd = chatInput.trim();
+                if (cmd) {
+                  setChatHistory(h => [...h.slice(-19), { text: `> ${cmd}`, color: "#94a3b8" }]);
+                  parseCheatCode(cmd);
+                }
+                setChatInput("");
+              }} className="text-xs px-2 py-1 bg-[#22d3ee]/20 border border-[#22d3ee]/40 text-[#22d3ee] rounded hover:bg-[#22d3ee]/30">
+                ↵
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* === GOD MODE HUD INDICATOR === */}
+      {state.godMode && (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[190] px-4 py-1.5 bg-gradient-to-r from-amber-500/90 to-orange-500/90 text-black text-xs font-black rounded-full shadow-lg border border-yellow-300/60 animate-pulse font-mono pointer-events-none"
+          style={{ boxShadow: "0 0 20px rgba(245,158,11,0.5)" }}>
+          ✨ GOD MODE ACTIVE ✨
+        </div>
+      )}
+
+      {/* === ABOUT PAGE DIALOG === */}
+      <Dialog open={aboutOpen} onOpenChange={setAboutOpen}>
+        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto bg-[#0f1117] border-2 border-[#334155] text-slate-100 rounded-xl font-mono">
+          <DialogHeader>
+            <DialogTitle className="text-2xl font-black flex items-center gap-3 text-emerald-400">
+              <span>🌿</span>
+              <span>Meadow Life — Game Guide</span>
+            </DialogTitle>
+            <DialogDescription className="text-slate-400 text-xs">
+              A cozy farming RPG with automation, crafting, and research. Version 2.0
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-6 py-2 text-xs">
+            {/* Overview */}
+            <div className="p-3 bg-[#1e293b] border border-[#334155] rounded-lg space-y-1.5">
+              <h3 className="font-bold text-emerald-400 text-sm mb-2">📖 About the Game</h3>
+              <p className="text-slate-300 leading-relaxed">
+                Meadow Life is a cozy top-down farming game. Grow crops, raise animals, mine for ores, 
+                craft tools, hire workers, and research advanced technology to automate your farm and 
+                conquer the mines. Press <kbd className="bg-slate-700 px-1 rounded text-white">WASD</kbd> to move, 
+                <kbd className="bg-slate-700 px-1 rounded text-white mx-1">E/Space</kbd> to interact, and 
+                <kbd className="bg-slate-700 px-1 rounded text-white mx-1">/</kbd> for cheats!
+              </p>
+            </div>
+
+            {/* Controls */}
+            <div>
+              <h3 className="font-bold text-sky-400 text-sm mb-2">🎮 Controls</h3>
+              <div className="grid grid-cols-2 gap-2">
+                {[
+                  ["WASD / Arrow Keys", "Move player"],
+                  ["E / Space", "Interact / Use tool (hold for charged)"],
+                  ["F", "Talk to NPC / Pet animal"],
+                  ["1-9, 0", "Select hotbar slot"],
+                  ["I / Esc", "Open / close inventory"],
+                  ["/", "Open cheat console"],
+                  ["H", "Open this guide"],
+                  ["Shift + WASD", "Run (move faster)"],
+                  ["Left Click", "Interact with hovered tile"],
+                  ["Right Click", "Split item stack"],
+                ].map(([key, action]) => (
+                  <div key={key} className="flex gap-2 items-start p-1.5 bg-[#1e293b] border border-[#334155]/60 rounded">
+                    <kbd className="bg-slate-700/80 px-1.5 py-0.5 rounded text-amber-300 text-[10px] font-bold whitespace-nowrap shrink-0">{key}</kbd>
+                    <span className="text-slate-300 text-[10px] leading-tight">{action}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Cheat Codes */}
+            <div>
+              <h3 className="font-bold text-purple-400 text-sm mb-2">💻 Cheat Codes (Press / to open console)</h3>
+              <div className="space-y-1.5">
+                {[
+                  ["/god", "Toggle God Mode — infinite energy, no damage"],
+                  ["/heal", "Restore full HP and energy"],
+                  ["/gold <n>", "Add n gold coins (e.g. /gold 5000)"],
+                  ["/item <id> <qty>", "Spawn items (e.g. /item iron_bar 20)"],
+                  ["/time <0-23>", "Set in-game hour (e.g. /time 6 = dawn)"],
+                  ["/day <n>", "Jump to a specific day number"],
+                  ["/research <tech_id>", "Instantly unlock a technology"],
+                  ["/research_all", "Unlock all technologies at once"],
+                  ["/rp <n>", "Add research points"],
+                  ["/help", "List all cheat commands in console"],
+                ].map(([cmd, desc]) => (
+                  <div key={cmd} className="flex gap-3 items-start p-1.5 bg-[#1e293b]/80 border border-purple-900/40 rounded">
+                    <code className="text-purple-300 text-[10px] font-bold whitespace-nowrap shrink-0 w-36">{cmd}</code>
+                    <span className="text-slate-400 text-[10px] leading-tight">{desc}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Technologies */}
+            <div>
+              <h3 className="font-bold text-violet-400 text-sm mb-2">🔬 Technology IDs (for /research cheat)</h3>
+              <div className="grid grid-cols-2 gap-1">
+                {TECHNOLOGIES.map(t => (
+                  <div key={t.id} className="flex gap-2 items-center p-1.5 bg-[#1e293b]/60 border border-violet-900/30 rounded">
+                    <span className="text-base">{t.icon}</span>
+                    <div>
+                      <code className="text-violet-300 text-[9px] block">{t.id}</code>
+                      <span className="text-slate-400 text-[9px]">{t.name}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Items Catalog */}
+            <div>
+              <h3 className="font-bold text-amber-400 text-sm mb-2">📦 Items Catalog (for /item cheat)</h3>
+              <div className="grid grid-cols-3 gap-1 max-h-60 overflow-y-auto pr-1">
+                {Object.values(ITEM_DEFS).map(item => (
+                  <div key={item.id} className="flex gap-1.5 items-center p-1.5 bg-[#1e293b]/60 border border-[#334155]/40 rounded">
+                    <span className="text-base shrink-0">{item.iconSymbol || "📦"}</span>
+                    <div className="overflow-hidden">
+                      <span className="text-slate-200 text-[9px] block truncate font-bold">{item.name}</span>
+                      <code className="text-slate-500 text-[8px] block truncate">{item.id}</code>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Tips */}
+            <div className="p-3 bg-[#1e293b] border border-emerald-900/50 rounded-lg">
+              <h3 className="font-bold text-emerald-400 text-sm mb-2">💡 Tips & Strategies</h3>
+              <ul className="space-y-1 text-slate-300 text-[10px] leading-relaxed list-disc list-inside">
+                <li>Use the <strong>Shipping Bin</strong> at (18, 29) to sell crops overnight — they're valued at their full price!</li>
+                <li>Assign workers to <strong>research_center</strong> buildings to accelerate tech research progress.</li>
+                <li>Craft a <strong>Player Store</strong> to buy bulk resources and hire lifetime workers cheaply.</li>
+                <li>Mine to depth 12+ for <strong>Uranium Ore</strong> — smelt it for powerful Uranium Bars.</li>
+                <li>Sleep before midnight to get full HP/Energy for the next day.</li>
+                <li>Research <strong>Energy Efficiency</strong> to make long farming sessions much more comfortable.</li>
+              </ul>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button onClick={() => setAboutOpen(false)} className="bg-emerald-700 hover:bg-emerald-600 text-white font-bold">
+              Start Farming! 🌱
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* === PLAYER STORE DIALOG === */}
+      {playerStoreOpen && (
+        <Dialog open={true} onOpenChange={() => setPlayerStoreOpen(false)}>
+          <DialogContent className="max-w-2xl max-h-[85vh] overflow-hidden flex flex-col bg-[#1a0f05] border-2 border-[#d97706] text-stone-100 rounded-xl font-mono">
+            <DialogHeader className="shrink-0">
+              <DialogTitle className="text-xl font-black flex items-center gap-2 text-amber-400 border-b border-amber-900/40 pb-2">
+                <span>🏪</span> Player Store
+                <span className="ml-auto text-sm font-normal text-amber-300 flex items-center gap-1">
+                  <Coins className="w-4 h-4" /> {state.coins}g
+                </span>
+              </DialogTitle>
+            </DialogHeader>
+
+            {/* Tabs */}
+            <div className="flex gap-2 shrink-0 border-b border-amber-900/30 pb-2">
+              {(["buy", "sell", "workers"] as const).map(tab => (
+                <button key={tab} onClick={() => setPlayerStoreTab(tab)}
+                  className={`px-4 py-1.5 text-xs font-bold rounded transition-all capitalize ${
+                    playerStoreTab === tab
+                      ? "bg-amber-600 text-black border border-amber-400"
+                      : "bg-stone-900/60 text-stone-400 border border-stone-800 hover:bg-stone-800"
+                  }`}>
+                  {tab === "buy" ? "🛒 Buy Items" : tab === "sell" ? "💰 Sell Items" : "👷 Workers"}
+                </button>
+              ))}
+            </div>
+
+            <div className="flex-1 overflow-y-auto min-h-0">
+              {/* BUY TAB */}
+              {playerStoreTab === "buy" && (
+                <div className="p-3 space-y-2">
+                  <p className="text-xs text-amber-200/60">Buy resources, seeds, and materials at a slight markup.</p>
+                  <div className="grid grid-cols-3 gap-2">
+                    {STORE_ITEMS.filter(d => d.buyPrice > 0 && d.price > 0).map(item => {
+                      const canAfford = state.coins >= item.buyPrice;
+                      return (
+                        <button key={item.id} disabled={!canAfford}
+                          onClick={() => {
+                            setState(prev => {
+                              const next = structuredClone(prev);
+                              if (next.coins < item.buyPrice) return next;
+                              const newItem = createItem(item.id, 1);
+                              const ok = addItem(next.inventory, newItem);
+                              if (ok) {
+                                next.coins -= item.buyPrice;
+                                toast.success(`Bought 1x ${item.name} for ${item.buyPrice}g`);
+                                gameAudio.playCoin();
+                              } else {
+                                toast.error("Inventory full!");
+                              }
+                              return next;
+                            });
+                          }}
+                          className={`flex items-center gap-2 p-2 rounded border text-left transition-all ${
+                            canAfford
+                              ? "bg-amber-950/40 border-amber-900/50 hover:bg-amber-900/40 hover:border-amber-600"
+                              : "bg-stone-950/40 border-stone-900/40 opacity-50 cursor-not-allowed"
+                          }`}>
+                          <span className="text-2xl">{item.iconSymbol || "📦"}</span>
+                          <div className="overflow-hidden">
+                            <div className="text-xs font-bold text-stone-200 truncate">{item.name}</div>
+                            <div className="text-[10px] text-amber-400 font-bold">{item.buyPrice}g</div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* SELL TAB */}
+              {playerStoreTab === "sell" && (
+                <div className="p-3 space-y-2">
+                  <p className="text-xs text-amber-200/60">Sell items from your inventory directly at the store.</p>
+                  <div className="grid grid-cols-5 gap-2">
+                    {state.inventory.map((item, idx) => (
+                      <button key={idx} disabled={!item}
+                        onClick={() => {
+                          if (!item) return;
+                          const storeDef = STORE_ITEMS.find(d => d.id === item.id);
+                          const sellPrice = storeDef ? storeDef.sellPrice : Math.max(1, Math.round((item.price || 0) * 0.8));
+                          setState(prev => {
+                            const next = structuredClone(prev);
+                            const inv = next.inventory;
+                            const slot = inv[idx];
+                            if (!slot) return next;
+                            const earned = sellPrice * slot.count;
+                            next.coins += earned;
+                            inv[idx] = null;
+                            toast.success(`Sold ${slot.count}x ${slot.name} for ${earned}g!`);
+                            gameAudio.playCoin();
+                            return next;
+                          });
+                        }}
+                        className={`relative flex flex-col items-center justify-center h-14 rounded border transition-all ${
+                          item
+                            ? "bg-amber-950/30 border-amber-900/50 hover:bg-amber-900/40 hover:border-amber-600 cursor-pointer"
+                            : "bg-stone-950/40 border-stone-900/40 opacity-30 cursor-not-allowed"
+                        }`}>
+                        {item ? (
+                          <>
+                            <span className="text-xl">{item.iconSymbol || "📦"}</span>
+                            <span className="text-[8px] text-amber-400 font-bold">{Math.max(1, Math.round((item.price || 0) * 0.8))}g</span>
+                            {item.count > 1 && (
+                              <span className="absolute bottom-0.5 right-1 text-[9px] bg-black/60 px-1 rounded text-white font-bold">{item.count}</span>
+                            )}
+                          </>
+                        ) : (
+                          <span className="text-stone-700 text-[10px]">{idx + 1}</span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* WORKERS TAB */}
+              {playerStoreTab === "workers" && (
+                <div className="p-3 space-y-4">
+                  <p className="text-xs text-amber-200/60">Hire permanent workers or sell your existing ones back.</p>
+
+                  {/* Hire new worker */}
+                  <div className="p-3 bg-[#1e120c] border border-amber-900/50 rounded-lg space-y-3">
+                    <h4 className="text-sm font-bold text-amber-400">Hire a New Worker — 1,000g (Lifetime)</h4>
+                    <p className="text-[10px] text-stone-400">Workers farm automatically: watering, harvesting, and clearing debris. Place a Worker Cabin first!</p>
+                    <div className="grid grid-cols-3 gap-2">
+                      {["Helper Bob", "Farmer Joe", "Ranch Hand Mary", "Plowman Steve", "Harvester Lucy"].map(name => (
+                        <button key={name}
+                          disabled={state.coins < 1000}
+                          onClick={() => {
+                            if (state.coins < 1000) { toast.error("Not enough gold! Need 1,000g."); return; }
+                            // Check if a worker cabin is placed
+                            let cabinTile: { x: number; y: number } | null = null;
+                            for (let ry = 0; ry < state.tiles.length; ry++) {
+                              for (let rx = 0; rx < state.tiles[ry].length; rx++) {
+                                const t = state.tiles[ry][rx];
+                                if (t.kind === "placed_item" && t.placedItemId === "worker_cabin") {
+                                  const taken = (state.workers || []).some(w => w.cabinX === rx && w.cabinY === ry);
+                                  if (!taken) { cabinTile = { x: rx, y: ry }; break; }
+                                }
+                              }
+                              if (cabinTile) break;
+                            }
+                            if (!cabinTile) { toast.error("No free Worker Cabin! Craft and place one first."); return; }
+                            const cabin = cabinTile;
+                            setState(prev => {
+                              const next = structuredClone(prev);
+                              next.coins -= 1000;
+                              if (!next.workers) next.workers = [];
+                              next.workers.push({
+                                id: `worker_${Date.now()}`,
+                                name,
+                                cabinX: cabin.x,
+                                cabinY: cabin.y,
+                                x: cabin.x,
+                                y: cabin.y,
+                                subX: cabin.x,
+                                subY: cabin.y,
+                                task: "auto",
+                                energy: 100,
+                                hasEatenToday: false,
+                                walkTimer: Math.random() * 3 + 2,
+                                actionTimer: 0,
+                                statusText: "Just hired!",
+                              });
+                              toast.success(`Hired ${name}! They'll work from 8AM-5PM daily.`);
+                              gameAudio.playCoin();
+                              return next;
+                            });
+                          }}
+                          className={`p-2 rounded border text-center text-xs transition-all ${
+                            state.coins >= 1000
+                              ? "bg-amber-700/40 border-amber-700/60 hover:bg-amber-600/50 text-amber-200"
+                              : "bg-stone-900/40 border-stone-800 text-stone-600 cursor-not-allowed"
+                          }`}>
+                          <div className="text-2xl mb-1">👷</div>
+                          <div className="font-bold">{name}</div>
+                          <div className="text-amber-400 font-bold text-[10px]">1,000g</div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Existing workers */}
+                  {(state.workers || []).length > 0 && (
+                    <div className="p-3 bg-[#1e120c] border border-stone-800 rounded-lg space-y-2">
+                      <h4 className="text-sm font-bold text-stone-300">Your Workers ({state.workers?.length || 0})</h4>
+                      {(state.workers || []).map(w => (
+                        <div key={w.id} className="flex items-center justify-between p-2 bg-stone-900/40 border border-stone-800 rounded">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xl">👷</span>
+                            <div>
+                              <div className="text-xs font-bold text-stone-200">{w.name}</div>
+                              <div className="text-[9px] text-stone-500">{w.statusText}</div>
+                            </div>
+                          </div>
+                          <button onClick={() => {
+                            if (!confirm(`Sell ${w.name} back? Refunds 500g.`)) return;
+                            setState(prev => {
+                              const next = structuredClone(prev);
+                              next.coins += 500;
+                              next.workers = (next.workers || []).filter(x => x.id !== w.id);
+                              const tile = next.tiles[w.cabinY]?.[w.cabinX];
+                              if (tile) { tile.kind = "grass"; tile.placedItemId = undefined; tile.chestInventory = undefined; }
+                              toast.success(`Sold ${w.name}. +500g`);
+                              return next;
+                            });
+                          }} className="text-[10px] px-2 py-1 bg-red-950/50 border border-red-900 text-red-300 rounded hover:bg-red-900">
+                            Sell (+500g)
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <DialogFooter className="shrink-0 border-t border-amber-900/30 pt-2">
+              <Button onClick={() => setPlayerStoreOpen(false)} className="bg-amber-700 hover:bg-amber-600 text-black font-bold">
+                Close Store
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* === RESEARCH CENTER DIALOG === */}
+      {researchCenterOpen && (
+        <Dialog open={true} onOpenChange={() => setResearchCenterOpen(false)}>
+          <DialogContent className="max-w-3xl max-h-[85vh] overflow-hidden flex flex-col bg-[#0d0a1a] border-2 border-[#7c3aed] text-slate-100 rounded-xl font-mono">
+            <DialogHeader className="shrink-0">
+              <DialogTitle className="text-xl font-black flex items-center gap-2 text-violet-400 border-b border-violet-900/50 pb-2">
+                <span>🔬</span> Research Center
+                <span className="ml-auto text-sm font-normal flex items-center gap-2">
+                  <span className="text-violet-300">⚗️ {Math.round(state.researchPoints || 0)} RP</span>
+                  {state.activeResearchId && (
+                    <span className="text-emerald-400 text-xs animate-pulse">● Researching...</span>
+                  )}
+                </span>
+              </DialogTitle>
+            </DialogHeader>
+
+            {/* Active Research Progress */}
+            {state.activeResearchId && (() => {
+              const tech = TECHNOLOGIES.find(t => t.id === state.activeResearchId);
+              if (!tech) return null;
+              const progress = state.researchProgress || 0;
+              const pct = Math.min(100, Math.round((progress / tech.cost) * 100));
+              const researchWorkers = (state.workers || []).filter(w => (state.workerAssignments || {})[w.id] === "research_center").length;
+              return (
+                <div className="shrink-0 p-3 bg-[#1e1535] border border-violet-900/50 rounded-lg space-y-2 mx-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-2xl">{tech.icon}</span>
+                    <div>
+                      <div className="text-sm font-bold text-violet-300">{tech.name}</div>
+                      <div className="text-[10px] text-slate-400">{researchWorkers} worker(s) assigned · {Math.round(2 + researchWorkers * 1.5 * 10) / 10} RP/sec</div>
+                    </div>
+                    <div className="ml-auto text-xs font-bold text-violet-400">{Math.round(progress)}/{tech.cost} RP</div>
+                  </div>
+                  <div className="h-3 bg-violet-950 rounded-full overflow-hidden border border-violet-800/50">
+                    <div className="h-full bg-gradient-to-r from-violet-600 to-fuchsia-500 transition-all duration-1000" style={{ width: `${pct}%` }} />
+                  </div>
+                  <div className="flex justify-between text-[9px] text-slate-500">
+                    <span>{pct}% complete</span>
+                    <button onClick={() => setState(prev => { const next = structuredClone(prev); next.activeResearchId = undefined; next.researchProgress = 0; return next; })}
+                      className="text-red-500 hover:text-red-400">Cancel Research</button>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Worker Assignment */}
+            {(state.workers || []).length > 0 && (
+              <div className="shrink-0 p-3 bg-[#12101e] border border-violet-900/30 rounded-lg">
+                <h4 className="text-xs font-bold text-violet-400 mb-2">Assign Workers to Research (+1.5 RP/sec each)</h4>
+                <div className="flex gap-2 flex-wrap">
+                  {(state.workers || []).map(w => {
+                    const assigned = (state.workerAssignments || {})[w.id] === "research_center";
+                    return (
+                      <button key={w.id} onClick={() => setState(prev => {
+                        const next = structuredClone(prev);
+                        if (!next.workerAssignments) next.workerAssignments = {};
+                        next.workerAssignments[w.id] = assigned ? "farm" : "research_center";
+                        return next;
+                      })} className={`px-3 py-1.5 rounded border text-xs font-bold transition-all flex items-center gap-1 ${
+                        assigned ? "bg-violet-700/50 border-violet-500 text-violet-200" : "bg-stone-900/60 border-stone-700 text-stone-400 hover:bg-stone-800"
+                      }`}>
+                        <span>👷</span> {w.name} {assigned ? "🔬" : "🌾"}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Tech Tree Grid */}
+            <div className="flex-1 overflow-y-auto min-h-0 p-1">
+              <h4 className="text-xs font-bold text-slate-400 mb-3 px-2">Technology Tree — click to start researching</h4>
+              <div className="grid grid-cols-2 gap-3 p-2">
+                {TECHNOLOGIES.map(tech => {
+                  const unlocked = (state.unlockedTechs || []).includes(tech.id);
+                  const canResearch = !unlocked && tech.prerequisites.every(p => (state.unlockedTechs || []).includes(p));
+                  const isActive = state.activeResearchId === tech.id;
+                  return (
+                    <div key={tech.id}
+                      onMouseEnter={() => setHoveredTech(tech)}
+                      onMouseLeave={() => setHoveredTech(null)}
+                      onClick={() => {
+                        if (unlocked || isActive) return;
+                        if (!canResearch) { toast.error(`Requires: ${tech.prerequisites.join(", ")}`); return; }
+                        setState(prev => {
+                          const next = structuredClone(prev);
+                          next.activeResearchId = tech.id;
+                          next.researchProgress = 0;
+                          toast.success(`Started researching: ${tech.name}!`);
+                          return next;
+                        });
+                      }}
+                      className={`p-3 rounded-lg border-2 cursor-pointer transition-all relative ${
+                        unlocked
+                          ? "bg-violet-950/50 border-violet-500/60 opacity-80"
+                          : isActive
+                          ? "bg-fuchsia-950/60 border-fuchsia-400 shadow-[0_0_15px_rgba(192,38,211,0.3)] animate-pulse"
+                          : canResearch
+                          ? "bg-[#1e1535] border-violet-800/60 hover:border-violet-500 hover:bg-[#261c45]"
+                          : "bg-stone-950/40 border-stone-800/40 opacity-40 cursor-not-allowed"
+                      }`}>
+                      <div className="flex items-start gap-2">
+                        <span className="text-3xl shrink-0">{tech.icon}</span>
+                        <div className="flex-1 overflow-hidden">
+                          <div className="flex items-center gap-1">
+                            <span className="font-bold text-xs text-slate-200 truncate">{tech.name}</span>
+                            {unlocked && <span className="text-emerald-400 text-xs">✓</span>}
+                            {isActive && <span className="text-fuchsia-400 text-xs">⟳</span>}
+                          </div>
+                          <p className="text-[10px] text-slate-400 leading-tight mt-0.5">{tech.description}</p>
+                          <div className="flex items-center justify-between mt-2">
+                            <span className="text-[9px] text-violet-400 font-bold">⚗️ {tech.cost} RP</span>
+                            {tech.prerequisites.length > 0 && (
+                              <span className="text-[9px] text-slate-600">Req: {tech.prerequisites.length} techs</span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <DialogFooter className="shrink-0 border-t border-violet-900/30 pt-2">
+              <div className="flex items-center gap-2 w-full">
+                <span className="text-xs text-slate-500 font-mono">
+                  {(state.unlockedTechs || []).length}/{TECHNOLOGIES.length} technologies unlocked
+                </span>
+                <Button onClick={() => setResearchCenterOpen(false)} className="ml-auto bg-violet-700 hover:bg-violet-600 text-white font-bold">
+                  Close Lab
+                </Button>
+              </div>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* 6. INFO CARD */}
+      <div className="w-full max-w-[704px] p-4 bg-[#0d1117] border-2 border-[#1e293b] text-xs text-slate-300 leading-relaxed rounded-lg shadow-md font-mono">
+        <p className="font-bold text-emerald-400 mb-1">🎮 Meadow Life — Keyboard Shortcuts</p>
+        <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 text-slate-400">
+          <span><kbd className="bg-slate-800 px-1 rounded text-white text-[9px]">WASD</kbd> Move</span>
+          <span><kbd className="bg-slate-800 px-1 rounded text-white text-[9px]">E/Space</kbd> Interact</span>
+          <span><kbd className="bg-slate-800 px-1 rounded text-white text-[9px]">I/Esc</kbd> Inventory</span>
+          <span><kbd className="bg-slate-800 px-1 rounded text-white text-[9px]">F</kbd> Talk / Pet</span>
+          <span><kbd className="bg-slate-800 px-1 rounded text-white text-[9px]">/</kbd> Cheat Console</span>
+          <span><kbd className="bg-slate-800 px-1 rounded text-white text-[9px]">H</kbd> Game Guide</span>
+        </div>
       </div>
     </div>
   );
+
 }
 
 function drawMinimap(

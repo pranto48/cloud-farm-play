@@ -24,6 +24,7 @@ import {
   migrateState,
   addItem,
   deductItems,
+  TECHNOLOGIES,
   type GameState,
   type Tile,
   type Enemy,
@@ -32,6 +33,7 @@ import {
   type MailLetter,
   type Animal,
   type Recipe,
+  type TechDef,
 } from "./meadow-life";
 import { shopInventoryForSeason, CROPS } from "./data/crops";
 import { ITEM_DEFS, createItem, type Item } from "./data/items";
@@ -81,8 +83,8 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
   const recipesByCategory = useMemo(() => {
     return {
       logistics: CRAFTING_RECIPES.filter((r) => ["chest", "sprinkler_basic", "sprinkler_quality"].includes(r.id)),
-      production: CRAFTING_RECIPES.filter((r) => ["furnace", "seed_maker"].includes(r.id)),
-      materials: CRAFTING_RECIPES.filter((r) => ["torch", "scarecrow"].includes(r.id)),
+      production: CRAFTING_RECIPES.filter((r) => ["furnace", "seed_maker", "research_center"].includes(r.id)),
+      materials: CRAFTING_RECIPES.filter((r) => ["torch", "scarecrow", "player_store"].includes(r.id)),
     };
   }, []);
 
@@ -104,6 +106,24 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
   const [readingLetter, setReadingLetter] = useState<MailLetter | null>(null);
 
   const [selectedWorkerId, setSelectedWorkerId] = useState<string | null>(null);
+
+  // Chat / Cheat Console
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatInput, setChatInput] = useState("");
+  const [chatHistory, setChatHistory] = useState<{ text: string; color: string }[]>([]);
+  const chatInputRef = useRef<HTMLInputElement | null>(null);
+
+  // About Page
+  const [aboutOpen, setAboutOpen] = useState(false);
+
+  // Player Store
+  const [playerStoreOpen, setPlayerStoreOpen] = useState(false);
+  const [playerStoreTile, setPlayerStoreTile] = useState<{ x: number; y: number } | null>(null);
+  const [playerStoreTab, setPlayerStoreTab] = useState<"buy" | "sell" | "workers">("buy");
+
+  // Research Center
+  const [researchCenterOpen, setResearchCenterOpen] = useState(false);
+  const [hoveredTech, setHoveredTech] = useState<TechDef | null>(null);
 
   // Layout toggle settings
   const [useSidebar, setUseSidebar] = useState(false); // default to false since we use Factorio bottom hotbar
@@ -788,12 +808,29 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
     const onKey = (e: KeyboardEvent) => {
       const k = e.key.toLowerCase();
       const tag = (e.target as HTMLElement | null)?.tagName;
-      if (tag === "INPUT" || tag === "TEXTAREA" || inventoryOpen || shopOpen || chestOpenTile || mailboxOpen) return;
+
+      // "/" opens the cheat console regardless of other state (only block if already in INPUT/TEXTAREA)
+      if (e.key === "/" && tag !== "INPUT" && tag !== "TEXTAREA" && !chatOpen) {
+        e.preventDefault();
+        setChatOpen(true);
+        setTimeout(() => chatInputRef.current?.focus(), 50);
+        return;
+      }
+
+      // "h" toggles the about page
+      if (k === "h" && tag !== "INPUT" && tag !== "TEXTAREA" && !inventoryOpen && !shopOpen && !chatOpen) {
+        e.preventDefault();
+        setAboutOpen((o) => !o);
+        return;
+      }
+
+      if (tag === "INPUT" || tag === "TEXTAREA" || inventoryOpen || shopOpen || chestOpenTile || mailboxOpen || chatOpen) return;
 
       const curState = stateRef.current;
 
       // Freeze movement when harvesting carrying crop
       if (curState.harvestLiftingTimer > 0) return;
+
 
       // W A S D Movement keys
       if (["w", "arrowup", "s", "arrowdown", "a", "arrowleft", "d", "arrowright"].includes(k)) {
@@ -1082,6 +1119,12 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
             setSleepConfirmOpen(true);
           } else if (facingTile.kind === "placed_item" && facingTile.placedItemId === "furnace") {
             setFurnaceOpenTile({ x: f.x, y: f.y });
+          } else if (facingTile.kind === "placed_item" && facingTile.placedItemId === "player_store") {
+            setPlayerStoreTile({ x: f.x, y: f.y });
+            setPlayerStoreTab("buy");
+            setPlayerStoreOpen(true);
+          } else if (facingTile.kind === "placed_item" && facingTile.placedItemId === "research_center") {
+            setResearchCenterOpen(true);
           } else if (facingTile.kind === "placed_item" && facingTile.placedItemId === "mailbox") {
             setMailboxOpen(true);
           } else if (facingTile.kind === "placed_item" && (facingTile.placedItemId === "chest" || facingTile.placedItemId === "worker_cabin")) {
@@ -1159,7 +1202,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
       window.removeEventListener("keydown", onKey);
       window.removeEventListener("keyup", onKeyUp);
     };
-  }, [inventoryOpen, shopOpen, chestOpenTile, mailboxOpen]);
+  }, [inventoryOpen, shopOpen, chestOpenTile, mailboxOpen, chatOpen]);
 
   // Periodic Fishing Nibble tracker ticks
   useEffect(() => {
@@ -1903,6 +1946,127 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
   const handleManualSleep = () => {
     setSleepConfirmOpen(true);
   };
+
+  // Player Store - available items for purchase with markup prices
+  const STORE_ITEMS = Object.values(ITEM_DEFS).filter(d => 
+    d.type === "resource" || d.type === "seed" || d.type === "crop" || d.type === "tool" || d.type === "furniture"
+  ).map(d => ({
+    ...d,
+    buyPrice: d.price > 0 ? Math.round(d.price * 1.5) : 10, // 50% markup for buying from store
+    sellPrice: Math.max(1, Math.round(d.price * 0.8)), // 80% of base price for selling
+  }));
+
+  // Cheat code parser
+  const parseCheatCode = (cmd: string) => {
+    const parts = cmd.trim().split(" ");
+    const command = parts[0].toLowerCase();
+    const addHistory = (text: string, color = "#4ade80") => {
+      setChatHistory(h => [...h.slice(-19), { text, color }]);
+    };
+
+    if (command === "/god" || command === "/godmode") {
+      setState(prev => {
+        const next = structuredClone(prev);
+        next.godMode = !next.godMode;
+        const msg = next.godMode ? "GOD MODE ENABLED ✨ (Infinite energy & invincibility)" : "God mode disabled";
+        addHistory(msg, next.godMode ? "#fbbf24" : "#94a3b8");
+        return next;
+      });
+    } else if (command === "/heal") {
+      setState(prev => {
+        const next = structuredClone(prev);
+        next.player.health = next.player.maxHealth;
+        next.energy = next.maxEnergy;
+        addHistory("Healed to full HP and Energy! ❤️");
+        return next;
+      });
+    } else if (command === "/gold" || command === "/coins") {
+      const amount = parseInt(parts[1]) || 1000;
+      if (isNaN(amount)) { addHistory("Usage: /gold <amount>", "#f87171"); return; }
+      setState(prev => {
+        const next = structuredClone(prev);
+        next.coins += amount;
+        addHistory(`Added ${amount} gold coins! 💰 (Total: ${next.coins}g)`);
+        return next;
+      });
+    } else if (command === "/item") {
+      const itemId = parts[1];
+      const qty = parseInt(parts[2]) || 1;
+      if (!itemId) { addHistory("Usage: /item <item_id> [qty]", "#f87171"); return; }
+      if (!ITEM_DEFS[itemId]) { addHistory(`Unknown item: ${itemId}. Check /help for valid IDs.`, "#f87171"); return; }
+      setState(prev => {
+        const next = structuredClone(prev);
+        const item = createItem(itemId, qty);
+        const ok = addItem(next.inventory, item);
+        if (ok) addHistory(`Spawned ${qty}x ${ITEM_DEFS[itemId].name} ${ITEM_DEFS[itemId].iconSymbol || "📦"}`);
+        else addHistory("Inventory is full!", "#f87171");
+        return next;
+      });
+    } else if (command === "/time") {
+      const hour = parseFloat(parts[1]);
+      if (isNaN(hour) || hour < 0 || hour >= 24) { addHistory("Usage: /time <0-23>", "#f87171"); return; }
+      setState(prev => {
+        const next = structuredClone(prev);
+        next.time = Math.round(hour * 60);
+        addHistory(`Time set to ${hour}:00 🕐`);
+        return next;
+      });
+    } else if (command === "/research") {
+      const techId = parts[1];
+      if (!techId) { addHistory("Usage: /research <tech_id>", "#f87171"); return; }
+      const tech = TECHNOLOGIES.find(t => t.id === techId);
+      if (!tech) { addHistory(`Unknown tech: ${techId}`, "#f87171"); return; }
+      setState(prev => {
+        const next = structuredClone(prev);
+        if (!next.unlockedTechs) next.unlockedTechs = [];
+        if (next.unlockedTechs.includes(techId)) {
+          addHistory(`${tech.name} is already unlocked!`, "#94a3b8");
+        } else {
+          next.unlockedTechs.push(techId);
+          addHistory(`Unlocked technology: ${tech.icon} ${tech.name}!`, "#a78bfa");
+        }
+        return next;
+      });
+    } else if (command === "/day") {
+      const d = parseInt(parts[1]) || (state.day + 1);
+      setState(prev => {
+        const next = structuredClone(prev);
+        next.day = d;
+        addHistory(`Day set to Day ${d} 📅`);
+        return next;
+      });
+    } else if (command === "/research_all") {
+      setState(prev => {
+        const next = structuredClone(prev);
+        next.unlockedTechs = TECHNOLOGIES.map(t => t.id);
+        next.researchPoints = (next.researchPoints || 0) + 9999;
+        addHistory(`All ${TECHNOLOGIES.length} technologies unlocked! 🔬`, "#a78bfa");
+        return next;
+      });
+    } else if (command === "/rp") {
+      const pts = parseInt(parts[1]) || 500;
+      setState(prev => {
+        const next = structuredClone(prev);
+        next.researchPoints = (next.researchPoints || 0) + pts;
+        addHistory(`Added ${pts} Research Points ⚗️ (Total: ${next.researchPoints})`);
+        return next;
+      });
+    } else if (command === "/help") {
+      addHistory("=== CHEAT CODES ===", "#fbbf24");
+      addHistory("/god — Toggle God Mode (infinite energy + invincibility)", "#e2e8f0");
+      addHistory("/heal — Restore full HP and energy", "#e2e8f0");
+      addHistory("/gold <n> — Add gold coins", "#e2e8f0");
+      addHistory("/item <id> [qty] — Spawn item", "#e2e8f0");
+      addHistory("/time <0-23> — Set time of day", "#e2e8f0");
+      addHistory("/day <n> — Set day number", "#e2e8f0");
+      addHistory("/research <tech_id> — Unlock a technology", "#e2e8f0");
+      addHistory("/research_all — Unlock all technologies", "#e2e8f0");
+      addHistory("/rp <n> — Add research points", "#e2e8f0");
+    } else {
+      addHistory(`Unknown command: ${command}. Type /help for a list.`, "#f87171");
+    }
+  };
+
 
   return (
     <div 

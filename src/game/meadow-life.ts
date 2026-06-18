@@ -216,6 +216,13 @@ export interface GameState {
   workers?: FarmWorker[];
   inHouse?: boolean;
   houseGrid?: Tile[][];
+  // Extended features
+  godMode?: boolean;
+  unlockedTechs?: string[];
+  researchPoints?: number;
+  activeResearchId?: string;
+  researchProgress?: number;
+  workerAssignments?: Record<string, string>; // workerId -> 'research_center' | 'farm'
 }
 
 export const DAY_START_MINUTES = 6 * 60;
@@ -293,6 +300,110 @@ export function deductItems(inventory: (Item | null)[], itemId: string, count = 
     }
   }
 }
+
+// Technology research system
+export interface TechDef {
+  id: string;
+  name: string;
+  description: string;
+  icon: string;
+  cost: number; // research points required
+  prerequisites: string[];
+  unlocks: string; // description of what unlocks
+}
+
+export const TECHNOLOGIES: TechDef[] = [
+  {
+    id: "tech_advanced_tools",
+    name: "Advanced Tools",
+    description: "Upgrade hoe, pickaxe, and axe efficiency by 50%.",
+    icon: "⚙️",
+    cost: 100,
+    prerequisites: [],
+    unlocks: "Tool upgrade multiplier +50%",
+  },
+  {
+    id: "tech_auto_irrigation",
+    name: "Auto Irrigation",
+    description: "Unlock Quality Sprinkler crafting recipe and reduce watering energy by 30%.",
+    icon: "💧",
+    cost: 150,
+    prerequisites: [],
+    unlocks: "Quality Sprinkler recipe + 30% watering energy discount",
+  },
+  {
+    id: "tech_precision_mining",
+    name: "Precision Mining",
+    description: "Pickaxe yields +1 extra ore and unlocks Uranium mine floors.",
+    icon: "⛏️",
+    cost: 200,
+    prerequisites: ["tech_advanced_tools"],
+    unlocks: "Mining yield +1, Uranium mine floors",
+  },
+  {
+    id: "tech_speed_smelting",
+    name: "Speed Smelting",
+    description: "Furnace smelting time reduced from 8s to 4s.",
+    icon: "🔥",
+    cost: 180,
+    prerequisites: ["tech_advanced_tools"],
+    unlocks: "Smelting speed x2",
+  },
+  {
+    id: "tech_crop_genetics",
+    name: "Crop Genetics",
+    description: "All crops grow 25% faster and have a 15% chance to yield double.",
+    icon: "🌱",
+    cost: 200,
+    prerequisites: ["tech_auto_irrigation"],
+    unlocks: "Crop growth +25%, double yield 15% chance",
+  },
+  {
+    id: "tech_animal_husbandry",
+    name: "Animal Husbandry",
+    description: "Animals produce items every day instead of every 2 days.",
+    icon: "🐄",
+    cost: 150,
+    prerequisites: [],
+    unlocks: "Animal produce daily",
+  },
+  {
+    id: "tech_combat_training",
+    name: "Combat Training",
+    description: "Sword damage +50% and unlock critical hit to 25% (from 15%).",
+    icon: "⚔️",
+    cost: 250,
+    prerequisites: [],
+    unlocks: "Sword damage +50%, crit chance 25%",
+  },
+  {
+    id: "tech_energy_efficiency",
+    name: "Energy Efficiency",
+    description: "All actions cost 30% less energy.",
+    icon: "⚡",
+    cost: 300,
+    prerequisites: ["tech_advanced_tools", "tech_crop_genetics"],
+    unlocks: "Action energy cost -30%",
+  },
+  {
+    id: "tech_mass_production",
+    name: "Mass Production",
+    description: "Crafting queue processes 2 items simultaneously.",
+    icon: "🏭",
+    cost: 350,
+    prerequisites: ["tech_speed_smelting"],
+    unlocks: "Dual crafting queue",
+  },
+  {
+    id: "tech_worker_boost",
+    name: "Worker Training Program",
+    description: "Worker efficiency +100% and energy consumption -50%.",
+    icon: "👷",
+    cost: 400,
+    prerequisites: ["tech_combat_training", "tech_animal_husbandry"],
+    unlocks: "Worker speed x2, energy cost -50%",
+  },
+];
 
 // Crafting System recipes
 export interface Recipe {
@@ -379,6 +490,30 @@ export const CRAFTING_RECIPES: Recipe[] = [
       { itemId: "coal", count: 5 },
     ],
     outputId: "furnace",
+    outputCount: 1,
+  },
+  {
+    id: "player_store",
+    name: "Player Store",
+    description: "A shop stand to buy/sell items and hire workers. Costs 30 Wood + 15 Stone + 5 Iron Bars.",
+    inputs: [
+      { itemId: "wood", count: 30 },
+      { itemId: "stone", count: 15 },
+      { itemId: "iron_bar", count: 5 },
+    ],
+    outputId: "player_store",
+    outputCount: 1,
+  },
+  {
+    id: "research_center",
+    name: "Research Center",
+    description: "Technology lab for unlocking new capabilities. Costs 30 Stone + 10 Iron Bars + 5 Copper Bars.",
+    inputs: [
+      { itemId: "stone", count: 30 },
+      { itemId: "iron_bar", count: 10 },
+      { itemId: "copper_bar", count: 5 },
+    ],
+    outputId: "research_center",
     outputCount: 1,
   },
 ];
@@ -706,6 +841,13 @@ export function newGame(): GameState {
     workers: [],
     inHouse: false,
     houseGrid: generateHouseInterior(),
+    // Extended features
+    godMode: false,
+    unlockedTechs: [],
+    researchPoints: 0,
+    activeResearchId: undefined,
+    researchProgress: 0,
+    workerAssignments: {},
   };
 }
 
@@ -754,6 +896,13 @@ export function migrateState(raw: unknown): GameState {
     // New fields added in recent versions — filter nulls, default to [] if absent
     pets:         Array.isArray(s.pets)          ? (s.pets as Pet[]).filter(Boolean)                    : [],
     workers:      Array.isArray(s.workers)       ? (s.workers as FarmWorker[]).filter(Boolean)          : [],
+    // Extended features migration
+    godMode: typeof s.godMode === "boolean" ? s.godMode : false,
+    unlockedTechs: Array.isArray(s.unlockedTechs) ? (s.unlockedTechs as string[]) : [],
+    researchPoints: typeof s.researchPoints === "number" ? s.researchPoints : 0,
+    activeResearchId: typeof s.activeResearchId === "string" ? s.activeResearchId : undefined,
+    researchProgress: typeof s.researchProgress === "number" ? s.researchProgress : 0,
+    workerAssignments: (s.workerAssignments && typeof s.workerAssignments === "object") ? (s.workerAssignments as Record<string, string>) : {},
     // Tiles: filter null rows, and within each row, replace null tiles with a safe default
     tiles: (() => {
       if (!Array.isArray(s.tiles)) return base.tiles;
@@ -949,6 +1098,36 @@ export function updateEntities(state: GameState, dt: number): void {
         if (tile && tile.kind === "placed_item" && tile.placedItemId === "furnace") {
           tickFurnace(tile, dt);
         }
+      }
+    }
+  }
+
+  // Research Center tick - workers assigned to research generate points
+  if (!state.inMine && state.activeResearchId) {
+    const tech = TECHNOLOGIES.find(t => t.id === state.activeResearchId);
+    if (tech) {
+      if (!state.researchPoints) state.researchPoints = 0;
+      if (!state.researchProgress) state.researchProgress = 0;
+      if (!state.workerAssignments) state.workerAssignments = {};
+      if (!state.unlockedTechs) state.unlockedTechs = [];
+
+      // Count workers assigned to research
+      const researchWorkers = (state.workers || []).filter(
+        w => w && state.workerAssignments![w.id] === "research_center"
+      ).length;
+
+      // Base rate: 2 RP/sec, +1.5 per assigned worker
+      const rpPerSec = 2 + researchWorkers * 1.5;
+      state.researchPoints += rpPerSec * dt;
+
+      // Advance research progress
+      state.researchProgress! += rpPerSec * dt;
+
+      // Check if research is complete
+      if (state.researchProgress! >= tech.cost) {
+        state.unlockedTechs.push(state.activeResearchId);
+        state.researchProgress = 0;
+        state.activeResearchId = undefined;
       }
     }
   }
@@ -1390,7 +1569,7 @@ export function interact(
   // Harvest freeze check
   if (state.harvestLiftingTimer > 0) return result;
 
-  const isExhausted = state.energy <= 0;
+  const isExhausted = state.energy <= 0 && !state.godMode;
   const f = targetTile || frontTile(state);
   if (!f) return result;
 
@@ -1402,7 +1581,8 @@ export function interact(
   const py = f.y * TILE + TILE / 2;
 
   const heldItem = state.inventory[state.hotbarIndex];
-  const toolEnergyCost = 2;
+  // God mode: tools cost no energy
+  const toolEnergyCost = state.godMode ? 0 : 2;
 
   // 1. Milking Cows logic with milk_pail
   if (heldItem && heldItem.id === "milk_pail") {

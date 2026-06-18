@@ -2594,6 +2594,62 @@ export function draw(
             ctx.fillRect(gx, gy, 1.5, 1.5);
           }
         }
+      } else if (t.kind === "house_floor") {
+        ctx.fillStyle = "#8d6e63";
+        ctx.fillRect(px, py, TILE, TILE);
+        ctx.strokeStyle = "#5d4037";
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(px, py + TILE / 2);
+        ctx.lineTo(px + TILE, py + TILE / 2);
+        ctx.moveTo(px + TILE, py);
+        ctx.lineTo(px + TILE, py + TILE);
+        if ((x + y) % 2 === 0) {
+          ctx.moveTo(px + TILE / 2, py);
+          ctx.lineTo(px + TILE / 2, py + TILE / 2);
+        } else {
+          ctx.moveTo(px + TILE / 4, py + TILE / 2);
+          ctx.lineTo(px + TILE / 4, py + TILE);
+          ctx.moveTo(px + (3 * TILE) / 4, py + TILE / 2);
+          ctx.lineTo(px + (3 * TILE) / 4, py + TILE);
+        }
+        ctx.stroke();
+      } else if (t.kind === "house_wall") {
+        ctx.fillStyle = "#3e2723";
+        ctx.fillRect(px, py, TILE, TILE);
+        ctx.fillStyle = "#271510";
+        ctx.fillRect(px, py + TILE - 4, TILE, 4);
+        ctx.strokeStyle = "#4e342e";
+        ctx.lineWidth = 2;
+        ctx.strokeRect(px + 1, py + 1, TILE - 2, TILE - 2);
+      } else if (t.kind === "house_door") {
+        ctx.fillStyle = "#8d6e63";
+        ctx.fillRect(px, py, TILE, TILE);
+        ctx.fillStyle = "#d84315";
+        ctx.fillRect(px + 4, py + 8, TILE - 8, TILE - 16);
+        ctx.strokeStyle = "#ff8a50";
+        ctx.lineWidth = 1.5;
+        ctx.strokeRect(px + 4, py + 8, TILE - 8, TILE - 16);
+        ctx.fillStyle = "#ffffff";
+        ctx.font = "8px monospace";
+        ctx.textAlign = "center";
+        ctx.fillText("EXIT", px + TILE / 2, py + TILE / 2 + 3);
+      } else if (t.kind === "house_bed") {
+        ctx.fillStyle = "#8d6e63";
+        ctx.fillRect(px, py, TILE, TILE);
+        ctx.fillStyle = "#5d4037";
+        ctx.fillRect(px + 2, py + 2, TILE - 4, TILE - 4);
+        if (y === 1) {
+          ctx.fillStyle = "#f5f5f5";
+          ctx.fillRect(px + 4, py + 4, TILE - 8, 10);
+          ctx.fillStyle = "#c62828";
+          ctx.fillRect(px + 4, py + 14, TILE - 8, TILE - 16);
+        } else {
+          ctx.fillStyle = "#c62828";
+          ctx.fillRect(px + 4, py + 2, TILE - 8, TILE - 6);
+          ctx.fillStyle = "#b71c1c";
+          ctx.fillRect(px + 4, py + 2, TILE - 8, 3);
+        }
       } else if (t.kind === "house") {
         // Determine whether this house tile belongs to the Farm House or the Shop storefront
         if (x >= 12 && x <= 17 && y >= 24 && y <= 28) {
@@ -2946,7 +3002,7 @@ export function draw(
         ctx.lineTo(px + 13 + debrisShake, py + 18);
         ctx.stroke();
 
-      } else if (t.kind === "ore_copper" || t.kind === "ore_iron" || t.kind === "ore_gold") {
+      } else if (t.kind === "ore_copper" || t.kind === "ore_iron" || t.kind === "ore_gold" || t.kind === "ore_uranium") {
         // Rich crystalline metallic ore deposit
         ctx.fillStyle = "rgba(0, 0, 0, 0.25)";
         ctx.beginPath();
@@ -2973,8 +3029,9 @@ export function draw(
         const gemColors = {
           ore_copper: ["#d35400", "#e67e22", "#f39c12"],
           ore_iron: ["#7f8c8d", "#bdc3c7", "#ecf0f1"],
-          ore_gold: ["#d4ac0d", "#f1c40f", "#f9e79f"]
-        }[t.kind as "ore_copper" | "ore_iron" | "ore_gold"] || ["#fff", "#fff", "#fff"];
+          ore_gold: ["#d4ac0d", "#f1c40f", "#f9e79f"],
+          ore_uranium: ["#145a32", "#2ecc71", "#a3e4d7"]
+        }[t.kind as "ore_copper" | "ore_iron" | "ore_gold" | "ore_uranium"] || ["#fff", "#fff", "#fff"];
 
         const crystals = [
           { dx: -4, dy: -6, size: 4 },
@@ -3111,6 +3168,21 @@ export function draw(
           const glow = (phase === "night" || phase === "evening") ? "#f1c40f" : "#85c1e9";
           ctx.fillStyle = glow;
           ctx.fillRect(px + 23, py + 17, 4, 4);
+        } else if (id === "furnace") {
+          ctx.fillStyle = "#7f8c8d";
+          ctx.fillRect(px + 4, py + 8, TILE - 8, TILE - 8);
+          ctx.fillStyle = "#566573";
+          ctx.fillRect(px + 4, py + 8, TILE - 8, 2);
+          ctx.fillRect(px + 4, py + 8, 2, TILE - 8);
+          ctx.fillStyle = "#2c3e50";
+          ctx.fillRect(px + 10, py + 18, 12, 10);
+          if (t.smeltActive) {
+            const fireGlow = Math.sin(Date.now() / 90) * 0.3 + 0.7;
+            ctx.fillStyle = `rgba(230, 126, 34, ${fireGlow})`;
+            ctx.fillRect(px + 12, py + 20, 8, 6);
+            ctx.fillStyle = `rgba(241, 196, 15, ${fireGlow})`;
+            ctx.fillRect(px + 14, py + 22, 4, 3);
+          }
         }
       }
 
@@ -3447,12 +3519,18 @@ export function draw(
     );
   }
 
-  // Active Tool Swipe indicator
-  const f = frontTile(state);
-  if (f && state.harvestLiftingTimer <= 0) {
-    ctx.strokeStyle = "rgba(255, 255, 255, 0.4)";
-    ctx.lineWidth = 1.5;
-    ctx.strokeRect(f.x * TILE + 2, f.y * TILE + 2, TILE - 4, TILE - 4);
+  // Active Tool Swipe indicator (Factorio style selector box)
+  const activeHighlight = hoveredTile || frontTile(state);
+  if (activeHighlight && state.harvestLiftingTimer <= 0) {
+    const dist = Math.abs(activeHighlight.x - p.x) + Math.abs(activeHighlight.y - p.y);
+    const inReach = dist <= 5;
+
+    ctx.strokeStyle = inReach ? "rgba(46, 204, 113, 0.7)" : "rgba(231, 76, 60, 0.5)";
+    ctx.lineWidth = 2;
+    ctx.strokeRect(activeHighlight.x * TILE + 1, activeHighlight.y * TILE + 1, TILE - 2, TILE - 2);
+
+    ctx.fillStyle = inReach ? "rgba(46, 204, 113, 0.08)" : "rgba(231, 76, 60, 0.08)";
+    ctx.fillRect(activeHighlight.x * TILE + 2, activeHighlight.y * TILE + 2, TILE - 4, TILE - 4);
 
     const held = state.inventory[state.hotbarIndex];
     if (held && held.id === "sword" && Math.sin(Date.now() / 60) > 0.6) {
@@ -3460,8 +3538,8 @@ export function draw(
       ctx.lineWidth = 4;
       ctx.beginPath();
       ctx.arc(
-        playerPx + (f.x - p.x) * 18,
-        playerPy + (f.y - p.y) * 18,
+        playerPx + (activeHighlight.x - p.x) * 18,
+        playerPy + (activeHighlight.y - p.y) * 18,
         14,
         0,
         Math.PI * 2

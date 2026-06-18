@@ -78,6 +78,14 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
   const [npcDialogue, setNpcDialogue] = useState<{ npcId: string; dialogue: string } | null>(null);
   const [sleepSummary, setSleepSummary] = useState<GameState["dailyEarnings"] | null>(null);
 
+  // New overhauls states
+  const [sleepConfirmOpen, setSleepConfirmOpen] = useState(false);
+  const [shippingBinOpen, setShippingBinOpen] = useState(false);
+  const [furnaceOpenTile, setFurnaceOpenTile] = useState<{ x: number; y: number } | null>(null);
+  const [craftingCategory, setCraftingCategory] = useState<"logistics" | "production" | "materials">("logistics");
+  const [craftingQueue, setCraftingQueue] = useState<{ id: string; name: string; iconSymbol: string; iconColor: string; progress: number }[]>([]);
+  const hoveredTileRef = useRef<{ x: number; y: number } | null>(null);
+
   // Mailbox Mail overlay
   const [mailboxOpen, setMailboxOpen] = useState(false);
   const [readingLetter, setReadingLetter] = useState<MailLetter | null>(null);
@@ -153,42 +161,60 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
   // Spacebar trigger for Reel minigame
   const [isSpacePressed, setIsSpacePressed] = useState(false);
 
-  const handleCanvasContextMenu = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    e.preventDefault();
+  const getMouseTileCoords = (clientX: number, clientY: number) => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    if (!canvas) return null;
 
     const rect = canvas.getBoundingClientRect();
-    const clickX = e.clientX - rect.left;
-    const clickY = e.clientY - rect.top;
+    const clickX = clientX - rect.left;
+    const clickY = clientY - rect.top;
 
     const scaleX = canvasSize.width / rect.width;
     const scaleY = canvasSize.height / rect.height;
     const canvasX = clickX * scaleX;
     const canvasY = clickY * scaleY;
 
-    // Calculate camera coords identical to render/draw
-    const p = state.player;
+    const p = stateRef.current.player;
     const pSubX = p.subX !== undefined ? p.subX : p.x;
     const pSubY = p.subY !== undefined ? p.subY : p.y;
-    
-    const gridCols = state.inMine ? 24 : COLS;
-    const gridRows = state.inMine ? 24 : ROWS;
-    
-    const cameraX = Math.max(
-      0,
-      Math.min(gridCols * TILE - canvasSize.width, pSubX * TILE + 16 - canvasSize.width / 2)
-    );
-    const cameraY = Math.max(
-      0,
-      Math.min(gridRows * TILE - canvasSize.height, pSubY * TILE + 16 - canvasSize.height / 2)
-    );
+
+    const gridCols = stateRef.current.inHouse ? 10 : (stateRef.current.inMine ? 24 : COLS);
+    const gridRows = stateRef.current.inHouse ? 10 : (stateRef.current.inMine ? 24 : ROWS);
+
+    let cameraX = 0;
+    if (gridCols * TILE < canvasSize.width) {
+      cameraX = -(canvasSize.width - gridCols * TILE) / 2;
+    } else {
+      cameraX = Math.max(
+        0,
+        Math.min(gridCols * TILE - canvasSize.width, pSubX * TILE + 16 - canvasSize.width / 2)
+      );
+    }
+
+    let cameraY = 0;
+    if (gridRows * TILE < canvasSize.height) {
+      cameraY = -(canvasSize.height - gridRows * TILE) / 2;
+    } else {
+      cameraY = Math.max(
+        0,
+        Math.min(gridRows * TILE - canvasSize.height, pSubY * TILE + 16 - canvasSize.height / 2)
+      );
+    }
 
     const worldX = canvasX + cameraX;
     const worldY = canvasY + cameraY;
 
     const tileX = Math.floor(worldX / TILE);
     const tileY = Math.floor(worldY / TILE);
+
+    return { x: tileX, y: tileY };
+  };
+
+  const handleCanvasContextMenu = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    e.preventDefault();
+    const coords = getMouseTileCoords(e.clientX, e.clientY);
+    if (!coords) return;
+    const { x: tileX, y: tileY } = coords;
 
     // Check if right clicked on/near a worker or their cabin
     if (state.workers) {
@@ -461,27 +487,29 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
       }
 
       // Draw game onto canvas
-      draw(ctx, stateRef.current, canvasSize.width, canvasSize.height);
+      draw(ctx, stateRef.current, canvasSize.width, canvasSize.height, hoveredTileRef.current);
 
       // Draw particle overlay
       ctx.save();
       const p = stateRef.current.player;
       const pSubX = p.subX !== undefined ? p.subX : p.x;
       const pSubY = p.subY !== undefined ? p.subY : p.y;
-      const cameraX = Math.max(
-        0,
-        Math.min(
-          (stateRef.current.inMine ? 24 : COLS) * TILE - canvasSize.width,
-          pSubX * TILE + 16 - canvasSize.width / 2
-        )
-      );
-      const cameraY = Math.max(
-        0,
-        Math.min(
-          (stateRef.current.inMine ? 24 : ROWS) * TILE - canvasSize.height,
-          pSubY * TILE + 16 - canvasSize.height / 2
-        )
-      );
+      const gridCols = stateRef.current.inHouse ? 10 : (stateRef.current.inMine ? 24 : COLS);
+      const gridRows = stateRef.current.inHouse ? 10 : (stateRef.current.inMine ? 24 : ROWS);
+
+      let cameraX = 0;
+      if (gridCols * TILE < canvasSize.width) {
+        cameraX = -(canvasSize.width - gridCols * TILE) / 2;
+      } else {
+        cameraX = Math.max(0, Math.min(gridCols * TILE - canvasSize.width, pSubX * TILE + 16 - canvasSize.width / 2));
+      }
+
+      let cameraY = 0;
+      if (gridRows * TILE < canvasSize.height) {
+        cameraY = -(canvasSize.height - gridRows * TILE) / 2;
+      } else {
+        cameraY = Math.max(0, Math.min(gridRows * TILE - canvasSize.height, pSubY * TILE + 16 - canvasSize.height / 2));
+      }
       ctx.translate(-cameraX, -cameraY);
 
       // Draw Particles
@@ -780,11 +808,27 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
             x += 1;
           }
 
-          const grid = next.inMine ? next.mineGrid : next.tiles;
+          const grid = next.inHouse
+            ? next.houseGrid!
+            : (next.inMine ? next.mineGrid : next.tiles);
           const gridRows = grid.length;
           const gridCols = grid[0]?.length || 0;
 
-          if (x >= 0 && y >= 0 && x < gridCols && y < gridRows && isWalkable(grid[y][x])) {
+          if (next.inHouse && x === 5 && y === 9) {
+            next.inHouse = false;
+            next.player.x = 15;
+            next.player.y = 29;
+            next.player.subX = 15;
+            next.player.subY = 29;
+            toast("Exited Farm House");
+          } else if (!next.inHouse && !next.inMine && x === 15 && y === 28) {
+            next.inHouse = true;
+            next.player.x = 5;
+            next.player.y = 8;
+            next.player.subX = 5;
+            next.player.subY = 8;
+            toast("Entered Farm House");
+          } else if (x >= 0 && y >= 0 && x < gridCols && y < gridRows && isWalkable(grid[y][x])) {
             next.player.x = x;
             next.player.y = y;
 

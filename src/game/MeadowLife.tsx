@@ -77,6 +77,15 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
   const [activeTab, setActiveTab] = useState<"inventory" | "crafting" | "social" | "skills">("inventory");
   const [shopOpen, setShopOpen] = useState(false);
   const [shopTab, setShopTab] = useState<"seeds" | "animals" | "upgrades">("seeds");
+
+  const recipesByCategory = useMemo(() => {
+    return {
+      logistics: CRAFTING_RECIPES.filter((r) => ["chest", "sprinkler_basic", "sprinkler_quality"].includes(r.id)),
+      production: CRAFTING_RECIPES.filter((r) => ["furnace", "seed_maker"].includes(r.id)),
+      materials: CRAFTING_RECIPES.filter((r) => ["torch", "scarecrow"].includes(r.id)),
+    };
+  }, []);
+
   const [chestOpenTile, setChestOpenTile] = useState<{ x: number; y: number } | null>(null);
   const [npcDialogue, setNpcDialogue] = useState<{ npcId: string; dialogue: string } | null>(null);
   const [sleepSummary, setSleepSummary] = useState<GameState["dailyEarnings"] | null>(null);
@@ -1483,38 +1492,89 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
   };
 
   // Inventory slot clicks
-  const handleSlotClick = (index: number, source: "inventory" | "chest") => {
-    const curGrid = state.inventory;
-    const chestGrid = chestOpenTile ? state.tiles[chestOpenTile.y][chestOpenTile.x].chestInventory : null;
-
+  const handleSlotClick = (index: number, source: "inventory" | "chest" | "shipping" | "furnace") => {
     if (heldItem === null) {
-      const item = source === "inventory" ? curGrid[index] : chestGrid?.[index];
+      let item = null;
+      if (source === "inventory") {
+        item = state.inventory[index];
+      } else if (source === "shipping") {
+        item = state.shippingBin[index];
+      } else if (source === "chest" && chestOpenTile) {
+        const grid = state.inHouse ? state.houseGrid! : (state.inMine ? state.mineGrid : state.tiles);
+        item = grid[chestOpenTile.y]?.[chestOpenTile.x]?.chestInventory?.[index];
+      } else if (source === "furnace" && furnaceOpenTile) {
+        const grid = state.inHouse ? state.houseGrid! : (state.inMine ? state.mineGrid : state.tiles);
+        item = grid[furnaceOpenTile.y]?.[furnaceOpenTile.x]?.chestInventory?.[index];
+      }
+
       if (item) {
         setHeldItem({ item, originalSlot: index, source });
         setState((prev) => {
           const next = structuredClone(prev);
           if (source === "inventory") {
             next.inventory[index] = null;
-          } else if (chestOpenTile) {
-            next.tiles[chestOpenTile.y][chestOpenTile.x].chestInventory![index] = null;
+          } else if (source === "shipping") {
+            next.shippingBin[index] = null;
+          } else if (source === "chest" && chestOpenTile) {
+            const grid = next.inHouse ? next.houseGrid! : (next.inMine ? next.mineGrid : next.tiles);
+            grid[chestOpenTile.y][chestOpenTile.x].chestInventory![index] = null;
+          } else if (source === "furnace" && furnaceOpenTile) {
+            const grid = next.inHouse ? next.houseGrid! : (next.inMine ? next.mineGrid : next.tiles);
+            grid[furnaceOpenTile.y][furnaceOpenTile.x].chestInventory![index] = null;
           }
           return next;
         });
       }
     } else {
+      const itemToPlace = heldItem.item;
+
+      // Validate furnace insertion rules
+      if (source === "furnace") {
+        if (index === 2) {
+          toast.error("Output slot is retrieve-only!");
+          return;
+        }
+        if (index === 0) {
+          const validOres = ["copper_ore", "iron_ore", "gold_ore", "uranium_ore"];
+          if (!validOres.includes(itemToPlace.id)) {
+            toast.error("Only copper, iron, gold, or uranium ores can be placed in the input slot!");
+            return;
+          }
+        }
+        if (index === 1) {
+          const validFuels = ["coal", "wood"];
+          if (!validFuels.includes(itemToPlace.id)) {
+            toast.error("Only coal or wood can be placed in the fuel slot!");
+            return;
+          }
+        }
+      }
+
       setState((prev) => {
         const next = structuredClone(prev);
-        const targetInv = source === "inventory" ? next.inventory : next.tiles[chestOpenTile!.y][chestOpenTile!.x].chestInventory!;
+        let targetInv: (Item | null)[] = [];
+        if (source === "inventory") {
+          targetInv = next.inventory;
+        } else if (source === "shipping") {
+          targetInv = next.shippingBin;
+        } else if (source === "chest" && chestOpenTile) {
+          const grid = next.inHouse ? next.houseGrid! : (next.inMine ? next.mineGrid : next.tiles);
+          targetInv = grid[chestOpenTile.y][chestOpenTile.x].chestInventory!;
+        } else if (source === "furnace" && furnaceOpenTile) {
+          const grid = next.inHouse ? next.houseGrid! : (next.inMine ? next.mineGrid : next.tiles);
+          targetInv = grid[furnaceOpenTile.y][furnaceOpenTile.x].chestInventory!;
+        }
+
         const targetItem = targetInv[index];
 
         if (targetItem === null) {
-          targetInv[index] = heldItem.item;
+          targetInv[index] = itemToPlace;
           setHeldItem(null);
-        } else if (targetItem.id === heldItem.item.id && targetItem.type !== "tool") {
-          targetItem.count += heldItem.item.count;
+        } else if (targetItem.id === itemToPlace.id && targetItem.type !== "tool") {
+          targetItem.count += itemToPlace.count;
           setHeldItem(null);
         } else {
-          const holding = heldItem.item;
+          const holding = itemToPlace;
           const original = heldItem.originalSlot;
           const originalSrc = heldItem.source;
 
@@ -1570,7 +1630,8 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
     if (!chestOpenTile) return;
     setState((prev) => {
       const next = structuredClone(prev);
-      const chestTile = next.tiles[chestOpenTile.y][chestOpenTile.x];
+      const grid = next.inHouse ? next.houseGrid! : (next.inMine ? next.mineGrid : next.tiles);
+      const chestTile = grid[chestOpenTile.y][chestOpenTile.x];
       if (chestTile.chestInventory) {
         chestTile.chestInventory = sortInventory(chestTile.chestInventory);
         toast.success("Chest inventory sorted!");
@@ -1583,7 +1644,8 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
     if (!chestOpenTile) return;
     setState((prev) => {
       const next = structuredClone(prev);
-      const chestTile = next.tiles[chestOpenTile.y][chestOpenTile.x];
+      const grid = next.inHouse ? next.houseGrid! : (next.inMine ? next.mineGrid : next.tiles);
+      const chestTile = grid[chestOpenTile.y][chestOpenTile.x];
       if (chestTile.chestInventory) {
         const moved = quickStackToChest(next.inventory, chestTile.chestInventory);
         if (moved) {
@@ -1597,13 +1659,23 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
     });
   };
 
-  const handleSlotRightClick = (e: React.MouseEvent, index: number, source: "inventory" | "chest") => {
+  const handleSlotRightClick = (e: React.MouseEvent, index: number, source: "inventory" | "chest" | "shipping" | "furnace") => {
     e.preventDefault(); // Prevent context menu
-    const curGrid = state.inventory;
-    const chestGrid = chestOpenTile ? state.tiles[chestOpenTile.y][chestOpenTile.x].chestInventory : null;
+    let curGrid = state.inventory;
+    if (source === "inventory") {
+      curGrid = state.inventory;
+    } else if (source === "shipping") {
+      curGrid = state.shippingBin;
+    } else if (source === "chest" && chestOpenTile) {
+      const grid = state.inHouse ? state.houseGrid! : (state.inMine ? state.mineGrid : state.tiles);
+      curGrid = grid[chestOpenTile.y]?.[chestOpenTile.x]?.chestInventory || [];
+    } else if (source === "furnace" && furnaceOpenTile) {
+      const grid = state.inHouse ? state.houseGrid! : (state.inMine ? state.mineGrid : state.tiles);
+      curGrid = grid[furnaceOpenTile.y]?.[furnaceOpenTile.x]?.chestInventory || [];
+    }
 
     if (heldItem === null) {
-      const item = source === "inventory" ? curGrid[index] : chestGrid?.[index];
+      const item = curGrid[index];
       if (item && item.count > 1 && item.type !== "tool" && item.type !== "weapon") {
         const halfCount = Math.ceil(item.count / 2);
         const remainCount = item.count - halfCount;
@@ -1613,41 +1685,90 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
 
         setState((prev) => {
           const next = structuredClone(prev);
-          const targetInv = source === "inventory" ? next.inventory : next.tiles[chestOpenTile!.y][chestOpenTile!.x].chestInventory!;
-          if (remainCount <= 0) {
-            targetInv[index] = null;
-          } else {
-            targetInv[index]!.count = remainCount;
+          let targetInv: (Item | null)[] = [];
+          if (source === "inventory") {
+            targetInv = next.inventory;
+          } else if (source === "shipping") {
+            targetInv = next.shippingBin;
+          } else if (source === "chest" && chestOpenTile) {
+            const grid = next.inHouse ? next.houseGrid! : (next.inMine ? next.mineGrid : next.tiles);
+            targetInv = grid[chestOpenTile.y][chestOpenTile.x].chestInventory!;
+          } else if (source === "furnace" && furnaceOpenTile) {
+            const grid = next.inHouse ? next.houseGrid! : (next.inMine ? next.mineGrid : next.tiles);
+            targetInv = grid[furnaceOpenTile.y][furnaceOpenTile.x].chestInventory!;
+          }
+
+          if (targetInv && targetInv[index]) {
+            if (remainCount <= 0) {
+              targetInv[index] = null;
+            } else {
+              targetInv[index]!.count = remainCount;
+            }
           }
           return next;
         });
       } else if (item) {
-        // If it's 1 item or a non-stackable tool, treat like normal click
         handleSlotClick(index, source);
       }
     } else {
-      // Place exactly 1 item from held stack
+      const itemToPlace = heldItem.item;
+
+      // Validate furnace insertion rules
+      if (source === "furnace") {
+        if (index === 2) {
+          toast.error("Output slot is retrieve-only!");
+          return;
+        }
+        if (index === 0) {
+          const validOres = ["copper_ore", "iron_ore", "gold_ore", "uranium_ore"];
+          if (!validOres.includes(itemToPlace.id)) {
+            toast.error("Only copper, iron, gold, or uranium ores can be placed in the input slot!");
+            return;
+          }
+        }
+        if (index === 1) {
+          const validFuels = ["coal", "wood"];
+          if (!validFuels.includes(itemToPlace.id)) {
+            toast.error("Only coal or wood can be placed in the fuel slot!");
+            return;
+          }
+        }
+      }
+
       setState((prev) => {
         const next = structuredClone(prev);
-        const targetInv = source === "inventory" ? next.inventory : next.tiles[chestOpenTile!.y][chestOpenTile!.x].chestInventory!;
-        const targetItem = targetInv[index];
+        let targetInv: (Item | null)[] = [];
+        if (source === "inventory") {
+          targetInv = next.inventory;
+        } else if (source === "shipping") {
+          targetInv = next.shippingBin;
+        } else if (source === "chest" && chestOpenTile) {
+          const grid = next.inHouse ? next.houseGrid! : (next.inMine ? next.mineGrid : next.tiles);
+          targetInv = grid[chestOpenTile.y][chestOpenTile.x].chestInventory!;
+        } else if (source === "furnace" && furnaceOpenTile) {
+          const grid = next.inHouse ? next.houseGrid! : (next.inMine ? next.mineGrid : next.tiles);
+          targetInv = grid[furnaceOpenTile.y][furnaceOpenTile.x].chestInventory!;
+        }
 
-        if (targetItem === null) {
-          targetInv[index] = { ...heldItem.item, count: 1 };
-          setHeldItem((prevHeld) => {
-            if (!prevHeld) return null;
-            const newCount = prevHeld.item.count - 1;
-            if (newCount <= 0) return null;
-            return { ...prevHeld, item: { ...prevHeld.item, count: newCount } };
-          });
-        } else if (targetItem.id === heldItem.item.id && targetItem.type !== "tool" && targetItem.type !== "weapon") {
-          targetItem.count += 1;
-          setHeldItem((prevHeld) => {
-            if (!prevHeld) return null;
-            const newCount = prevHeld.item.count - 1;
-            if (newCount <= 0) return null;
-            return { ...prevHeld, item: { ...prevHeld.item, count: newCount } };
-          });
+        if (targetInv) {
+          const targetItem = targetInv[index];
+          if (targetItem === null) {
+            targetInv[index] = { ...itemToPlace, count: 1 };
+            setHeldItem((prevHeld) => {
+              if (!prevHeld) return null;
+              const newCount = prevHeld.item.count - 1;
+              if (newCount <= 0) return null;
+              return { ...prevHeld, item: { ...prevHeld.item, count: newCount } };
+            });
+          } else if (targetItem.id === itemToPlace.id && targetItem.type !== "tool" && targetItem.type !== "weapon") {
+            targetItem.count += 1;
+            setHeldItem((prevHeld) => {
+              if (!prevHeld) return null;
+              const newCount = prevHeld.item.count - 1;
+              if (newCount <= 0) return null;
+              return { ...prevHeld, item: { ...prevHeld.item, count: newCount } };
+            });
+          }
         }
         return next;
       });
@@ -1780,12 +1901,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
   };
 
   const handleManualSleep = () => {
-    setState((prev) => {
-      const next = structuredClone(prev);
-      sleep(next);
-      setSleepSummary(next.dailyEarnings || null);
-      return next;
-    });
+    setSleepConfirmOpen(true);
   };
 
   return (
@@ -2460,70 +2576,152 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
             )}
 
             {activeTab === "crafting" && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                {CRAFTING_RECIPES.map((recipe) => {
-                  const canCraft = recipe.inputs.every((input) =>
-                    state.inventory.reduce(
-                      (sum, item) => (item && item.id === input.itemId ? sum + item.count : sum),
-                      0
-                    ) >= input.count
-                  );
-                  return (
-                    <div
-                      key={recipe.id}
-                      className="p-3 bg-stone-900/40 rounded-lg border border-stone-800 flex flex-col justify-between"
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 font-mono">
+                {/* Left side: Category Selectors & Recipe Grid */}
+                <div className="md:col-span-2 space-y-4">
+                  {/* Factorio-style Tab buttons */}
+                  <div className="flex gap-1.5 border-b border-zinc-700 pb-2">
+                    <button
+                      onClick={() => setCraftingCategory("logistics")}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 text-xs border font-bold transition-all ${
+                        craftingCategory === "logistics"
+                          ? "bg-zinc-850 border-orange-500 text-orange-400 font-extrabold"
+                          : "bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:bg-zinc-800"
+                      }`}
                     >
-                      <div>
-                        <div className="flex items-center gap-1.5 font-bold text-xs">
-                          <span className="text-amber-400">
-                            {ITEM_DEFS[recipe.outputId]?.iconSymbol || "⚙"}
-                          </span>
-                          <span>{recipe.name}</span>
+                      <Backpack className="h-3.5 w-3.5" />
+                      Logistics
+                    </button>
+                    <button
+                      onClick={() => setCraftingCategory("production")}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 text-xs border font-bold transition-all ${
+                        craftingCategory === "production"
+                          ? "bg-zinc-850 border-orange-500 text-orange-400 font-extrabold"
+                          : "bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:bg-zinc-800"
+                      }`}
+                    >
+                      <Hammer className="h-3.5 w-3.5" />
+                      Production
+                    </button>
+                    <button
+                      onClick={() => setCraftingCategory("materials")}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 text-xs border font-bold transition-all ${
+                        craftingCategory === "materials"
+                          ? "bg-zinc-850 border-orange-500 text-orange-400 font-extrabold"
+                          : "bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:bg-zinc-800"
+                      }`}
+                    >
+                      <Shield className="h-3.5 w-3.5" />
+                      Materials
+                    </button>
+                  </div>
+
+                  {/* Recipes Grid */}
+                  <div className="grid grid-cols-6 gap-2 p-3 bg-zinc-950/80 rounded border border-zinc-800/80 min-h-[160px]">
+                    {(recipesByCategory[craftingCategory] || []).map((recipe) => {
+                      const itemDef = ITEM_DEFS[recipe.outputId];
+                      const canCraft = recipe.inputs.every((input) =>
+                        state.inventory.reduce(
+                          (sum, item) => (item && item.id === input.itemId ? sum + item.count : sum),
+                          0
+                        ) >= input.count
+                      );
+
+                      return (
+                        <button
+                          key={recipe.id}
+                          onMouseEnter={() => setHoveredRecipe(recipe)}
+                          onMouseLeave={() => setHoveredRecipe(null)}
+                          onClick={() => handleStartCrafting(recipe)}
+                          className={`relative flex flex-col items-center justify-center h-14 w-14 rounded border-2 transition-all ${
+                            canCraft
+                              ? "bg-zinc-900 border-zinc-700 hover:bg-zinc-800 hover:border-orange-500 text-zinc-200"
+                              : "bg-zinc-950/60 border-zinc-900 opacity-45 desaturate-50 text-zinc-500 cursor-not-allowed"
+                          }`}
+                        >
+                          <span className="text-2xl">{itemDef?.iconSymbol || "⚙"}</span>
+                          {recipe.outputCount > 1 && (
+                            <span className="absolute bottom-0.5 right-1 px-1 bg-black/60 rounded text-[9px] font-bold text-white">
+                              {recipe.outputCount}
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Right side: Detailed Recipe Inspector */}
+                <div className="bg-[#141517] p-3 rounded border border-slate-700 flex flex-col justify-between min-h-[220px]">
+                  {hoveredRecipe ? (() => {
+                    const itemDef = ITEM_DEFS[hoveredRecipe.outputId];
+                    return (
+                      <div className="space-y-3 flex-1 flex flex-col justify-between font-mono">
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-2 border-b border-zinc-800 pb-2">
+                            <span className="text-2xl bg-zinc-900 p-1 border border-zinc-800 rounded">
+                              {itemDef?.iconSymbol || "⚙"}
+                            </span>
+                            <div>
+                              <h4 className="font-extrabold text-sm text-orange-400">
+                                {hoveredRecipe.name}
+                              </h4>
+                              <span className="text-[9px] text-zinc-500 font-bold uppercase">
+                                Produces x{hoveredRecipe.outputCount}
+                              </span>
+                            </div>
+                          </div>
+                          
+                          <p className="text-[10px] text-zinc-400 leading-normal">
+                            {hoveredRecipe.description}
+                          </p>
+
+                          {/* Ingredient Checklist */}
+                          <div className="space-y-1.5 pt-1">
+                            <span className="text-[9px] text-zinc-500 font-bold uppercase tracking-wider block mb-1">
+                              Ingredients:
+                            </span>
+                            {hoveredRecipe.inputs.map((input) => {
+                              const playerHas = state.inventory.reduce(
+                                (sum, item) => (item && item.id === input.itemId ? sum + item.count : sum),
+                                0
+                              );
+                              const hasEnough = playerHas >= input.count;
+                              const inputDef = ITEM_DEFS[input.itemId];
+                              return (
+                                <div
+                                  key={input.itemId}
+                                  className={`text-[10px] flex justify-between items-center p-1 bg-zinc-900/40 rounded border font-mono ${
+                                    hasEnough ? "border-green-950 text-green-400" : "border-red-950 text-red-400"
+                                  }`}
+                                >
+                                  <span className="flex items-center gap-1.5">
+                                    <span>{inputDef?.iconSymbol || "📦"}</span>
+                                    <span>{inputDef?.name || input.itemId.replace("_", " ")}</span>
+                                  </span>
+                                  <span className="font-bold">
+                                    {playerHas}/{input.count}
+                                  </span>
+                                </div>
+                              );
+                            })}
+                          </div>
                         </div>
-                        <p className="text-[10px] text-stone-400 mt-1 leading-relaxed">
-                          {recipe.description}
-                        </p>
-                        <div className="mt-2.5 space-y-1">
-                          {recipe.inputs.map((input) => {
-                            const playerHas = state.inventory.reduce(
-                              (sum, item) => (item && item.id === input.itemId ? sum + item.count : sum),
-                              0
-                            );
-                            return (
-                              <div
-                                key={input.itemId}
-                                className={`text-[9px] flex justify-between font-mono ${
-                                  playerHas >= input.count ? "text-green-400" : "text-red-400"
-                                }`}
-                              >
-                                <span>{input.itemId.replace("_", " ")}</span>
-                                <span>
-                                  {playerHas}/{input.count}
-                                </span>
-                              </div>
-                            );
-                          })}
+
+                        <div className="pt-2 border-t border-zinc-800">
+                          <span className="text-[9px] text-zinc-500 font-bold tracking-wider block text-center mb-1">
+                            CLICK RECIPE ICON TO CRAFT
+                          </span>
                         </div>
                       </div>
-                      <Button
-                        size="xs"
-                        variant={canCraft ? "default" : "outline"}
-                        disabled={!canCraft}
-                        className="mt-3 text-xs w-full"
-                        onClick={() => {
-                          setState((prev) => {
-                            const next = structuredClone(prev);
-                            const act = craftItem(recipe, next);
-                            toast(act);
-                            return next;
-                          });
-                        }}
-                      >
-                        Craft x{recipe.outputCount}
-                      </Button>
+                    );
+                  })() : (
+                    <div className="flex flex-col items-center justify-center text-center text-zinc-500 text-[10px] py-8 h-full flex-1">
+                      <span>⚙ Hover over a recipe to view costs.</span>
+                      <span className="mt-1">Click to queue crafting.</span>
                     </div>
-                  );
-                })}
+                  )}
+                </div>
               </div>
             )}
 
@@ -2606,49 +2804,244 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
       </Dialog>
 
       {/* E. CHEST STORAGE INTERFACE */}
-      {chestOpenTile && (
-      <Dialog open={true} onOpenChange={() => setChestOpenTile(null)}>
-        <DialogContent className="max-w-md bg-stone-900 border-stone-850 text-stone-100">
-          <DialogHeader>
-            <DialogTitle className="text-lg font-bold flex items-center gap-2 text-amber-500 border-b border-stone-800 pb-2">
-              <Compass className="h-5 w-5" />
-              <span>{state.tiles[chestOpenTile.y]?.[chestOpenTile.x]?.placedItemId === "worker_cabin" ? "Worker Cabin Feed Box" : "Wooden Chest Storage"}</span>
-            </DialogTitle>
-          </DialogHeader>
+      {chestOpenTile && (() => {
+        const grid = state.inHouse ? state.houseGrid! : (state.inMine ? state.mineGrid : state.tiles);
+        const tile = grid[chestOpenTile.y]?.[chestOpenTile.x];
+        if (!tile) return null;
 
+        const isCabin = tile.placedItemId === "worker_cabin";
+        const chestInventory = tile.chestInventory || [];
 
-          {chestOpenTile && (
-            <div className="space-y-4 py-2">
-              <div>
-                <div className="flex justify-between items-center mb-2">
-                  <h4 className="text-xs font-bold text-amber-500 font-mono">{state.tiles[chestOpenTile.y]?.[chestOpenTile.x]?.placedItemId === "worker_cabin" ? "Cabin Feed Box Contents" : "Chest Contents"}</h4>
-                  <div className="flex gap-2">
-                    <Button 
-                      size="xs" 
-                      variant="outline" 
-                      className="text-[10px] h-6 px-2 bg-[#5d4037]/20 border-stone-850 text-stone-300 hover:bg-[#5d4037]/40 font-mono" 
-                      onClick={handleSortChest}
-                    >
-                      Sort Chest
-                    </Button>
-                    <Button 
-                      size="xs" 
-                      variant="outline" 
-                      className="text-[10px] h-6 px-2 bg-[#5d4037]/20 border-stone-850 text-stone-300 hover:bg-[#5d4037]/40 font-mono" 
-                      onClick={handleQuickStack}
-                    >
-                      Quick Stack
-                    </Button>
+        return (
+          <Dialog open={true} onOpenChange={() => setChestOpenTile(null)}>
+            <DialogContent className="max-w-md bg-stone-900 border-stone-850 text-stone-100 rounded-lg">
+              <DialogHeader>
+                <DialogTitle className="text-lg font-bold flex items-center gap-2 text-amber-500 border-b border-stone-800 pb-2">
+                  <Compass className="h-5 w-5" />
+                  <span>{isCabin ? "Worker Cabin Feed Box" : "Wooden Chest Storage"}</span>
+                </DialogTitle>
+              </DialogHeader>
+
+              <div className="space-y-4 py-2">
+                <div>
+                  <div className="flex justify-between items-center mb-2">
+                    <h4 className="text-xs font-bold text-amber-500 font-mono">{isCabin ? "Cabin Feed Box Contents" : "Chest Contents"}</h4>
+                    <div className="flex gap-2">
+                      <Button 
+                        size="xs" 
+                        variant="outline" 
+                        className="text-[10px] h-6 px-2 bg-[#5d4037]/20 border-stone-850 text-stone-300 hover:bg-[#5d4037]/40 font-mono" 
+                        onClick={handleSortChest}
+                      >
+                        Sort Chest
+                      </Button>
+                      <Button 
+                        size="xs" 
+                        variant="outline" 
+                        className="text-[10px] h-6 px-2 bg-[#5d4037]/20 border-stone-850 text-stone-300 hover:bg-[#5d4037]/40 font-mono" 
+                        onClick={handleQuickStack}
+                      >
+                        Quick Stack
+                      </Button>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-6 gap-2 bg-[#2d1e18] p-3 rounded-lg border border-stone-800">
+                    {chestInventory.map((item, idx) => (
+                      <button
+                        key={idx}
+                        onClick={() => handleSlotClick(idx, "chest")}
+                        onContextMenu={(e) => handleSlotRightClick(e, idx, "chest")}
+                        onMouseEnter={() => item && setHoveredItem(item)}
+                        onMouseLeave={() => setHoveredItem(null)}
+                        className={`relative flex items-center justify-center h-12 rounded border transition-all ${
+                          item
+                            ? "bg-[#7c5a3c]/20 hover:bg-[#7c5a3c]/40 border-stone-700"
+                            : "bg-stone-900/60 border-stone-800/80"
+                        }`}
+                      >
+                        {item ? (
+                          <>
+                            <span className="text-xl">{item.iconSymbol || "🎁"}</span>
+                            {item.count > 1 && (
+                              <span className="absolute bottom-0.5 right-1 px-1 bg-black/60 rounded text-[9px] font-bold text-white font-mono">
+                                {item.count}
+                              </span>
+                            )}
+                          </>
+                        ) : (
+                          <span className="text-xs opacity-10 text-stone-100">-</span>
+                        )}
+                      </button>
+                    ))}
                   </div>
                 </div>
-                <div className="grid grid-cols-6 gap-2 bg-[#2d1e18] p-3 rounded-lg border border-stone-800">
-                  {(
-                    state.tiles[chestOpenTile.y]?.[chestOpenTile.x]?.chestInventory || []
-                  ).map((item, idx) => (
+
+                <div>
+                  <div className="flex justify-between items-center mb-2">
+                    <h4 className="text-xs font-bold text-stone-400 font-mono">Your Pack Pack</h4>
+                    <Button 
+                      size="xs" 
+                      variant="outline" 
+                      className="text-[10px] h-6 px-2 bg-[#5d4037]/20 border-stone-850 text-stone-300 hover:bg-[#5d4037]/40 font-mono" 
+                      onClick={handleSortInventory}
+                    >
+                      Sort Inventory
+                    </Button>
+                  </div>
+                  <div className="grid grid-cols-6 gap-2 bg-stone-950/55 p-3 rounded-lg border border-stone-850">
+                    {state.inventory.map((item, idx) => (
+                      <button
+                        key={idx}
+                        onClick={() => handleSlotClick(idx, "inventory")}
+                        onContextMenu={(e) => handleSlotRightClick(e, idx, "inventory")}
+                        onMouseEnter={() => item && setHoveredItem(item)}
+                        onMouseLeave={() => setHoveredItem(null)}
+                        className={`relative flex items-center justify-center h-12 rounded border transition-all ${
+                          item
+                            ? "bg-[#7c5a3c]/15 hover:bg-[#7c5a3c]/35 border-stone-850"
+                            : "bg-stone-900/40 border-stone-800/80"
+                        }`}
+                      >
+                        {item ? (
+                          <>
+                            <span className="text-xl">{item.iconSymbol || "🎁"}</span>
+                            {item.count > 1 && (
+                              <span className="absolute bottom-0.5 right-1 px-1 bg-black/60 rounded text-[9px] font-bold text-white font-mono">
+                                {item.count}
+                              </span>
+                            )}
+                          </>
+                        ) : (
+                          <span className="text-xs opacity-10 text-stone-100">-</span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Detailed Hover Inspection Tooltip */}
+                {hoveredItem ? (
+                  <div className="p-2.5 bg-stone-950/80 border border-[#5d4037] rounded-lg flex items-start gap-2.5 transition-all">
+                    <span className="text-2xl bg-stone-900 p-1 rounded">{hoveredItem.iconSymbol || "🎁"}</span>
+                    <div className="flex-1 text-[11px] leading-snug">
+                      <div className="flex justify-between items-center font-mono">
+                        <span className="font-extrabold text-amber-400">{hoveredItem.name}</span>
+                        {hoveredItem.price > 0 && <span className="font-bold text-yellow-500">{hoveredItem.price}g</span>}
+                      </div>
+                      <p className="text-stone-300 text-[10px] mt-0.5 font-mono">{hoveredItem.description}</p>
+                      {(hoveredItem.energyRestore !== undefined || hoveredItem.healthRestore !== undefined) && (
+                        <div className="flex gap-2 mt-1 text-[9px] font-bold font-mono">
+                          {hoveredItem.energyRestore !== undefined && hoveredItem.energyRestore !== 0 && (
+                            <span className="text-emerald-400">⚡ Energy: {hoveredItem.energyRestore > 0 ? "+" : ""}{hoveredItem.energyRestore}</span>
+                          )}
+                          {hoveredItem.healthRestore !== undefined && hoveredItem.healthRestore !== 0 && (
+                            <span className="text-red-400">❤️ Health: {hoveredItem.healthRestore > 0 ? "+" : ""}{hoveredItem.healthRestore}</span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-2 bg-stone-950/20 border border-dashed border-stone-850 rounded-lg text-center text-stone-500 text-[10px] py-3 font-mono">
+                    Hover over an item to inspect details. Right-click to split stacks.
+                  </div>
+                )}
+              </div>
+
+              <DialogFooter>
+                <Button variant="outline" className="text-xs" onClick={() => setChestOpenTile(null)}>
+                  Close Chest
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        );
+      })()}
+
+      {/* STARDEW VALLEY SLEEP CONFIRMATION DIALOG */}
+      {sleepConfirmOpen && (
+        <Dialog open={true} onOpenChange={() => setSleepConfirmOpen(false)}>
+          <DialogContent className="max-w-xs bg-[#2d1e18] border-2 border-[#5d4037] text-stone-100 rounded-lg font-mono">
+            <DialogHeader>
+              <DialogTitle className="text-sm font-bold text-center text-amber-400">
+                Go to sleep for the night?
+              </DialogTitle>
+            </DialogHeader>
+            <DialogFooter className="flex justify-center gap-4 border-t border-[#5d4037]/50 pt-3 mt-2">
+              <Button
+                variant="outline"
+                className="bg-[#5d4037]/45 border-[#5d4037] text-amber-400 hover:bg-[#5d4037]/85 font-bold px-4"
+                onClick={handleConfirmSleep}
+              >
+                Yes
+              </Button>
+              <Button
+                variant="outline"
+                className="bg-stone-800 border-stone-700 text-stone-300 hover:bg-stone-700 font-bold px-4"
+                onClick={() => setSleepConfirmOpen(false)}
+              >
+                No
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* SHIPPING BIN STORAGE INTERFACE */}
+      {shippingBinOpen && (
+        <Dialog open={true} onOpenChange={() => setShippingBinOpen(false)}>
+          <DialogContent className="max-w-md bg-[#2d1e18] border-2 border-[#5d4037] text-stone-100 rounded-lg font-mono">
+            <DialogHeader>
+              <DialogTitle className="text-lg font-bold flex items-center gap-2 text-amber-400 border-b border-[#5d4037] pb-2">
+                <span>🌾 Shipping Bin 🌾</span>
+              </DialogTitle>
+            </DialogHeader>
+
+            <div className="space-y-4 py-2">
+              <div>
+                <p className="text-xs text-stone-400 mb-2 font-mono">
+                  Items placed here will be shipped overnight for gold.
+                </p>
+                <div className="grid grid-cols-6 gap-2 bg-[#1e120c] p-3 rounded-lg border border-[#5d4037]/60">
+                  {state.shippingBin.map((item, idx) => (
                     <button
                       key={idx}
-                      onClick={() => handleSlotClick(idx, "chest")}
-                      onContextMenu={(e) => handleSlotRightClick(e, idx, "chest")}
+                      onClick={() => handleSlotClick(idx, "shipping")}
+                      onContextMenu={(e) => handleSlotRightClick(e, idx, "shipping")}
+                      onMouseEnter={() => item && setHoveredItem(item)}
+                      onMouseLeave={() => setHoveredItem(null)}
+                      className={`relative flex items-center justify-center h-12 rounded border transition-all ${
+                        item
+                          ? "bg-[#5d4037]/40 hover:bg-[#5d4037]/60 border-[#5d4037]"
+                          : "bg-stone-950/80 border-stone-800"
+                      }`}
+                    >
+                      {item ? (
+                        <>
+                          <span className="text-xl">{item.iconSymbol || "📦"}</span>
+                          {item.count > 1 && (
+                            <span className="absolute bottom-0.5 right-1 px-1 bg-black/60 rounded text-[9px] font-bold text-white font-mono">
+                              {item.count}
+                            </span>
+                          )}
+                        </>
+                      ) : (
+                        <span className="text-[10px] text-stone-600 font-mono">{idx + 1}</span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Player Inventory view */}
+              <div>
+                <h4 className="text-xs font-bold text-amber-400 font-mono mb-2">My Inventory</h4>
+                <div className="grid grid-cols-6 gap-2 bg-[#2d1e18] p-3 rounded-lg border border-stone-800">
+                  {state.inventory.slice(0, 30).map((item, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => handleSlotClick(idx, "inventory")}
+                      onContextMenu={(e) => handleSlotRightClick(e, idx, "inventory")}
                       onMouseEnter={() => item && setHoveredItem(item)}
                       onMouseLeave={() => setHoveredItem(null)}
                       className={`relative flex items-center justify-center h-12 rounded border transition-all ${
@@ -2659,7 +3052,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                     >
                       {item ? (
                         <>
-                          <span className="text-xl">{item.iconSymbol || "🎁"}</span>
+                          <span className="text-xl">{item.iconSymbol || "📦"}</span>
                           {item.count > 1 && (
                             <span className="absolute bottom-0.5 right-1 px-1 bg-black/60 rounded text-[9px] font-bold text-white font-mono">
                               {item.count}
@@ -2667,94 +3060,190 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                           )}
                         </>
                       ) : (
-                        <span className="text-xs opacity-10 text-stone-100">-</span>
+                        <span className="text-[10px] text-stone-700 font-mono">{idx + 1}</span>
                       )}
                     </button>
                   ))}
                 </div>
               </div>
+            </div>
 
-              <div>
-                <div className="flex justify-between items-center mb-2">
-                  <h4 className="text-xs font-bold text-stone-400 font-mono">Your Pack Pack</h4>
-                  <Button 
-                    size="xs" 
-                    variant="outline" 
-                    className="text-[10px] h-6 px-2 bg-[#5d4037]/20 border-stone-850 text-stone-300 hover:bg-[#5d4037]/40 font-mono" 
-                    onClick={handleSortInventory}
-                  >
-                    Sort Inventory
-                  </Button>
-                </div>
-                <div className="grid grid-cols-6 gap-2 bg-stone-950/55 p-3 rounded-lg border border-stone-850">
-                  {state.inventory.map((item, idx) => (
+            <DialogFooter>
+              <Button variant="outline" className="text-xs" onClick={() => setShippingBinOpen(false)}>
+                Close Bin
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* STONE FURNACE SMELTER INTERFACE */}
+      {furnaceOpenTile && (() => {
+        const grid = state.inHouse ? state.houseGrid! : (state.inMine ? state.mineGrid : state.tiles);
+        const tile = grid[furnaceOpenTile.y]?.[furnaceOpenTile.x];
+        if (!tile) return null;
+
+        const smeltTimer = tile.smeltTimer || 0;
+        const smeltMaxTime = tile.smeltMaxTime || 8;
+        const isActive = tile.smeltActive || false;
+        const pct = isActive ? Math.round(((smeltMaxTime - smeltTimer) / smeltMaxTime) * 100) : 0;
+
+        const fInv = tile.chestInventory || [null, null, null];
+        const inputItem = fInv[0];
+        const fuelItem = fInv[1];
+        const outputItem = fInv[2];
+
+        return (
+          <Dialog open={true} onOpenChange={() => setFurnaceOpenTile(null)}>
+            <DialogContent className="max-w-md bg-zinc-900 border-2 border-zinc-700 text-zinc-100 rounded-none font-mono">
+              <DialogHeader>
+                <DialogTitle className="text-lg font-bold flex items-center gap-2 text-orange-400 border-b border-zinc-700 pb-2">
+                  <Flame className={`h-5 w-5 ${isActive ? "text-orange-500 animate-pulse" : "text-zinc-500"}`} />
+                  <span>Stone Furnace</span>
+                </DialogTitle>
+              </DialogHeader>
+
+              <div className="space-y-6 py-2">
+                <div className="flex items-center justify-between bg-zinc-950 p-4 rounded border border-zinc-800">
+                  <div className="flex flex-col items-center gap-1">
+                    <span className="text-[10px] text-zinc-500 font-bold">INPUT (3 Ores)</span>
                     <button
-                      key={idx}
-                      onClick={() => handleSlotClick(idx, "inventory")}
-                      onContextMenu={(e) => handleSlotRightClick(e, idx, "inventory")}
-                      onMouseEnter={() => item && setHoveredItem(item)}
+                      onClick={() => handleSlotClick(0, "furnace")}
+                      onContextMenu={(e) => handleSlotRightClick(e, 0, "furnace")}
+                      onMouseEnter={() => inputItem && setHoveredItem(inputItem)}
                       onMouseLeave={() => setHoveredItem(null)}
-                      className={`relative flex items-center justify-center h-12 rounded border transition-all ${
-                        item
-                          ? "bg-[#7c5a3c]/15 hover:bg-[#7c5a3c]/35 border-stone-850"
-                          : "bg-stone-900/40 border-stone-800/80"
+                      className={`relative flex items-center justify-center w-14 h-14 rounded border-2 transition-all ${
+                        inputItem
+                          ? "bg-zinc-800 border-orange-500/50 hover:bg-zinc-700"
+                          : "bg-zinc-900/40 border-zinc-800 border-dashed"
                       }`}
                     >
-                      {item ? (
+                      {inputItem ? (
                         <>
-                          <span className="text-xl">{item.iconSymbol || "🎁"}</span>
-                          {item.count > 1 && (
-                            <span className="absolute bottom-0.5 right-1 px-1 bg-black/60 rounded text-[9px] font-bold text-white font-mono">
-                              {item.count}
-                            </span>
-                          )}
+                          <span className="text-2xl">{inputItem.iconSymbol}</span>
+                          <span className="absolute bottom-0.5 right-1 px-1 bg-black/80 rounded text-[9px] font-bold text-white font-mono">
+                            {inputItem.count}
+                          </span>
                         </>
                       ) : (
-                        <span className="text-xs opacity-10 text-stone-100">-</span>
+                        <span className="text-[18px] opacity-25">🪨</span>
                       )}
                     </button>
-                  ))}
+                  </div>
+
+                  <div className="flex flex-col items-center gap-2 flex-1 px-4">
+                    <div className="w-full bg-zinc-850 h-3 border border-zinc-700 rounded-none relative overflow-hidden">
+                      <div 
+                        className="bg-gradient-to-r from-orange-600 to-yellow-500 h-full transition-all duration-100"
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <Flame className={`h-4 w-4 ${isActive ? "text-orange-500 animate-bounce" : "text-zinc-650"}`} />
+                      <span className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider">
+                        {isActive ? `SMELTING... ${pct}%` : "IDLE"}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col items-center gap-1">
+                    <span className="text-[10px] text-zinc-500 font-bold">FUEL (Coal/Wood)</span>
+                    <button
+                      onClick={() => handleSlotClick(1, "furnace")}
+                      onContextMenu={(e) => handleSlotRightClick(e, 1, "furnace")}
+                      onMouseEnter={() => fuelItem && setHoveredItem(fuelItem)}
+                      onMouseLeave={() => setHoveredItem(null)}
+                      className={`relative flex items-center justify-center w-14 h-14 rounded border-2 transition-all ${
+                        fuelItem
+                          ? "bg-zinc-800 border-yellow-600/50 hover:bg-zinc-700"
+                          : "bg-zinc-900/40 border-zinc-800 border-dashed"
+                      }`}
+                    >
+                      {fuelItem ? (
+                        <>
+                          <span className="text-2xl">{fuelItem.iconSymbol}</span>
+                          <span className="absolute bottom-0.5 right-1 px-1 bg-black/80 rounded text-[9px] font-bold text-white font-mono">
+                            {fuelItem.count}
+                          </span>
+                        </>
+                      ) : (
+                        <span className="text-[18px] opacity-25">🪵</span>
+                      )}
+                    </button>
+                  </div>
+
+                  <span className="text-zinc-650 text-lg px-2">➔</span>
+
+                  <div className="flex flex-col items-center gap-1">
+                    <span className="text-[10px] text-zinc-500 font-bold">OUTPUT</span>
+                    <button
+                      onClick={() => handleSlotClick(2, "furnace")}
+                      onContextMenu={(e) => handleSlotRightClick(e, 2, "furnace")}
+                      onMouseEnter={() => outputItem && setHoveredItem(outputItem)}
+                      onMouseLeave={() => setHoveredItem(null)}
+                      className={`relative flex items-center justify-center w-16 h-16 rounded border-2 transition-all ${
+                        outputItem
+                          ? "bg-zinc-850 border-green-500/70 hover:bg-zinc-700"
+                          : "bg-zinc-900/40 border-zinc-850"
+                      }`}
+                    >
+                      {outputItem ? (
+                        <>
+                          <span className="text-3xl">{outputItem.iconSymbol}</span>
+                          <span className="absolute bottom-0.5 right-1 px-1 bg-black/80 rounded text-[10px] font-bold text-white font-mono">
+                            {outputItem.count}
+                          </span>
+                        </>
+                      ) : (
+                        <span className="text-[20px] opacity-15">🪙</span>
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <h4 className="text-xs font-bold text-orange-400 font-mono mb-2">Player Inventory</h4>
+                  <div className="grid grid-cols-6 gap-2 bg-[#2d1e18] p-3 rounded-lg border border-stone-800">
+                    {state.inventory.slice(0, 30).map((item, idx) => (
+                      <button
+                        key={idx}
+                        onClick={() => handleSlotClick(idx, "inventory")}
+                        onContextMenu={(e) => handleSlotRightClick(e, idx, "inventory")}
+                        onMouseEnter={() => item && setHoveredItem(item)}
+                        onMouseLeave={() => setHoveredItem(null)}
+                        className={`relative flex items-center justify-center h-12 rounded border transition-all ${
+                          item
+                            ? "bg-[#7c5a3c]/20 hover:bg-[#7c5a3c]/40 border-stone-700"
+                            : "bg-stone-900/60 border-stone-800/80"
+                        }`}
+                      >
+                        {item ? (
+                          <>
+                            <span className="text-xl">{item.iconSymbol || "📦"}</span>
+                            {item.count > 1 && (
+                              <span className="absolute bottom-0.5 right-1 px-1 bg-black/60 rounded text-[9px] font-bold text-white font-mono">
+                                {item.count}
+                              </span>
+                            )}
+                          </>
+                        ) : (
+                          <span className="text-[10px] text-stone-700 font-mono">{idx + 1}</span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
 
-              {/* Detailed Hover Inspection Tooltip */}
-              {hoveredItem ? (
-                <div className="p-2.5 bg-stone-950/80 border border-[#5d4037] rounded-lg flex items-start gap-2.5 transition-all">
-                  <span className="text-2xl bg-stone-900 p-1 rounded">{hoveredItem.iconSymbol || "🎁"}</span>
-                  <div className="flex-1 text-[11px] leading-snug">
-                    <div className="flex justify-between items-center font-mono">
-                      <span className="font-extrabold text-amber-400">{hoveredItem.name}</span>
-                      {hoveredItem.price > 0 && <span className="font-bold text-yellow-500">{hoveredItem.price}g</span>}
-                    </div>
-                    <p className="text-stone-300 text-[10px] mt-0.5 font-mono">{hoveredItem.description}</p>
-                    {(hoveredItem.energyRestore !== undefined || hoveredItem.healthRestore !== undefined) && (
-                      <div className="flex gap-2 mt-1 text-[9px] font-bold font-mono">
-                        {hoveredItem.energyRestore !== undefined && hoveredItem.energyRestore !== 0 && (
-                          <span className="text-emerald-400">⚡ Energy: {hoveredItem.energyRestore > 0 ? "+" : ""}{hoveredItem.energyRestore}</span>
-                        )}
-                        {hoveredItem.healthRestore !== undefined && hoveredItem.healthRestore !== 0 && (
-                          <span className="text-red-400">❤️ Health: {hoveredItem.healthRestore > 0 ? "+" : ""}{hoveredItem.healthRestore}</span>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ) : (
-                <div className="p-2 bg-stone-950/20 border border-dashed border-stone-850 rounded-lg text-center text-stone-500 text-[10px] py-3 font-mono">
-                  Hover over an item to inspect details. Right-click to split stacks.
-                </div>
-              )}
-            </div>
-          )}
-
-          <DialogFooter>
-            <Button variant="outline" className="text-xs" onClick={() => setChestOpenTile(null)}>
-              Close Chest
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-      )}
+              <DialogFooter>
+                <Button variant="outline" className="text-xs border-zinc-700 text-zinc-300 bg-zinc-800 hover:bg-zinc-700" onClick={() => setFurnaceOpenTile(null)}>
+                  Close Smelter
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        );
+      })()}
 
       {/* F. NPC DIALOG OVERLAY */}
 

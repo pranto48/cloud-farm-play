@@ -1054,32 +1054,44 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
           }
         });
 
+        const grid = curState.inHouse ? curState.houseGrid! : (curState.inMine ? curState.mineGrid : curState.tiles);
+        const facingTile = grid[f.y]?.[f.x];
+
         if (foundNpc) {
           const lines = (foundNpc as NPCDef).defaultDialogue;
           const choice = lines[Math.floor(Math.random() * lines.length)];
           setNpcDialogue({ npcId: foundNpcId, dialogue: choice });
-        } else if (curState.tiles[f.y][f.x].kind === "shop") {
-          setShopOpen(true);
-        } else if (curState.tiles[f.y][f.x].kind === "placed_item" && curState.tiles[f.y][f.x].placedItemId === "mailbox") {
-          setMailboxOpen(true);
-        } else if (curState.tiles[f.y][f.x].kind === "placed_item" && (curState.tiles[f.y][f.x].placedItemId === "chest" || curState.tiles[f.y][f.x].placedItemId === "worker_cabin")) {
-          setChestOpenTile({ x: f.x, y: f.y });
-        } else if (curState.tiles[f.y][f.x].kind === "placed_item" && curState.tiles[f.y][f.x].placedItemId === "chicken_egg") {
-          // Collect Chicken Egg
-          setState((prev) => {
-            const next = structuredClone(prev);
-            const egg = createItem("chicken_egg", 1);
-            const success = addItem(next.inventory, egg);
-            if (success) {
-              next.tiles[f.y][f.x].kind = "grass";
-              next.tiles[f.y][f.x].placedItemId = undefined;
-              toast.success("Collected a Chicken Egg! 🥚");
-              gameAudio.playCoin();
-            } else {
-              toast.error("Inventory full!");
-            }
-            return next;
-          });
+        } else if (facingTile) {
+          if (facingTile.kind === "shop") {
+            setShopOpen(true);
+          } else if (facingTile.kind === "house_bed") {
+            setSleepConfirmOpen(true);
+          } else if (facingTile.kind === "placed_item" && facingTile.placedItemId === "furnace") {
+            setFurnaceOpenTile({ x: f.x, y: f.y });
+          } else if (facingTile.kind === "placed_item" && facingTile.placedItemId === "mailbox") {
+            setMailboxOpen(true);
+          } else if (facingTile.kind === "placed_item" && (facingTile.placedItemId === "chest" || facingTile.placedItemId === "worker_cabin")) {
+            setChestOpenTile({ x: f.x, y: f.y });
+          } else if (!curState.inMine && !curState.inHouse && f.x === 18 && f.y === 29) {
+            setShippingBinOpen(true);
+          } else if (facingTile.kind === "placed_item" && facingTile.placedItemId === "chicken_egg") {
+            // Collect Chicken Egg
+            setState((prev) => {
+              const next = structuredClone(prev);
+              const nextGrid = next.inHouse ? next.houseGrid! : (next.inMine ? next.mineGrid : next.tiles);
+              const egg = createItem("chicken_egg", 1);
+              const success = addItem(next.inventory, egg);
+              if (success) {
+                nextGrid[f.y][f.x].kind = next.inHouse ? "house_floor" : (next.inMine ? "mine_dirt" : "grass");
+                nextGrid[f.y][f.x].placedItemId = undefined;
+                toast.success("Collected a Chicken Egg! 🥚");
+                gameAudio.playCoin();
+              } else {
+                toast.error("Inventory full!");
+              }
+              return next;
+            });
+          }
         }
       }
       // ESC / I Inventory panel

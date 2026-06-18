@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { ArrowLeft, Cloud, Maximize2, Save, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth";
+import { auth } from "@/integrations/firebase/client";
 import {
   fetchGameBySlug,
   fetchCloudSave,
@@ -36,7 +37,7 @@ function PlayPage() {
   const { slug } = Route.useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const userId = user?.uid || (user as any)?.id;
+  const userId = user?.uid || (user as any)?.id || auth.currentUser?.uid;
 
   const game = useQuery({ queryKey: ["game", slug], queryFn: () => fetchGameBySlug(slug) });
   const save = useQuery({
@@ -83,15 +84,16 @@ function PlayPage() {
   }, [game.data, chosen, userId]);
 
   const doSave = useCallback(async (state: GameState, opts?: { silent?: boolean }) => {
-    if (!userId || userId === "undefined" || !game.data) return;
+    const activeUserId = userId || auth.currentUser?.uid;
+    if (!activeUserId || activeUserId === "undefined" || !game.data) return;
     setStatus("saving");
     try {
       await upsertCloudSave({
-        userId,
+        userId: activeUserId,
         gameId: game.data.id,
         saveData: state as unknown,
       });
-      await touchLastPlayed(userId, game.data.id);
+      await touchLastPlayed(activeUserId, game.data.id);
       dirtyRef.current = false;
       setStatus("saved");
       if (!opts?.silent) toast.success("Game saved to cloud");

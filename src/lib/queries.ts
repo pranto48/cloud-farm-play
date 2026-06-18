@@ -107,6 +107,10 @@ export async function fetchGameBySlug(slug: string): Promise<GameRow | null> {
 }
 
 export async function fetchCloudSave(userId: string, gameId: string) {
+  if (!userId || userId === "undefined") {
+    console.warn("[Queries] fetchCloudSave called with invalid userId:", userId);
+    return null;
+  }
   const q = query(
     collection(db, "cloud_saves"), 
     where("user_id", "==", userId), 
@@ -121,6 +125,10 @@ export async function fetchCloudSave(userId: string, gameId: string) {
 }
 
 export async function fetchAllCloudSaves(userId: string) {
+  if (!userId || userId === "undefined") {
+    console.warn("[Queries] fetchAllCloudSaves called with invalid userId:", userId);
+    return [];
+  }
   const q = query(collection(db, "cloud_saves"), where("user_id", "==", userId));
   const snap = await getDocs(q);
   const saves = snap.docs.map(d => d.data());
@@ -144,6 +152,10 @@ export async function fetchAllCloudSaves(userId: string) {
 }
 
 export async function fetchPlayStats(userId: string) {
+  if (!userId || userId === "undefined") {
+    console.warn("[Queries] fetchPlayStats called with invalid userId:", userId);
+    return { sessions: 0, recent: [] };
+  }
   const q = query(collection(db, "play_sessions"), where("user_id", "==", userId));
   const snap = await getDocs(q);
   const sessions = snap.docs.map(d => d.data());
@@ -175,6 +187,10 @@ export async function upsertCloudSave(params: {
   saveData: unknown;
   slotName?: string;
 }) {
+  if (!params.userId || params.userId === "undefined") {
+    console.error("[Queries] upsertCloudSave called with invalid userId:", params.userId);
+    throw new Error("Cannot save game: User is not authenticated.");
+  }
   const slot = params.slotName ?? "Auto Save";
   if (!params.userId || params.userId === "undefined") {
     console.warn("[Firebase] upsertCloudSave: userId is missing or invalid, skipping save.", params);
@@ -199,7 +215,7 @@ export async function deleteCloudSave(id: string) {
 
 export async function touchLastPlayed(userId: string, gameId: string) {
   if (!userId || userId === "undefined") {
-    console.warn("[Firebase] touchLastPlayed: userId is missing or invalid, skipping.", { userId, gameId });
+    console.warn("[Queries] touchLastPlayed: userId is missing or invalid, skipping.", { userId, gameId });
     return;
   }
   const docId = `${userId}_${gameId}`;
@@ -210,7 +226,7 @@ export async function touchLastPlayed(userId: string, gameId: string) {
 
 export async function startPlaySession(userId: string, gameId: string) {
   if (!userId || userId === "undefined") {
-    console.warn("[Firebase] startPlaySession: userId is missing or invalid, skipping session start.", { userId, gameId });
+    console.warn("[Queries] startPlaySession: userId is missing or invalid, skipping session start.", { userId, gameId });
     return { id: "temp_session", started_at: new Date().toISOString() };
   }
   const docRef = doc(collection(db, "play_sessions"));

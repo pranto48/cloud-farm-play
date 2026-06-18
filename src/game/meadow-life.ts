@@ -1678,6 +1678,7 @@ export function interact(state: GameState, chargeLevel: number = 1): { message: 
         }
       }
       break;
+  }
 
   // 4. Plant Seeds
   if (heldItem && heldItem.type === "seed" && tile.kind === "soil") {

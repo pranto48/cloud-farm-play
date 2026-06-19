@@ -2231,11 +2231,13 @@ export function interact(
           subX: f.x,
           subY: f.y,
           task: "idle",
+          role: "idle",
+          inventory: null,
           energy: 100,
           hasEatenToday: false,
           walkTimer: Math.random() * 3 + 2,
           actionTimer: 0,
-          statusText: "Idle",
+          statusText: "Just hired!",
         });
       } else if (heldItem.id === "pet_bowl_dog" || heldItem.id === "pet_bowl_cat") {
         if (!state.pets) state.pets = [];
@@ -2841,7 +2843,7 @@ export function draw(
           ctx.fillStyle = "#bd9e72";
           ctx.fillRect(px + 8 + pathR * 12, py + 8 + pathR * 12, 2, 2);
         }
-      } else if (t.kind === "water") {
+            } else if (t.kind === "water") {
         // 1. Sandy beach shoreline
         drawOrganicBlob(ctx, y, x, currentGrid, TILE, isWater, "#e5cbb3", 0.75);
         // 2. Shallow water transition
@@ -3680,10 +3682,11 @@ export function draw(
     });
   }
 
-  // 3c. Draw Hired Workers
+    // 3c. Draw Hired Workers
   if (!state.inMine && state.workers) {
     state.workers.forEach((worker) => {
       if (!worker) return;
+      
       const bounce = (Math.abs(worker.x - worker.subX) > 0.01 || Math.abs(worker.y - worker.subY) > 0.01) ? Math.sin(Date.now() / 100) * 2 : 0;
       
       const wx = worker.subX * TILE;

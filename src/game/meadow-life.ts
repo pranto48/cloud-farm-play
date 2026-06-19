@@ -2227,15 +2227,19 @@ export function interact(
           cabinX: f.x,
           cabinY: f.y,
           x: f.x,
+          y: f.y,
           subX: f.x,
           subY: f.y,
           task: "idle",
           energy: 100,
+          role: "farming",
+          inventory: null,
           hasEatenToday: false,
           walkTimer: Math.random() * 3 + 2,
           actionTimer: 0,
           statusText: "Idle",
-        });
+        };
+        state.workers.push(newWorker);
       } else if (heldItem.id === "pet_bowl_dog" || heldItem.id === "pet_bowl_cat") {
         if (!state.pets) state.pets = [];
         const isDog = heldItem.id === "pet_bowl_dog";

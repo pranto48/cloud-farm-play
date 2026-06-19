@@ -932,7 +932,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
         });
       }
       // Space / E Action Key
-      else if (k === "e" || e.code === "Space") {
+      else if (e.code === "Space") {
         e.preventDefault();
 
         const held = curState.inventory[curState.hotbarIndex];
@@ -1152,7 +1152,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
         }
       }
       // ESC / I Inventory panel
-      else if (k === "i" || e.code === "Escape") {
+      else if (k === "i" || k === "e" || e.code === "Escape") {
         e.preventDefault();
         setInventoryOpen((o) => !o);
       }
@@ -1160,7 +1160,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
 
     const onKeyUp = (e: KeyboardEvent) => {
       const code = e.code;
-      if (code === "Space" || code === "KeyE") {
+      if (code === "Space") {
         setIsSpacePressed(false);
 
         if (chargingToolRef.current) {
@@ -2656,7 +2656,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
           </DialogHeader>
 
           <div className="flex border-b border-slate-800 gap-1 my-1">
-            {(["inventory", "crafting", "social", "skills"] as const).map((tab) => (
+            {(["inventory", "crafting", "workers", "social", "skills"] as const).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
@@ -2903,6 +2903,53 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                       <span>⚙ Hover over a recipe to view costs.</span>
                       <span className="mt-1">Click to queue crafting.</span>
                     </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+                        {activeTab === "workers" && (
+              <div className="space-y-3">
+                <h3 className="text-[#ff9200] font-bold border-b border-[#ff9200]/30 pb-1 mb-2">Worker Management</h3>
+                <div className="grid grid-cols-1 gap-2">
+                  {state.workers && state.workers.length > 0 ? state.workers.map(w => (
+                    <div key={w.id} className="bg-[#141517] p-2 border border-slate-700 rounded-none flex items-center gap-3">
+                      <div className="w-8 h-8 flex items-center justify-center bg-[#2f3136] border border-slate-600">👷</div>
+                      <div className="flex-1 text-xs">
+                        <div className="font-bold text-[#ff9200]">{w.name}</div>
+                        <div className="text-slate-400 text-[10px]">Energy: {Math.floor(w.energy)}%</div>
+                        <div className="text-slate-400 text-[10px]">Status: {w.statusText}</div>
+                        {w.inventory && (
+                          <div className="text-emerald-400 text-[10px]">Holding: {w.inventory.name} ({w.inventory.count}x)</div>
+                        )}
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <select 
+                          className="bg-[#2f3136] border border-slate-600 text-xs px-2 py-1 text-slate-200 outline-none hover:border-[#ff9200] transition-colors"
+                          value={w.role}
+                          onChange={(e) => {
+                            const val = e.target.value as any;
+                            setState(prev => {
+                              const next = structuredClone(prev);
+                              const target = next.workers?.find(x => x.id === w.id);
+                              if (target) {
+                                target.role = val;
+                                target.task = "idle";
+                              }
+                              return next;
+                            });
+                          }}
+                        >
+                          <option value="idle">Idle (Resting)</option>
+                          <option value="farming">Farming (Water/Harvest)</option>
+                          <option value="woodcutting">Woodcutting (Chop/Clear)</option>
+                          <option value="water">Water Collection</option>
+                          <option value="mining">Mining</option>
+                        </select>
+                      </div>
+                    </div>
+                  )) : (
+                    <div className="text-center text-slate-500 text-xs py-4">No workers hired. Buy them at the Player Store.</div>
                   )}
                 </div>
               </div>

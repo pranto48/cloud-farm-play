@@ -138,6 +138,8 @@ export interface FarmWorker {
   subX: number;
   subY: number;
   task: "idle" | "water" | "harvest" | "clear" | "auto";
+  role: "farming" | "woodcutting" | "water" | "mining" | "idle";
+  inventory: import("./data/items").Item | null;
   energy: number; // 0 - 100
   hasEatenToday: boolean;
   walkTimer: number;
@@ -438,6 +440,30 @@ export interface Recipe {
 }
 
 export const CRAFTING_RECIPES: Recipe[] = [
+  {
+    id: "bed",
+    name: "Cozy Bed",
+    description: "A comfortable bed. Sleep in it to save and start a new day.",
+    inputs: [{ itemId: "wood", count: 50 }, { itemId: "fiber", count: 30 }],
+    outputId: "bed",
+    outputCount: 1,
+  },
+  {
+    id: "stone_path",
+    name: "Stone Path",
+    description: "A durable path. Prevents debris and slightly increases walk speed.",
+    inputs: [{ itemId: "stone", count: 2 }],
+    outputId: "stone_path",
+    outputCount: 5,
+  },
+  {
+    id: "toolset",
+    name: "Advanced Toolset",
+    description: "Placeable workstation to upgrade your tools automatically.",
+    inputs: [{ itemId: "iron_bar", count: 5 }, { itemId: "wood", count: 40 }],
+    outputId: "toolset",
+    outputCount: 1,
+  },
   {
     id: "chest",
     name: "Wood Chest",
@@ -1268,41 +1294,113 @@ export function updateEntities(state: GameState, dt: number): void {
       return;
     }
 
-    // Auto task evaluation
-    let activeTask: "idle" | "water" | "harvest" | "clear" = worker.task === "auto" ? "idle" : worker.task;
-    
-    if (worker.task === "auto") {
-      const zoneRadius = 4;
-      let foundWater = false;
-      let foundHarvest = false;
-      let foundClear = false;
-
-      for (let dy = -zoneRadius; dy <= zoneRadius; dy++) {
-        for (let dx = -zoneRadius; dx <= zoneRadius; dx++) {
-          const tx = worker.cabinX + dx;
-          const ty = worker.cabinY + dy;
-          if (tx >= 0 && ty >= 0 && tx < COLS && ty < ROWS) {
-            const t = grid[ty][tx];
-            if (t.kind === "soil" || (t.cropId && !t.watered && t.kind !== "watered")) {
-              foundWater = true;
-            }
-            if (t.cropId && t.age >= (CROPS[t.cropId]?.growDays || 3)) {
-              foundHarvest = true;
-            }
-            if (t.kind === "debris_weed" || t.kind === "debris_branch" || t.kind === "debris_stone") {
-              foundClear = true;
+    // Inventory full check -> find chest
+    if (worker.inventory) {
+      worker.statusText = "Inventory full, seeking Chest...";
+      let nearestChestX = -1;
+      let nearestChestY = -1;
+      let minChestDist = 9999;
+      for (let y = 0; y < ROWS; y++) {
+        for (let x = 0; x < COLS; x++) {
+          const t = grid[y][x];
+          if (t.kind === "placed_item" && t.placedItemId === "chest") {
+            const d = Math.abs(x - worker.x) + Math.abs(y - worker.y);
+            if (d < minChestDist) {
+              minChestDist = d;
+              nearestChestX = x;
+              nearestChestY = y;
             }
           }
         }
       }
 
-      // Priority order: Water first, then Harvest, then Clear
-      if (foundWater) activeTask = "water";
-      else if (foundHarvest) activeTask = "harvest";
-      else if (foundClear) activeTask = "clear";
+      if (nearestChestX !== -1) {
+        if (minChestDist <= 1) {
+          // Deposit
+          if (worker.actionTimer <= 0) {
+            worker.actionTimer = 0.5;
+            const chestTile = grid[nearestChestY][nearestChestX];
+            if (chestTile.chestInventory) {
+              addItem(chestTile.chestInventory!, worker.inventory!);
+              worker.inventory = null;
+            }
+          } else {
+            worker.actionTimer -= dt;
+          }
+          return;
+        } else {
+          // Move to chest
+          worker.walkTimer -= dt;
+          if (worker.walkTimer <= 0) {
+            worker.walkTimer = 0.4;
+            const dx = Math.sign(nearestChestX - worker.x);
+            const dy = Math.sign(nearestChestY - worker.y);
+            let nextX = worker.x + dx;
+            let nextY = worker.y;
+            if (dx !== 0 && isWorkerWalkable(grid[nextY]?.[nextX])) { worker.x = nextX; }
+            else {
+              nextX = worker.x; nextY = worker.y + dy;
+              if (dy !== 0 && isWorkerWalkable(grid[nextY]?.[nextX])) { worker.y = nextY; }
+            }
+          }
+          return;
+        }
+      } else {
+        worker.statusText = "Inventory full, NO CHEST FOUND!";
+        // Drop items on ground? For now, we just destroy or wait. Let's just wait.
+        return;
+      }
     }
 
-    worker.statusText = `Shift: Task is ${worker.task.toUpperCase()}${worker.task === "auto" ? ` (${activeTask.toUpperCase()})` : ""}`;
+    // Role-based task evaluation
+    let activeTask: "idle" | "water" | "harvest" | "clear" | "chop" | "mine" | "fetch_water" = "idle";
+    
+    const roleRadius = 8;
+    let foundTarget = false;
+    let targetX = -1;
+    let targetY = -1;
+
+    if (worker.role !== "idle") {
+      let searchOptions: Array<"water" | "harvest" | "clear" | "chop" | "mine" | "fetch_water"> = [];
+      if (worker.role === "farming") searchOptions = ["water", "harvest"];
+      else if (worker.role === "woodcutting") searchOptions = ["chop", "clear"];
+      else if (worker.role === "mining") searchOptions = ["mine"];
+      else if (worker.role === "water") searchOptions = ["fetch_water"];
+
+      for (const opt of searchOptions) {
+        if (foundTarget) break;
+        for (let dy = -roleRadius; dy <= roleRadius; dy++) {
+          if (foundTarget) break;
+          for (let dx = -roleRadius; dx <= roleRadius; dx++) {
+            const tx = worker.cabinX + dx;
+            const ty = worker.cabinY + dy;
+            if (tx >= 0 && ty >= 0 && tx < COLS && ty < ROWS) {
+              const t = grid[ty][tx];
+              if (opt === "water" && (t.kind === "soil" || (t.cropId && !t.watered && t.kind !== "watered"))) {
+                foundTarget = true; activeTask = "water"; targetX = tx; targetY = ty; break;
+              }
+              if (opt === "harvest" && t.cropId && t.age >= (CROPS[t.cropId]?.growDays || 3)) {
+                foundTarget = true; activeTask = "harvest"; targetX = tx; targetY = ty; break;
+              }
+              if (opt === "clear" && (t.kind === "debris_weed" || t.kind === "debris_branch")) {
+                foundTarget = true; activeTask = "clear"; targetX = tx; targetY = ty; break;
+              }
+              if (opt === "chop" && t.kind === "tree") {
+                foundTarget = true; activeTask = "chop"; targetX = tx; targetY = ty; break;
+              }
+              if (opt === "mine" && t.kind === "debris_stone") {
+                foundTarget = true; activeTask = "mine"; targetX = tx; targetY = ty; break;
+              }
+              if (opt === "fetch_water" && t.kind === "water") {
+                foundTarget = true; activeTask = "fetch_water"; targetX = tx; targetY = ty; break;
+              }
+            }
+          }
+        }
+      }
+    }
+
+    worker.statusText = `Shift: Role is ${worker.role.toUpperCase()}${activeTask !== "idle" ? ` (${activeTask.toUpperCase()})` : ""}`;
 
     if (activeTask === "idle") {
       worker.walkTimer -= dt;
@@ -1321,40 +1419,7 @@ export function updateEntities(state: GameState, dt: number): void {
       return;
     }
 
-    const zoneRadius = 4;
-    let targetX = -1;
-    let targetY = -1;
-
-    for (let dy = -zoneRadius; dy <= zoneRadius; dy++) {
-      for (let dx = -zoneRadius; dx <= zoneRadius; dx++) {
-        const tx = worker.cabinX + dx;
-        const ty = worker.cabinY + dy;
-        if (tx >= 0 && ty >= 0 && tx < COLS && ty < ROWS) {
-          const t = grid[ty][tx];
-          if (activeTask === "water") {
-            if (t.kind === "soil" || (t.cropId && !t.watered && t.kind !== "watered")) {
-              targetX = tx;
-              targetY = ty;
-              break;
-            }
-          } else if (activeTask === "harvest") {
-            if (t.cropId && t.age >= (CROPS[t.cropId]?.growDays || 3)) {
-              targetX = tx;
-              targetY = ty;
-              break;
-            }
-          } else if (activeTask === "clear") {
-            if (t.kind === "debris_weed" || t.kind === "debris_branch" || t.kind === "debris_stone") {
-              targetX = tx;
-              targetY = ty;
-              break;
-            }
-          }
-        }
-      }
-      if (targetX !== -1) break;
-    }
-
+    // Target already found in role search
     if (targetX === -1) {
       worker.walkTimer -= dt;
       if (worker.walkTimer <= 0) {

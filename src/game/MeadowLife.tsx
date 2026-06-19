@@ -1323,12 +1323,82 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
     setSleepConfirmOpen(false);
   };
 
+  const getGlobalStorageItems = (gameState: GameState): Item[] => {
+    const items: Item[] = [];
+    const grids = [gameState.tiles, gameState.houseGrid, gameState.mineGrid].filter(Boolean) as Tile[][][];
+    for (const grid of grids) {
+      for (const row of grid) {
+        for (const tile of row) {
+          if (tile.kind === "placed_item" && tile.placedItemId === "chest" && tile.chestInventory) {
+            tile.chestInventory.forEach(itm => {
+              if (itm) {
+                const existing = items.find(i => i.id === itm.id);
+                if (existing) existing.count += itm.count;
+                else items.push({ ...itm });
+              }
+            });
+          }
+        }
+      }
+    }
+    return items;
+  };
+
+  const checkGlobalItems = (gameState: GameState, itemId: string, count: number): boolean => {
+    if (hasItems(gameState.inventory, itemId, count)) return true;
+    const globalItems = getGlobalStorageItems(gameState);
+    const globalItem = globalItems.find(i => i.id === itemId);
+    const personalCount = gameState.inventory.filter(i => i?.id === itemId).reduce((a, b) => a + (b?.count || 0), 0);
+    return personalCount + (globalItem?.count || 0) >= count;
+  };
+
+  const deductGlobalItems = (gameState: GameState, itemId: string, count: number) => {
+    let remaining = count;
+    for (let i = 0; i < gameState.inventory.length; i++) {
+      const itm = gameState.inventory[i];
+      if (itm && itm.id === itemId) {
+        if (itm.count >= remaining) {
+          itm.count -= remaining;
+          if (itm.count === 0) gameState.inventory[i] = null;
+          return;
+        } else {
+          remaining -= itm.count;
+          gameState.inventory[i] = null;
+        }
+      }
+    }
+    if (remaining > 0) {
+      const grids = [gameState.tiles, gameState.houseGrid, gameState.mineGrid].filter(Boolean) as Tile[][][];
+      for (const grid of grids) {
+        for (const row of grid) {
+          for (const tile of row) {
+            if (tile.kind === "placed_item" && tile.placedItemId === "chest" && tile.chestInventory) {
+              for (let i = 0; i < tile.chestInventory.length; i++) {
+                const itm = tile.chestInventory[i];
+                if (itm && itm.id === itemId) {
+                  if (itm.count >= remaining) {
+                    itm.count -= remaining;
+                    if (itm.count === 0) tile.chestInventory[i] = null;
+                    return;
+                  } else {
+                    remaining -= itm.count;
+                    tile.chestInventory[i] = null;
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  };
+
   const handleStartCrafting = (recipe: Recipe) => {
     let hasAll = true;
     setState((prev) => {
       const next = structuredClone(prev);
       for (const input of recipe.inputs) {
-        if (!hasItems(next.inventory, input.itemId, input.count)) {
+        if (!checkGlobalItems(next, input.itemId, input.count)) {
           hasAll = false;
           break;
         }
@@ -1340,7 +1410,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
       }
 
       for (const input of recipe.inputs) {
-        deductItems(next.inventory, input.itemId, input.count);
+        deductGlobalItems(next, input.itemId, input.count);
       }
 
       const itemDef = ITEM_DEFS[recipe.outputId];
@@ -3027,6 +3097,25 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                     Hover over an item to inspect details. Right-click to split stacks.
                   </div>
                 )}
+
+                {/* Global Storage Section */}
+                <div className="mt-4 border-t border-[#ff9200]/30 pt-3">
+                  <h3 className="text-[#ff9200] font-bold mb-2 flex items-center gap-2">
+                    <span>📦</span> Global Storage (All Chests)
+                  </h3>
+                  <div className="flex flex-wrap gap-1 bg-[#1a202c] p-3 border-2 border-[#2d3748] rounded-sm max-h-[120px] overflow-y-auto">
+                    {getGlobalStorageItems(state).length === 0 ? (
+                      <div className="text-slate-500 text-xs italic">No items stored in chests.</div>
+                    ) : (
+                      getGlobalStorageItems(state).map((item, idx) => (
+                        <div key={idx} className="w-10 h-10 bg-[#2d3748] border border-slate-600 flex items-center justify-center relative rounded text-2xl">
+                          <span title={item.name}>{item.iconSymbol}</span>
+                          <span className="absolute bottom-0.5 right-1 text-[9px] font-black text-white outline-text">{item.count}</span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
               </div>
             )}
 

@@ -1078,9 +1078,9 @@ function isTileInWorkerZone(t: Tile, role: string): boolean {
 
 
 function getWorkerSpeed(t?: Tile): number {
-  if (!t) return 0.8;
+  if (!t) return 0.25;
   const isRoad = t.placedItemId === "stone_path" || t.kind === "path";
-  return isRoad ? 0.2 : 0.8;
+  return isRoad ? 0.05 : 0.25;
 }
 
 export function isWorkerWalkable(t: Tile, workerRole?: string, workerX?: number, workerY?: number, cabinX?: number, cabinY?: number): boolean {
@@ -1276,6 +1276,32 @@ export function updateEntities(state: GameState, dt: number): void {
     // They sleep between 10 PM and 6 AM, but only if they are not currently working
     const isSleepTime = (state.time >= 22 * 60 || state.time < 6 * 60) && !isShiftTime;
     const isOnStrike = worker.energy <= 0;
+
+    // Companion logic for idle workers
+    if (worker.role === "idle") {
+      worker.statusText = "Following you";
+      const pX = Math.floor(state.player.x);
+      const pY = Math.floor(state.player.y);
+      const dist = Math.abs(worker.x - pX) + Math.abs(worker.y - pY);
+      
+      if (dist > 2) {
+        worker.walkTimer -= dt;
+        if (worker.walkTimer <= 0) {
+          worker.walkTimer = getWorkerSpeed(grid[worker.y]?.[worker.x]) * 0.8;
+          const dx = Math.sign(pX - worker.x);
+          const dy = Math.sign(pY - worker.y);
+          let nextX = worker.x + dx;
+          let nextY = worker.y;
+          if (dx !== 0 && isWorkerWalkable(grid[nextY]?.[nextX], worker.role, worker.x, worker.y, worker.cabinX, worker.cabinY)) { worker.x = nextX; }
+          else {
+            nextX = worker.x; nextY = worker.y + dy;
+            if (dy !== 0 && isWorkerWalkable(grid[nextY]?.[nextX], worker.role, worker.x, worker.y, worker.cabinX, worker.cabinY)) { worker.y = nextY; }
+          }
+        }
+      }
+      return;
+    }
+
 
     if (worker.actionTimer > 0) {
       worker.actionTimer -= dt;
@@ -1485,7 +1511,7 @@ export function updateEntities(state: GameState, dt: number): void {
       worker.statusText = `Moving to target (${targetX}, ${targetY})`;
     } else {
       if (worker.actionTimer <= 0) {
-        worker.actionTimer = 1.2;
+        worker.actionTimer = 0.4;
       } else {
         worker.actionTimer -= dt;
         if (worker.actionTimer <= 0) {

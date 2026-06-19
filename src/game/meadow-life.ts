@@ -1069,9 +1069,11 @@ export function isWalkable(t: Tile): boolean {
   );
 }
 
-export function isWorkerWalkable(t: Tile): boolean {
+export function isWorkerWalkable(t: Tile, workerRole?: string, workerX?: number, workerY?: number, cabinX?: number, cabinY?: number): boolean {
   if (!t) return false;
-  return (
+  
+  // Base collision checks
+  const isBaseWalkable = (
     t.kind !== "water" &&
     t.kind !== "tree" &&
     t.kind !== "house" &&
@@ -1086,8 +1088,29 @@ export function isWorkerWalkable(t: Tile): boolean {
     t.kind !== "ore_uranium" &&
     t.kind !== "house_wall" &&
     t.kind !== "house_bed" &&
-    (t.kind !== "placed_item" || t.cropId !== undefined || t.placedItemId === "chicken_egg")
+    (t.kind !== "placed_item" || t.cropId !== undefined || t.placedItemId === "chicken_egg" || t.placedItemId === "stone_path")
   );
+
+  if (!isBaseWalkable) return false;
+
+  // If worker context is provided, enforce zoning and road restrictions
+  if (workerRole && workerRole !== "idle") {
+    const isRoad = t.placedItemId === "stone_path" || t.kind === "path";
+    const isInZone = t.zone === workerRole || (workerRole === "water_collector" && t.zone === "water");
+    // Let them walk around their cabin so they don't get permanently stuck
+    let isNearCabin = false;
+    if (workerX !== undefined && workerY !== undefined && cabinX !== undefined && cabinY !== undefined) {
+       // We can't easily get t.x/t.y here unless we pass it, but if they are offroad, they can only move towards a road.
+       // For simplicity, we just check if the tile is a road or in zone.
+    }
+    
+    // Workers MUST walk on roads or inside their assigned zone
+    if (!isRoad && !isInZone) {
+      return false; // Blocking movement off-road
+    }
+  }
+
+  return true;
 }
 
 export function tickFurnace(tile: Tile, dt: number): void {
@@ -1274,12 +1297,12 @@ export function updateEntities(state: GameState, dt: number): void {
 
           let nextX = worker.x + dx;
           let nextY = worker.y;
-          if (dx !== 0 && isWorkerWalkable(grid[nextY]?.[nextX])) {
+          if (dx !== 0 && isWorkerWalkable(grid[nextY]?.[nextX], worker.role, worker.x, worker.y, worker.cabinX, worker.cabinY)) {
             worker.x = nextX;
           } else {
             nextX = worker.x;
             nextY = worker.y + dy;
-            if (dy !== 0 && isWorkerWalkable(grid[nextY]?.[nextX])) {
+            if (dy !== 0 && isWorkerWalkable(grid[nextY]?.[nextX], worker.role, worker.x, worker.y, worker.cabinX, worker.cabinY)) {
               worker.y = nextY;
             }
           }
@@ -1297,7 +1320,7 @@ export function updateEntities(state: GameState, dt: number): void {
     }
 
     // Inventory full check -> find chest
-    if (worker.inventory) {
+    if (worker.inventory, worker.role, worker.x, worker.y, worker.cabinX, worker.cabinY) {
       worker.statusText = "Inventory full, seeking Chest...";
       let nearestChestX = -1;
       let nearestChestY = -1;
@@ -1339,10 +1362,10 @@ export function updateEntities(state: GameState, dt: number): void {
             const dy = Math.sign(nearestChestY - worker.y);
             let nextX = worker.x + dx;
             let nextY = worker.y;
-            if (dx !== 0 && isWorkerWalkable(grid[nextY]?.[nextX])) { worker.x = nextX; }
+            if (dx !== 0 && isWorkerWalkable(grid[nextY]?.[nextX], worker.role, worker.x, worker.y, worker.cabinX, worker.cabinY)) { worker.x = nextX; }
             else {
               nextX = worker.x; nextY = worker.y + dy;
-              if (dy !== 0 && isWorkerWalkable(grid[nextY]?.[nextX])) { worker.y = nextY; }
+              if (dy !== 0 && isWorkerWalkable(grid[nextY]?.[nextX], worker.role, worker.x, worker.y, worker.cabinX, worker.cabinY), worker.role, worker.x, worker.y, worker.cabinX, worker.cabinY) { worker.y = nextY; }
             }
           }
           return;
@@ -1412,7 +1435,7 @@ export function updateEntities(state: GameState, dt: number): void {
         const d = dirs[Math.floor(Math.random() * dirs.length)];
         const tx = worker.cabinX + d[0] * 2;
         const ty = worker.cabinY + d[1] * 2;
-        if (tx >= 0 && ty >= 0 && tx < COLS && ty < ROWS && isWorkerWalkable(grid[ty]?.[tx])) {
+        if (tx >= 0 && ty >= 0 && tx < COLS && ty < ROWS && isWorkerWalkable(grid[ty]?.[tx], worker.role, worker.x, worker.y, worker.cabinX, worker.cabinY)) {
           worker.x = tx;
           worker.y = ty;
         }
@@ -1434,7 +1457,7 @@ export function updateEntities(state: GameState, dt: number): void {
           Math.abs(tx - worker.cabinX) <= roleRadius &&
           Math.abs(ty - worker.cabinY) <= roleRadius &&
           tx >= 0 && ty >= 0 && tx < COLS && ty < ROWS &&
-          isWorkerWalkable(grid[ty]?.[tx])
+          isWorkerWalkable(grid[ty]?.[tx], worker.role, worker.x, worker.y, worker.cabinX, worker.cabinY)
         ) {
           worker.x = tx;
           worker.y = ty;
@@ -1454,12 +1477,12 @@ export function updateEntities(state: GameState, dt: number): void {
 
         let nextX = worker.x + dx;
         let nextY = worker.y;
-        if (dx !== 0 && isWorkerWalkable(grid[nextY]?.[nextX])) {
+        if (dx !== 0 && isWorkerWalkable(grid[nextY]?.[nextX], worker.role, worker.x, worker.y, worker.cabinX, worker.cabinY)) {
           worker.x = nextX;
         } else {
           nextX = worker.x;
           nextY = worker.y + dy;
-          if (dy !== 0 && isWorkerWalkable(grid[nextY]?.[nextX])) {
+          if (dy !== 0 && isWorkerWalkable(grid[nextY]?.[nextX], worker.role, worker.x, worker.y, worker.cabinX, worker.cabinY), worker.role, worker.x, worker.y, worker.cabinX, worker.cabinY) {
             worker.y = nextY;
           }
         }

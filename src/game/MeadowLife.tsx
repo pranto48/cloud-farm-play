@@ -2589,7 +2589,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                         onClick={() => {
                           setState(prev => {
                             const next = structuredClone(prev);
-                            next.money += item.price;
+                            next.coins += item.price;
                             if (next.inventory[idx]!.count > 1) {
                               next.inventory[idx]!.count--;
                             } else {
@@ -2654,14 +2654,14 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                         return;
                       }
                       
-                      if (state.money < 1000) {
+                      if (state.coins < 1000) {
                         toast.error("Not enough gold to hire a worker (1000g).");
                         return;
                       }
 
                       setState(prev => {
                         const next = structuredClone(prev);
-                        next.money -= 1000;
+                        next.coins -= 1000;
                         if (!next.workers) next.workers = [];
                         next.workers.push({
                           id: `worker_${Date.now()}`,

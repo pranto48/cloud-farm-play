@@ -80,7 +80,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
   const [inventoryOpen, setInventoryOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<"inventory" | "crafting" | "social" | "skills" | "workers">("inventory");
   const [shopOpen, setShopOpen] = useState(false);
-  const [shopTab, setShopTab] = useState<"seeds" | "animals" | "upgrades">("seeds");
+  const [shopTab, setShopTab] = useState<"seeds" | "animals" | "upgrades" | "sell" | "hire">("seeds");
 
   const recipesByCategory = useMemo(() => {
     return {
@@ -2407,7 +2407,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
 
           {/* Tab buttons */}
           <div className="flex border-b border-slate-800 gap-1 my-2">
-            {(["seeds", "animals", "upgrades"] as const).map((tab) => (
+            {(["seeds", "animals", "upgrades", "sell", "hire"] as const).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setShopTab(tab)}
@@ -2492,6 +2492,133 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                     </Button>
                   </div>
                 ))}
+              </div>
+            )}
+
+                        {/* Sell inventory items */}
+            {shopTab === "sell" && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {state.inventory.map((item, idx) => {
+                  if (!item || !item.price) return null;
+                  return (
+                    <div
+                      key={`${item.id}_${idx}`}
+                      className="p-2.5 bg-[#181a1c] border border-slate-800 flex justify-between items-center rounded-none"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="text-xl">{item.iconSymbol || "📦"}</span>
+                        <div>
+                          <div className="font-bold text-xs">{item.name}</div>
+                          <div className="text-[9px] text-slate-400">Qty: {item.count}</div>
+                        </div>
+                      </div>
+                      <Button
+                        size="sm"
+                        className="text-xs bg-[#3a3f44] border border-slate-700 text-slate-200 hover:bg-emerald-500/25 hover:border-emerald-500 hover:text-emerald-400 rounded-none font-mono"
+                        onClick={() => {
+                          setState(prev => {
+                            const next = structuredClone(prev);
+                            next.money += item.price;
+                            if (next.inventory[idx]!.count > 1) {
+                              next.inventory[idx]!.count--;
+                            } else {
+                              next.inventory[idx] = null;
+                            }
+                            gameAudio.playCoin();
+                            return next;
+                          });
+                        }}
+                      >
+                        Sell 1x (+{item.price}g)
+                      </Button>
+                    </div>
+                  );
+                })}
+                {state.inventory.every(item => !item || !item.price) && (
+                  <div className="col-span-1 sm:col-span-2 text-center text-slate-500 text-xs py-8">
+                    You have no sellable items in your inventory.
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Hire Workers */}
+            {shopTab === "hire" && (
+              <div className="space-y-2">
+                <div className="p-3 bg-[#181a1c] border border-slate-805 flex flex-col gap-2 rounded-none">
+                  <div className="flex items-center gap-3">
+                    <span className="text-2xl">👷</span>
+                    <div>
+                      <div className="font-bold text-sm text-[#ff9200]">Hire a Worker</div>
+                      <div className="text-xs text-slate-400">
+                        Requires a vacant Worker Cabin to house them.<br/>
+                        Workers automate farming, mining, and woodcutting.
+                      </div>
+                    </div>
+                  </div>
+                  <Button
+                    size="sm"
+                    className="w-full bg-[#3a3f44] border border-slate-700 text-slate-200 hover:bg-[#ff9200]/25 hover:border-[#ff9200] rounded-none font-mono mt-2"
+                    onClick={() => {
+                      // Find an available worker cabin
+                      let emptyCabin = null;
+                      if (!state.workers) state.workers = [];
+                      for (let y = 0; y < state.tiles.length; y++) {
+                        for (let x = 0; x < state.tiles[y].length; x++) {
+                          const tile = state.tiles[y][x];
+                          if (tile.kind === "placed_item" && tile.placedItemId === "worker_cabin") {
+                            // Check if this cabin already belongs to a worker
+                            const occupant = state.workers.find(w => w.cabinX === x && w.cabinY === y);
+                            if (!occupant) {
+                              emptyCabin = { x, y };
+                              break;
+                            }
+                          }
+                        }
+                        if (emptyCabin) break;
+                      }
+
+                      if (!emptyCabin) {
+                        toast.error("You need to buy and place a Worker Cabin first!");
+                        return;
+                      }
+                      
+                      if (state.money < 1000) {
+                        toast.error("Not enough gold to hire a worker (1000g).");
+                        return;
+                      }
+
+                      setState(prev => {
+                        const next = structuredClone(prev);
+                        next.money -= 1000;
+                        if (!next.workers) next.workers = [];
+                        next.workers.push({
+                          id: `worker_${Date.now()}`,
+                          name: `Worker #${next.workers.length + 1}`,
+                          cabinX: emptyCabin!.x,
+                          cabinY: emptyCabin!.y,
+                          x: emptyCabin!.x,
+                          y: emptyCabin!.y,
+                          subX: emptyCabin!.x,
+                          subY: emptyCabin!.y,
+                          task: "idle",
+                          role: "idle",
+                          inventory: null,
+                          energy: 100,
+                          hasEatenToday: false,
+                          walkTimer: Math.random() * 3 + 2,
+                          actionTimer: 0,
+                          statusText: "Just hired!",
+                        });
+                        gameAudio.playCoin();
+                        toast.success("Worker Hired!");
+                        return next;
+                      });
+                    }}
+                  >
+                    Hire Worker (1000g)
+                  </Button>
+                </div>
               </div>
             )}
 

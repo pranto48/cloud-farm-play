@@ -46,6 +46,8 @@ export interface Tile {
   /** Placed item details. */
   placedItemId?: string;
   chestInventory?: (Item | null)[];
+  /** Assigned work zone. */
+  zone?: "farming" | "mining" | "woodcutting" | "water";
   hitPoints?: number;
   lastHitTime?: number;
   lastRustleTime?: number;

@@ -354,6 +354,23 @@ export const ITEM_DEFS: Record<string, Omit<Item, "count">> = {
     iconColor: "#1a1a1a",
     iconSymbol: "🪨",
   },
+
+  // New Ores & Bars
+  silver_ore: {
+    id: "silver_ore", name: "Silver Ore", type: "resource",
+    description: "Raw silver. Can be smelted into bars.",
+    price: 20, iconColor: "#e5e4e2", iconSymbol: "🪨"
+  },
+  coal: {
+    id: "coal", name: "Coal", type: "resource",
+    description: "A combustible black rock used as fuel.",
+    price: 15, iconColor: "#2f4f4f", iconSymbol: "🌑"
+  },
+  silver_bar: {
+    id: "silver_bar", name: "Silver Bar", type: "resource",
+    description: "A precious silver bar.",
+    price: 100, iconColor: "#d3d3d3", iconSymbol: "🧱"
+  },
   copper_ore: {
     id: "copper_ore",
     name: "Copper Ore",
@@ -518,6 +535,38 @@ export const ITEM_DEFS: Record<string, Omit<Item, "count">> = {
   },
 
   // Placeables
+
+  // Factory Structures
+  wood_cutter: {
+    id: "wood_cutter", name: "Sawmill", type: "furniture",
+    description: "Automatically cuts wood into planks.",
+    price: 500, iconColor: "#8b4513", iconSymbol: "⚙️"
+  },
+  stone_cutter: {
+    id: "stone_cutter", name: "Stone Cutter", type: "furniture",
+    description: "Refines stone into usable blocks.",
+    price: 500, iconColor: "#808080", iconSymbol: "⚙️"
+  },
+  solar_panel: {
+    id: "solar_panel", name: "Solar Panel", type: "furniture",
+    description: "Generates electricity during the day.",
+    price: 2500, iconColor: "#1e90ff", iconSymbol: "☀️"
+  },
+  battery: {
+    id: "battery", name: "Battery", type: "furniture",
+    description: "Stores excess electricity for night-time.",
+    price: 3000, iconColor: "#32cd32", iconSymbol: "🔋"
+  },
+  pet_house: {
+    id: "pet_house", name: "Pet House", type: "furniture",
+    description: "A cozy home for your pets.",
+    price: 400, iconColor: "#cd853f", iconSymbol: "🏠"
+  },
+  animal_house: {
+    id: "animal_house", name: "Animal House", type: "furniture",
+    description: "A barn for your farm animals.",
+    price: 1200, iconColor: "#a52a2a", iconSymbol: "🏚️"
+  },
   chest: {
     id: "chest",
     name: "Wood Chest",

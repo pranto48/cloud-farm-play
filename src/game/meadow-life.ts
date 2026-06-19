@@ -5,8 +5,8 @@ import { FISH_TYPES, type FishingState } from "./fishing";
 import { gameAudio } from "./audio";
 
 export const TILE = 32;
-export const COLS = 120;
-export const ROWS = 120;
+export const COLS = 240;
+export const ROWS = 240;
 
 export type TileKind =
   | "grass"
@@ -28,6 +28,8 @@ export type TileKind =
   | "ore_copper"
   | "ore_iron"
   | "ore_gold"
+  | "ore_silver"
+  | "ore_coal"
   | "ore_uranium"
   | "house_wall"
   | "house_floor"
@@ -420,6 +422,25 @@ export const TECHNOLOGIES: TechDef[] = [
     prerequisites: ["tech_speed_smelting"],
     unlocks: "Dual crafting queue",
   },
+
+  {
+    id: "tech_electricity",
+    name: "Electricity",
+    description: "Unlocks Solar Panels and Batteries to power machines.",
+    icon: "⚡",
+    cost: 500,
+    prerequisites: ["tech_mass_production"],
+    unlocks: "Solar Panel, Battery",
+  },
+  {
+    id: "tech_automation",
+    name: "Automation",
+    description: "Unlocks the Furnace, Wood Cutter, and Stone Cutter.",
+    icon: "⚙️",
+    cost: 600,
+    prerequisites: ["tech_electricity"],
+    unlocks: "Furnace, Wood Cutter, Stone Cutter",
+  },
   {
     id: "tech_worker_boost",
     name: "Worker Training Program",
@@ -442,6 +463,55 @@ export interface Recipe {
 }
 
 export const CRAFTING_RECIPES: Recipe[] = [
+
+  {
+    id: "solar_panel", name: "Solar Panel",
+    description: "Generates electricity during the day.",
+    inputs: [{ itemId: "iron_bar", count: 10 }, { itemId: "gold_bar", count: 2 }],
+    outputId: "solar_panel", outputCount: 1,
+  },
+  {
+    id: "battery", name: "Battery",
+    description: "Stores excess electricity for night-time.",
+    inputs: [{ itemId: "iron_bar", count: 5 }, { itemId: "coal", count: 10 }, { itemId: "gold_bar", count: 1 }],
+    outputId: "battery", outputCount: 1,
+  },
+  {
+    id: "wood_cutter", name: "Sawmill",
+    description: "Automatically cuts wood into planks.",
+    inputs: [{ itemId: "iron_bar", count: 5 }, { itemId: "wood", count: 50 }],
+    outputId: "wood_cutter", outputCount: 1,
+  },
+  {
+    id: "stone_cutter", name: "Stone Cutter",
+    description: "Refines stone into usable blocks.",
+    inputs: [{ itemId: "iron_bar", count: 5 }, { itemId: "stone", count: 50 }],
+    outputId: "stone_cutter", outputCount: 1,
+  },
+  {
+    id: "furnace", name: "Furnace",
+    description: "Smelts ores into bars using coal or electricity.",
+    inputs: [{ itemId: "stone", count: 100 }, { itemId: "coal", count: 20 }],
+    outputId: "furnace", outputCount: 1,
+  },
+  {
+    id: "iron_bar", name: "Iron Bar",
+    description: "Smelt Iron Ore.",
+    inputs: [{ itemId: "iron_ore", count: 5 }, { itemId: "coal", count: 1 }],
+    outputId: "iron_bar", outputCount: 1,
+  },
+  {
+    id: "silver_bar", name: "Silver Bar",
+    description: "Smelt Silver Ore.",
+    inputs: [{ itemId: "silver_ore", count: 5 }, { itemId: "coal", count: 1 }],
+    outputId: "silver_bar", outputCount: 1,
+  },
+  {
+    id: "gold_bar", name: "Gold Bar",
+    description: "Smelt Gold Ore.",
+    inputs: [{ itemId: "gold_ore", count: 5 }, { itemId: "coal", count: 1 }],
+    outputId: "gold_bar", outputCount: 1,
+  },
   {
     id: "bed",
     name: "Cozy Bed",
@@ -624,6 +694,8 @@ function makeMap(): Tile[][] {
     Array.from({ length: COLS }, () => ({ kind: "grass" as TileKind, age: -1, watered: false }))
   );
 
+  const noise = new ImprovedNoise();
+
   // Farm zone starter plot
   for (let y = 32; y <= 42; y++) {
     for (let x = 8; x <= 22; x++) t[y][x].kind = "soil";
@@ -634,11 +706,11 @@ function makeMap(): Tile[][] {
     for (let x = 12; x <= 17; x++) t[y][x].kind = "house";
   }
 
-  // Mailbox setup next to house
+  // Mailbox setup
   t[STATIC_POINTS.mailbox.y][STATIC_POINTS.mailbox.x].kind = "placed_item";
   t[STATIC_POINTS.mailbox.y][STATIC_POINTS.mailbox.x].placedItemId = "mailbox";
 
-  // Mine Cave entrance in the top right
+  // Mine Cave entrance
   t[6][72].kind = "mine_cave";
 
   // Shop counter in the town zone (right side)
@@ -647,44 +719,36 @@ function makeMap(): Tile[][] {
   }
   t[40][70].kind = "shop";
 
-  // NPC spawn zones near town
-  for (let x = 67; x <= 72; x++) {
-    t[41][x].kind = "path";
-  }
-
-  // Paths
-  for (let x = 16; x <= 70; x++) t[44][x].kind = "path";
-  for (let y = 29; y <= 44; y++) t[y][16].kind = "path";
-  for (let y = 40; y <= 44; y++) t[y][70].kind = "path";
-  for (let y = 7; y <= 44; y++) t[y][72].kind = "path";
-
-  // South river / pond
-  for (let y = 54; y <= 66; y++) {
-    for (let x = 2; x <= 14; x++) {
-      if (Math.abs(y - 60) + Math.abs(x - 8) < 10) {
+  // Procedural Map Generation
+  for (let y = 0; y < ROWS; y++) {
+    for (let x = 0; x < COLS; x++) {
+      if (t[y][x].kind !== "grass") continue; // skip already placed structures
+      
+      const isStartArea = x < 80 && y < 60;
+      
+      const waterVal = noise.noise(x * 0.05, y * 0.05, 0);
+      if (waterVal > 0.4 && !isStartArea) {
         t[y][x].kind = "water";
+        continue;
       }
-    }
-  }
 
-  // Seed trees
-  const trees: Array<[number, number]> = [
-    [6, 12], [8, 10], [20, 18], [24, 22], [28, 40], [36, 38], [46, 18], [60, 44], [58, 12], [40, 52],
-    [62, 24], [66, 26], [72, 50], [50, 64], [26, 58], [14, 48], [74, 16], [78, 30],
-  ];
-  trees.forEach(([x, y]) => {
-    if (x >= 0 && y >= 0 && x < COLS && y < ROWS && t[y][x].kind === "grass") {
-      t[y][x].kind = "tree";
-    }
-  });
+      const forestVal = noise.noise(x * 0.08, y * 0.08, 100);
+      const oreVal = noise.noise(x * 0.1, y * 0.1, 200);
 
-  // Overgrown debris across the whole map
-  for (let y = 1; y < ROWS - 1; y++) {
-    for (let x = 1; x < COLS - 1; x++) {
-      // Avoid spawning debris directly on top of paths, houses, or water
-      if (t[y][x].kind === "grass") {
-        const isStartPlot = (x >= 5 && x <= 25 && y >= 20 && y <= 45);
-        const spawnRate = isStartPlot ? 0.08 : 0.22;
+      // Random scattering
+      if (forestVal > 0.3) {
+        if (Math.random() < 0.6) t[y][x].kind = "tree";
+      } else if (oreVal > 0.35 && !isStartArea) {
+        // High density ore patch
+        const rand = Math.random();
+        if (rand < 0.1) t[y][x].kind = "ore_iron";
+        else if (rand < 0.15) t[y][x].kind = "ore_coal";
+        else if (rand < 0.20) t[y][x].kind = "ore_silver";
+        else if (rand < 0.22) t[y][x].kind = "ore_gold";
+        else t[y][x].kind = "debris_stone";
+      } else {
+        // Normal debris scattered
+        const spawnRate = isStartArea ? 0.05 : 0.15;
         if (Math.random() < spawnRate) {
           const rand = Math.random();
           if (rand < 0.45) t[y][x].kind = "debris_weed";
@@ -695,6 +759,13 @@ function makeMap(): Tile[][] {
       }
     }
   }
+
+  // Ensure path connections near house
+  for (let x = 67; x <= 72; x++) t[41][x].kind = "path";
+  for (let x = 16; x <= 70; x++) t[44][x].kind = "path";
+  for (let y = 29; y <= 44; y++) t[y][16].kind = "path";
+  for (let y = 40; y <= 44; y++) t[y][70].kind = "path";
+  for (let y = 7; y <= 44; y++) t[y][72].kind = "path";
 
   return t;
 }
@@ -1063,6 +1134,8 @@ export function isWalkable(t: Tile): boolean {
     t.kind !== "ore_iron" &&
     t.kind !== "ore_gold" &&
     t.kind !== "ore_uranium" &&
+    t.kind !== "ore_silver" &&
+    t.kind !== "ore_coal" &&
     t.kind !== "house_wall" &&
     t.kind !== "house_bed" &&
     t.kind !== "placed_item" // chests & sprinklers block movement
@@ -1100,6 +1173,8 @@ export function isWorkerWalkable(t: Tile, workerRole?: string, workerX?: number,
     t.kind !== "ore_iron" &&
     t.kind !== "ore_gold" &&
     t.kind !== "ore_uranium" &&
+    t.kind !== "ore_silver" &&
+    t.kind !== "ore_coal" &&
     t.kind !== "house_wall" &&
     t.kind !== "house_bed" &&
     (t.kind !== "placed_item" || t.cropId !== undefined || t.placedItemId === "chicken_egg" || t.placedItemId === "stone_path")
@@ -1119,6 +1194,7 @@ export function tickFurnace(tile: Tile, dt: number): void {
   const smeltRecipes: Record<string, string> = {
     copper_ore: "copper_bar",
     iron_ore: "iron_bar",
+    silver_ore: "silver_bar",
     gold_ore: "gold_bar",
     uranium_ore: "uranium_bar",
   };
@@ -1170,17 +1246,92 @@ export function tickFurnace(tile: Tile, dt: number): void {
   }
 }
 
+
+// --- Factory Automation ---
+function getAdjacentChests(grid: Tile[][], y: number, x: number): Tile[] {
+  const chests: Tile[] = [];
+  const dirs = [[-1, 0], [1, 0], [0, -1], [0, 1]];
+  dirs.forEach(([dy, dx]) => {
+    const ny = y + dy, nx = x + dx;
+    if (ny >= 0 && ny < ROWS && nx >= 0 && nx < COLS) {
+      const t = grid[ny][nx];
+      if (t.kind === "placed_item" && t.placedItemId === "chest" && t.chestInventory) {
+        chests.push(t);
+      }
+    }
+  });
+  return chests;
+}
+
+function processFactory(tile: Tile, grid: Tile[][], y: number, x: number, dt: number, inputId: string, outputId: string, cost: number, time: number) {
+  if (tile.smeltActive) {
+    if (tile.smeltTimer !== undefined) {
+      tile.smeltTimer -= dt;
+      if (tile.smeltTimer <= 0) {
+        tile.smeltActive = false;
+        tile.smeltTimer = 0;
+        
+        // Try to push to adjacent chest
+        const chests = getAdjacentChests(grid, y, x);
+        let pushed = false;
+        for (const chest of chests) {
+          // Find slot with same item or empty
+          for (let i = 0; i < chest.chestInventory!.length; i++) {
+            if (chest.chestInventory![i] === null) {
+              chest.chestInventory![i] = createItem(outputId, 1);
+              pushed = true; break;
+            } else if (chest.chestInventory![i]!.id === outputId && chest.chestInventory![i]!.count < 99) {
+              chest.chestInventory![i]!.count++;
+              pushed = true; break;
+            }
+          }
+          if (pushed) break;
+        }
+      }
+    }
+  } else {
+    // Try to pull from adjacent chest
+    const chests = getAdjacentChests(grid, y, x);
+    let pulled = false;
+    for (const chest of chests) {
+      for (let i = 0; i < chest.chestInventory!.length; i++) {
+        const item = chest.chestInventory![i];
+        if (item && item.id === inputId && item.count >= cost) {
+          item.count -= cost;
+          if (item.count <= 0) chest.chestInventory![i] = null;
+          pulled = true;
+          break;
+        }
+      }
+      if (pulled) break;
+    }
+    
+    if (pulled) {
+      tile.smeltActive = true;
+      tile.smeltTimer = time;
+      tile.smeltMaxTime = time;
+    }
+  }
+}
+
 export function updateEntities(state: GameState, dt: number): void {
-  // Update furnaces on farm
+  // Update factory buildings on farm
+  const isPowered = (state.unlockedTechs || []).includes("tech_electricity"); // Basic electricity simulation: unlocked globally if you have the tech
+  
   for (let y = 0; y < ROWS; y++) {
     for (let x = 0; x < COLS; x++) {
       const tile = state.tiles[y]?.[x];
-      if (tile && tile.kind === "placed_item" && tile.placedItemId === "furnace") {
-        tickFurnace(tile, dt);
+      if (tile && tile.kind === "placed_item") {
+        if (tile.placedItemId === "furnace") {
+          tickFurnace(tile, dt);
+        } else if (tile.placedItemId === "wood_cutter") {
+          processFactory(tile, state.tiles, y, x, dt, "wood", "fiber", 2, 5); // Wood to Fiber (Sawdust)
+        } else if (tile.placedItemId === "stone_cutter") {
+          processFactory(tile, state.tiles, y, x, dt, "stone", "coal", 3, 5); // Stone to Coal (Crushing)
+        }
       }
     }
   }
-
   // Update furnaces inside house
   if (state.houseGrid) {
     for (let y = 0; y < state.houseGrid.length; y++) {
@@ -2061,15 +2212,17 @@ export function interact(
             maxAge: 0.3,
           });
         }
-      } else if (tile.kind === "ore_copper" || tile.kind === "ore_iron" || tile.kind === "ore_gold" || tile.kind === "ore_uranium") {
+      } else if (tile.kind === "ore_copper" || tile.kind === "ore_iron" || tile.kind === "ore_gold" || tile.kind === "ore_uranium" || tile.kind === "ore_silver" || tile.kind === "ore_coal") {
         tile.lastHitTime = Date.now();
-        const oreMap = {
+        const oreMap: Record<string, any> = {
           ore_copper: { item: "copper_ore", xp: 8, color: "#d35400" },
           ore_iron: { item: "iron_ore", xp: 15, color: "#95a5a6" },
           ore_gold: { item: "gold_ore", xp: 30, color: "#f1c40f" },
           ore_uranium: { item: "uranium_ore", xp: 50, color: "#2ecc71" },
+          ore_silver: { item: "silver_ore", xp: 20, color: "#bdc3c7" },
+          ore_coal: { item: "coal", xp: 10, color: "#2c3e50" },
         };
-        const config = oreMap[tile.kind as keyof typeof oreMap];
+        const config = oreMap[tile.kind];
 
         if (tile.hitPoints === undefined) tile.hitPoints = 4;
         tile.hitPoints -= pickDmg;
@@ -2942,24 +3095,7 @@ export function draw(
             ctx.arc(0, 0, 1.2, 0, Math.PI * 2);
             ctx.fill();
           }
-        
-  // 9. Time of day lighting overlay
-  if (!state.inHouse && !state.inMine) {
-    const hours = state.time / 60;
-    let alpha = 0;
-    let color = "0,0,0";
-    if (hours < 6) { alpha = 0.55; color = "10,10,40"; } // deep night
-    else if (hours < 8) { alpha = 0.35 - ((hours - 6) / 2) * 0.35; color = "255,140,50"; } // sunrise
-    else if (hours >= 17 && hours < 20) { alpha = ((hours - 17) / 3) * 0.45; color = "255,90,0"; } // sunset
-    else if (hours >= 20) { alpha = 0.45 + Math.min(1, (hours - 20) / 4) * 0.1; color = "10,10,40"; } // night
-
-    if (alpha > 0) {
-      ctx.fillStyle = `rgba(${color}, ${alpha})`;
-      ctx.fillRect(cameraX, cameraY, viewWidth, viewHeight);
-    }
-  }
-
-  ctx.restore();
+          ctx.restore();
         }
       } else if (t.kind === "soil" || t.kind === "watered" || t.cropId !== undefined) {
         // Draw connected soil plots with a darker shadow/border first
@@ -3309,24 +3445,7 @@ export function draw(
           });
         }
 
-      
-  // 9. Time of day lighting overlay
-  if (!state.inHouse && !state.inMine) {
-    const hours = state.time / 60;
-    let alpha = 0;
-    let color = "0,0,0";
-    if (hours < 6) { alpha = 0.55; color = "10,10,40"; } // deep night
-    else if (hours < 8) { alpha = 0.35 - ((hours - 6) / 2) * 0.35; color = "255,140,50"; } // sunrise
-    else if (hours >= 17 && hours < 20) { alpha = ((hours - 17) / 3) * 0.45; color = "255,90,0"; } // sunset
-    else if (hours >= 20) { alpha = 0.45 + Math.min(1, (hours - 20) / 4) * 0.1; color = "10,10,40"; } // night
-
-    if (alpha > 0) {
-      ctx.fillStyle = `rgba(${color}, ${alpha})`;
-      ctx.fillRect(cameraX, cameraY, viewWidth, viewHeight);
-    }
-  }
-
-  ctx.restore();
+        ctx.restore();
       }
 
       // Render Debris & Ores with hit/rustle shake
@@ -3414,7 +3533,7 @@ export function draw(
         ctx.lineTo(px + 13 + debrisShake, py + 18);
         ctx.stroke();
 
-      } else if (t.kind === "ore_copper" || t.kind === "ore_iron" || t.kind === "ore_gold" || t.kind === "ore_uranium") {
+      } else if (t.kind === "ore_copper" || t.kind === "ore_iron" || t.kind === "ore_gold" || t.kind === "ore_uranium" || t.kind === "ore_silver" || t.kind === "ore_coal") {
         // Rich crystalline metallic ore deposit
         ctx.fillStyle = "rgba(0, 0, 0, 0.25)";
         ctx.beginPath();
@@ -3442,8 +3561,10 @@ export function draw(
           ore_copper: ["#d35400", "#e67e22", "#f39c12"],
           ore_iron: ["#7f8c8d", "#bdc3c7", "#ecf0f1"],
           ore_gold: ["#d4ac0d", "#f1c40f", "#f9e79f"],
-          ore_uranium: ["#145a32", "#2ecc71", "#a3e4d7"]
-        }[t.kind as "ore_copper" | "ore_iron" | "ore_gold" | "ore_uranium"] || ["#fff", "#fff", "#fff"];
+          ore_uranium: ["#145a32", "#2ecc71", "#a3e4d7"],
+          ore_silver: ["#7f8c8d", "#bdc3c7", "#ffffff"],
+          ore_coal: ["#17202a", "#2c3e50", "#5d6d7e"]
+        }[t.kind as "ore_copper" | "ore_iron" | "ore_gold" | "ore_uranium" | "ore_silver" | "ore_coal"] || ["#fff", "#fff", "#fff"];
 
         const crystals = [
           { dx: -4, dy: -6, size: 4 },
@@ -3516,25 +3637,64 @@ export function draw(
           ctx.rotate(Date.now() / 150);
           ctx.fillStyle = "#95a5a6";
           ctx.fillRect(-6, -1, 12, 2);
-        
-  // 9. Time of day lighting overlay
-  if (!state.inHouse && !state.inMine) {
-    const hours = state.time / 60;
-    let alpha = 0;
-    let color = "0,0,0";
-    if (hours < 6) { alpha = 0.55; color = "10,10,40"; } // deep night
-    else if (hours < 8) { alpha = 0.35 - ((hours - 6) / 2) * 0.35; color = "255,140,50"; } // sunrise
-    else if (hours >= 17 && hours < 20) { alpha = ((hours - 17) / 3) * 0.45; color = "255,90,0"; } // sunset
-    else if (hours >= 20) { alpha = 0.45 + Math.min(1, (hours - 20) / 4) * 0.1; color = "10,10,40"; } // night
-
-    if (alpha > 0) {
-      ctx.fillStyle = `rgba(${color}, ${alpha})`;
-      ctx.fillRect(cameraX, cameraY, viewWidth, viewHeight);
-    }
-  }
-
-  ctx.restore();
-        } else if (id === "chicken_egg") {
+          ctx.restore();
+        } else if (id === "furnace") {
+          ctx.fillStyle = "#566573";
+          ctx.fillRect(px + 4, py + 4, TILE - 8, TILE - 4);
+          ctx.fillStyle = "#2c3e50";
+          ctx.fillRect(px + 8, py + 16, TILE - 16, TILE - 20);
+          ctx.fillStyle = "#e67e22"; // fire glow
+          ctx.beginPath();
+          ctx.arc(px + 16, py + 22, 3 + Math.sin(Date.now() / 100), 0, Math.PI * 2);
+          ctx.fill();
+        } else if (id === "wood_cutter") {
+          ctx.fillStyle = "#873600";
+          ctx.fillRect(px + 4, py + 8, TILE - 8, TILE - 12);
+          ctx.fillStyle = "#bdc3c7"; // saw blade
+          ctx.beginPath();
+          ctx.arc(px + 16, py + 10, 6, 0, Math.PI * 2);
+          ctx.fill();
+        } else if (id === "stone_cutter") {
+          ctx.fillStyle = "#7f8c8d";
+          ctx.fillRect(px + 4, py + 8, TILE - 8, TILE - 12);
+          ctx.fillStyle = "#bdc3c7"; // saw blade
+          ctx.fillRect(px + 14, py + 6, 4, 12);
+        } else if (id === "solar_panel") {
+          ctx.fillStyle = "#2980b9";
+          ctx.fillRect(px + 2, py + 6, TILE - 4, TILE - 10);
+          ctx.fillStyle = "#ecf0f1";
+          ctx.fillRect(px + 14, py + 6, 2, TILE - 10);
+          ctx.fillRect(px + 2, py + 14, TILE - 4, 2);
+        } else if (id === "battery") {
+          ctx.fillStyle = "#27ae60";
+          ctx.fillRect(px + 8, py + 8, TILE - 16, TILE - 8);
+          ctx.fillStyle = "#f1c40f";
+          ctx.fillRect(px + 12, py + 14, 8, 4);
+        } else if (id === "pet_house") {
+          ctx.fillStyle = "#d35400";
+          ctx.beginPath();
+          ctx.moveTo(px + 16, py + 2);
+          ctx.lineTo(px + 2, py + 14);
+          ctx.lineTo(px + 30, py + 14);
+          ctx.fill();
+          ctx.fillStyle = "#e67e22";
+          ctx.fillRect(px + 6, py + 14, TILE - 12, TILE - 14);
+          ctx.fillStyle = "#000000";
+          ctx.beginPath();
+          ctx.arc(px + 16, py + 24, 4, Math.PI, 0);
+          ctx.fill();
+        } else if (id === "animal_house") {
+          ctx.fillStyle = "#c0392b";
+          ctx.beginPath();
+          ctx.moveTo(px + 16, py + 2);
+          ctx.lineTo(px + 0, py + 16);
+          ctx.lineTo(px + 32, py + 16);
+          ctx.fill();
+          ctx.fillStyle = "#e74c3c";
+          ctx.fillRect(px + 2, py + 16, TILE - 4, TILE - 16);
+          ctx.fillStyle = "#ecf0f1";
+          ctx.fillRect(px + 10, py + 20, 12, 12);
+                } else if (id === "chicken_egg") {
           ctx.fillStyle = "#f9e79f";
           ctx.beginPath();
           ctx.arc(px + 16, py + 20, 5, 0, Math.PI * 2);
@@ -3657,24 +3817,7 @@ export function draw(
           ctx.fill();
         }
 
-      
-  // 9. Time of day lighting overlay
-  if (!state.inHouse && !state.inMine) {
-    const hours = state.time / 60;
-    let alpha = 0;
-    let color = "0,0,0";
-    if (hours < 6) { alpha = 0.55; color = "10,10,40"; } // deep night
-    else if (hours < 8) { alpha = 0.35 - ((hours - 6) / 2) * 0.35; color = "255,140,50"; } // sunrise
-    else if (hours >= 17 && hours < 20) { alpha = ((hours - 17) / 3) * 0.45; color = "255,90,0"; } // sunset
-    else if (hours >= 20) { alpha = 0.45 + Math.min(1, (hours - 20) / 4) * 0.1; color = "10,10,40"; } // night
-
-    if (alpha > 0) {
-      ctx.fillStyle = `rgba(${color}, ${alpha})`;
-      ctx.fillRect(cameraX, cameraY, viewWidth, viewHeight);
-    }
-  }
-
-  ctx.restore();
+        ctx.restore();
 
         if (t.watered || state.weather === "rainy") {
           const cropGlisten = Math.sin(Date.now() / 400 + (x * 13 + y * 7));
@@ -3726,24 +3869,7 @@ export function draw(
         ctx.fillRect(4, -15, 6, 6);
       }
 
-    
-  // 9. Time of day lighting overlay
-  if (!state.inHouse && !state.inMine) {
-    const hours = state.time / 60;
-    let alpha = 0;
-    let color = "0,0,0";
-    if (hours < 6) { alpha = 0.55; color = "10,10,40"; } // deep night
-    else if (hours < 8) { alpha = 0.35 - ((hours - 6) / 2) * 0.35; color = "255,140,50"; } // sunrise
-    else if (hours >= 17 && hours < 20) { alpha = ((hours - 17) / 3) * 0.45; color = "255,90,0"; } // sunset
-    else if (hours >= 20) { alpha = 0.45 + Math.min(1, (hours - 20) / 4) * 0.1; color = "10,10,40"; } // night
-
-    if (alpha > 0) {
-      ctx.fillStyle = `rgba(${color}, ${alpha})`;
-      ctx.fillRect(cameraX, cameraY, viewWidth, viewHeight);
-    }
-  }
-
-  ctx.restore();
+      ctx.restore();
 
       if (animal.hasProduce && animal.type === "calf") {
         ctx.fillStyle = "#fff";
@@ -3785,24 +3911,7 @@ export function draw(
         ctx.rotate(tailAngle);
         ctx.fillStyle = "#ffb74d";
         ctx.fillRect(-4, -2, 4, 3);
-      
-  // 9. Time of day lighting overlay
-  if (!state.inHouse && !state.inMine) {
-    const hours = state.time / 60;
-    let alpha = 0;
-    let color = "0,0,0";
-    if (hours < 6) { alpha = 0.55; color = "10,10,40"; } // deep night
-    else if (hours < 8) { alpha = 0.35 - ((hours - 6) / 2) * 0.35; color = "255,140,50"; } // sunrise
-    else if (hours >= 17 && hours < 20) { alpha = ((hours - 17) / 3) * 0.45; color = "255,90,0"; } // sunset
-    else if (hours >= 20) { alpha = 0.45 + Math.min(1, (hours - 20) / 4) * 0.1; color = "10,10,40"; } // night
-
-    if (alpha > 0) {
-      ctx.fillStyle = `rgba(${color}, ${alpha})`;
-      ctx.fillRect(cameraX, cameraY, viewWidth, viewHeight);
-    }
-  }
-
-  ctx.restore();
+        ctx.restore();
       } else {
         ctx.fillStyle = "#b0bec5";
         ctx.fillRect(-5, -9, 10, 9);
@@ -3819,24 +3928,7 @@ export function draw(
         ctx.fill();
       }
 
-    
-  // 9. Time of day lighting overlay
-  if (!state.inHouse && !state.inMine) {
-    const hours = state.time / 60;
-    let alpha = 0;
-    let color = "0,0,0";
-    if (hours < 6) { alpha = 0.55; color = "10,10,40"; } // deep night
-    else if (hours < 8) { alpha = 0.35 - ((hours - 6) / 2) * 0.35; color = "255,140,50"; } // sunrise
-    else if (hours >= 17 && hours < 20) { alpha = ((hours - 17) / 3) * 0.45; color = "255,90,0"; } // sunset
-    else if (hours >= 20) { alpha = 0.45 + Math.min(1, (hours - 20) / 4) * 0.1; color = "10,10,40"; } // night
-
-    if (alpha > 0) {
-      ctx.fillStyle = `rgba(${color}, ${alpha})`;
-      ctx.fillRect(cameraX, cameraY, viewWidth, viewHeight);
-    }
-  }
-
-  ctx.restore();
+      ctx.restore();
 
       if (pet.pettedToday) {
         ctx.fillStyle = "#fff";
@@ -3985,24 +4077,7 @@ export function draw(
       ctx.fillRect(-5, -9, 2, 2);
       ctx.fillRect(3, -9, 2, 2);
 
-    
-  // 9. Time of day lighting overlay
-  if (!state.inHouse && !state.inMine) {
-    const hours = state.time / 60;
-    let alpha = 0;
-    let color = "0,0,0";
-    if (hours < 6) { alpha = 0.55; color = "10,10,40"; } // deep night
-    else if (hours < 8) { alpha = 0.35 - ((hours - 6) / 2) * 0.35; color = "255,140,50"; } // sunrise
-    else if (hours >= 17 && hours < 20) { alpha = ((hours - 17) / 3) * 0.45; color = "255,90,0"; } // sunset
-    else if (hours >= 20) { alpha = 0.45 + Math.min(1, (hours - 20) / 4) * 0.1; color = "10,10,40"; } // night
-
-    if (alpha > 0) {
-      ctx.fillStyle = `rgba(${color}, ${alpha})`;
-      ctx.fillRect(cameraX, cameraY, viewWidth, viewHeight);
-    }
-  }
-
-  ctx.restore();
+      ctx.restore();
 
       if (slime.hp < slime.maxHp) {
         ctx.fillStyle = "rgba(0,0,0,0.5)";

@@ -223,6 +223,7 @@ export interface GameState {
   activeResearchId?: string;
   researchProgress?: number;
   workerAssignments?: Record<string, string>; // workerId -> 'research_center' | 'farm'
+  purchasedLands?: string[]; // IDs of purchased land parcels
 }
 
 export const DAY_START_MINUTES = 6 * 60;
@@ -300,6 +301,27 @@ export function deductItems(inventory: (Item | null)[], itemId: string, count = 
     }
   }
 }
+
+// Land Parcels System
+export interface LandParcel {
+  id: string;
+  name: string;
+  type: "farming" | "forest" | "water" | "mining";
+  description: string;
+  cost: number;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  icon: string;
+}
+
+export const LAND_PARCELS: LandParcel[] = [
+  { id: "land_farming", name: "Farming Plot", type: "farming", description: "A 20x15 patch of tillable soil.", cost: 2000, x: 26, y: 32, width: 20, height: 15, icon: "🌾" },
+  { id: "land_forest", name: "Forest Area", type: "forest", description: "Dense tree zone that auto-grows wood.", cost: 3500, x: 5, y: 70, width: 20, height: 20, icon: "🌲" },
+  { id: "land_water", name: "Water Area", type: "water", description: "A large fishing pond expansion.", cost: 4000, x: 40, y: 70, width: 25, height: 15, icon: "🐟" },
+  { id: "land_mining", name: "Mining Zone", type: "mining", description: "A surface mining zone with ore deposits.", cost: 5000, x: 80, y: 10, width: 15, height: 20, icon: "⛏️" },
+];
 
 // Technology research system
 export interface TechDef {
@@ -548,6 +570,27 @@ export function craftItem(recipe: Recipe, state: GameState): string {
 }
 
 // Procedural Farm generator
+export function applyLandPurchase(tiles: Tile[][], parcel: LandParcel): void {
+  for (let y = parcel.y; y < parcel.y + parcel.height; y++) {
+    for (let x = parcel.x; x < parcel.x + parcel.width; x++) {
+      if (y >= 0 && y < ROWS && x >= 0 && x < COLS) {
+        if (parcel.type === "farming") {
+          tiles[y][x] = { kind: "soil", age: 0, watered: false };
+        } else if (parcel.type === "forest") {
+          tiles[y][x] = { kind: Math.random() < 0.6 ? "tree" : "grass", age: 0, watered: false };
+        } else if (parcel.type === "water") {
+          tiles[y][x] = { kind: "water", age: 0, watered: false };
+        } else if (parcel.type === "mining") {
+          if (Math.random() < 0.2) tiles[y][x] = { kind: "ore_copper", age: 0, watered: false };
+          else if (Math.random() < 0.3) tiles[y][x] = { kind: "ore_iron", age: 0, watered: false };
+          else if (Math.random() < 0.4) tiles[y][x] = { kind: "debris_stone", age: 0, watered: false };
+          else tiles[y][x] = { kind: "grass", age: 0, watered: false };
+        }
+      }
+    }
+  }
+}
+
 function makeMap(): Tile[][] {
   const t: Tile[][] = Array.from({ length: ROWS }, () =>
     Array.from({ length: COLS }, () => ({ kind: "grass" as TileKind, age: -1, watered: false }))
@@ -848,6 +891,7 @@ export function newGame(): GameState {
     activeResearchId: undefined,
     researchProgress: 0,
     workerAssignments: {},
+    purchasedLands: [],
   };
 }
 
@@ -903,6 +947,7 @@ export function migrateState(raw: unknown): GameState {
     activeResearchId: typeof s.activeResearchId === "string" ? s.activeResearchId : undefined,
     researchProgress: typeof s.researchProgress === "number" ? s.researchProgress : 0,
     workerAssignments: (s.workerAssignments && typeof s.workerAssignments === "object") ? (s.workerAssignments as Record<string, string>) : {},
+    purchasedLands: Array.isArray(s.purchasedLands) ? (s.purchasedLands as string[]) : [],
     // Tiles: filter null rows, and within each row, replace null tiles with a safe default
     tiles: (() => {
       if (!Array.isArray(s.tiles)) return base.tiles;
@@ -2524,13 +2569,28 @@ class ImprovedNoise {
 
 const noiseBase = new ImprovedNoise();
 
-function getGrassColor(x: number, y: number): string {
+function getGrassColor(x: number, y: number, season: string): string {
   const val = noiseBase.noise(x * 0.08, y * 0.08, 0);
   const t = Math.max(0, Math.min(1, (val + 0.35) / 0.7));
-  // Interpolate between #7ec77a (RGB 126, 199, 122) and #5da859 (RGB 93, 168, 89)
-  const rCol = Math.round(126 - (126 - 93) * t);
-  const gCol = Math.round(199 - (199 - 168) * t);
-  const bCol = Math.round(122 - (122 - 89) * t);
+  
+  let c1, c2;
+  if (season === "summer") {
+    c1 = {r: 130, g: 190, b: 60};
+    c2 = {r: 95, g: 160, b: 50};
+  } else if (season === "fall") {
+    c1 = {r: 210, g: 140, b: 60};
+    c2 = {r: 180, g: 110, b: 40};
+  } else if (season === "winter") {
+    c1 = {r: 220, g: 235, b: 240};
+    c2 = {r: 190, g: 210, b: 225};
+  } else { // spring
+    c1 = {r: 126, g: 199, b: 122};
+    c2 = {r: 93, g: 168, b: 89};
+  }
+  
+  const rCol = Math.round(c1.r - (c1.r - c2.r) * t);
+  const gCol = Math.round(c1.g - (c1.g - c2.g) * t);
+  const bCol = Math.round(c1.b - (c1.b - c2.b) * t);
   return `rgb(${rCol}, ${gCol}, ${bCol})`;
 }
 
@@ -2649,7 +2709,7 @@ export function draw(
         ctx.fillRect(px, py, TILE, TILE);
       } else if (!state.inMine) {
         // Smooth noise-based grass color
-        const grassColor = getGrassColor(x, y);
+        const grassColor = getGrassColor(x, y, state.season);
         ctx.fillStyle = grassColor;
         ctx.fillRect(px, py, TILE, TILE);
 
@@ -2760,8 +2820,11 @@ export function draw(
         }
       } else if (t.kind === "soil" || t.kind === "watered" || t.cropId !== undefined) {
         // Draw connected soil plots with a darker shadow/border first
-        drawOrganicBlob(ctx, y, x, currentGrid, TILE, isSoil, "#5a3b25", 0.68);
-        const soilColor = (t.kind === "watered" || t.watered) ? "#4a3120" : "#8a5a3b";
+        const soilShadow = state.season === "winter" ? "#4d423b" : "#5a3b25";
+        drawOrganicBlob(ctx, y, x, currentGrid, TILE, isSoil, soilShadow, 0.68);
+        const baseSoil = state.season === "winter" ? "#7c6c5f" : "#8a5a3b";
+        const wetSoil = state.season === "winter" ? "#3a2a20" : "#4a3120";
+        const soilColor = (t.kind === "watered" || t.watered) ? wetSoil : baseSoil;
         drawOrganicBlob(ctx, y, x, currentGrid, TILE, isSoil, soilColor, 0.58);
 
         // Glistening effect on watered soils
@@ -3056,14 +3119,23 @@ export function draw(
         // Fluffy leaves (3 overlapping layers)
         const leafSwayX = Math.sin(Date.now() / 400 + y) * 0.8;
         
+        let cBase = "#1e7e34", cMid = "#28a745", cHigh = "#5cb85c";
+        if (state.season === "fall") {
+          cBase = "#b03a2e"; cMid = "#d35400"; cHigh = "#e67e22";
+        } else if (state.season === "winter") {
+          cBase = "#175d26"; cMid = "#1e7e34"; cHigh = "#a9cce3"; // snowy tops
+        } else if (state.season === "summer") {
+          cBase = "#145a32"; cMid = "#1e8449"; cHigh = "#27ae60";
+        }
+
         // Layer 1: Dark background leaves
-        ctx.fillStyle = "#1e7e34";
+        ctx.fillStyle = cBase;
         ctx.beginPath();
         ctx.arc(0 + leafSwayX, -30, 15, 0, Math.PI * 2);
         ctx.fill();
 
         // Layer 2: Medium leaves
-        ctx.fillStyle = "#28a745";
+        ctx.fillStyle = cMid;
         ctx.beginPath();
         ctx.arc(-8 + leafSwayX, -35, 12, 0, Math.PI * 2);
         ctx.arc(8 + leafSwayX, -35, 12, 0, Math.PI * 2);
@@ -3071,7 +3143,7 @@ export function draw(
         ctx.fill();
 
         // Layer 3: Highlight light green leaves
-        ctx.fillStyle = "#5cb85c";
+        ctx.fillStyle = cHigh;
         ctx.beginPath();
         ctx.arc(-5 + leafSwayX, -38, 8, 0, Math.PI * 2);
         ctx.arc(5 + leafSwayX, -38, 8, 0, Math.PI * 2);

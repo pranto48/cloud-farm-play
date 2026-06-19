@@ -119,7 +119,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
   // Player Store
   const [playerStoreOpen, setPlayerStoreOpen] = useState(false);
   const [playerStoreTile, setPlayerStoreTile] = useState<{ x: number; y: number } | null>(null);
-  const [playerStoreTab, setPlayerStoreTab] = useState<"buy" | "sell" | "workers">("buy");
+  const [playerStoreTab, setPlayerStoreTab] = useState<"buy" | "sell" | "workers" | "land">("buy");
 
   // Research Center
   const [researchCenterOpen, setResearchCenterOpen] = useState(false);
@@ -3873,14 +3873,14 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
 
             {/* Tabs */}
             <div className="flex gap-2 shrink-0 border-b border-amber-900/30 pb-2">
-              {(["buy", "sell", "workers"] as const).map(tab => (
+              {(["buy", "sell", "workers", "land"] as const).map(tab => (
                 <button key={tab} onClick={() => setPlayerStoreTab(tab)}
                   className={`px-4 py-1.5 text-xs font-bold rounded transition-all capitalize ${
                     playerStoreTab === tab
                       ? "bg-amber-600 text-black border border-amber-400"
                       : "bg-stone-900/60 text-stone-400 border border-stone-800 hover:bg-stone-800"
                   }`}>
-                  {tab === "buy" ? "🛒 Buy Items" : tab === "sell" ? "💰 Sell Items" : "👷 Workers"}
+                  {tab === "buy" ? "🛒 Buy Items" : tab === "sell" ? "💰 Sell Items" : tab === "workers" ? "👷 Workers" : "📜 Land Expansions"}
                 </button>
               ))}
             </div>
@@ -4072,6 +4072,79 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                       ))}
                     </div>
                   )}
+                </div>
+              )}
+
+              {/* LAND TAB */}
+              {playerStoreTab === "land" && (
+                <div className="p-3 space-y-4">
+                  <p className="text-xs text-amber-200/60">Expand your farm by purchasing new land parcels.</p>
+                  
+                  <div className="grid grid-cols-2 gap-3">
+                    {LAND_PARCELS.map(parcel => {
+                      const owned = (state.purchasedLands || []).includes(parcel.id);
+                      const canAfford = state.coins >= parcel.cost;
+                      
+                      return (
+                        <div key={parcel.id} className={`p-3 rounded-lg border-2 flex flex-col relative transition-all ${
+                          owned ? "bg-amber-950/20 border-amber-900/40 opacity-70" :
+                          "bg-[#1e120c] border-amber-900/60 hover:border-amber-500 hover:bg-[#2a170d]"
+                        }`}>
+                          <div className="flex gap-3 mb-2">
+                            <div className="text-3xl shrink-0 bg-black/30 p-2 rounded-lg flex items-center justify-center">
+                              {parcel.icon}
+                            </div>
+                            <div className="flex-1">
+                              <h4 className="font-bold text-sm text-amber-300">{parcel.name}</h4>
+                              <p className="text-[10px] text-stone-400 mt-0.5 leading-tight">{parcel.description}</p>
+                              <div className="text-[9px] text-stone-500 mt-1">Area: {parcel.width}x{parcel.height} ({(parcel.width * parcel.height)} tiles)</div>
+                            </div>
+                          </div>
+                          
+                          <div className="mt-auto pt-3 flex items-center justify-between border-t border-amber-900/30">
+                            {owned ? (
+                              <span className="text-emerald-500 text-xs font-bold ml-auto flex items-center gap-1">
+                                ✓ OWNED
+                              </span>
+                            ) : (
+                              <>
+                                <span className={`text-xs font-bold flex items-center gap-1 ${canAfford ? 'text-amber-400' : 'text-red-400'}`}>
+                                  {parcel.cost}g
+                                </span>
+                                <button 
+                                  disabled={!canAfford}
+                                  onClick={() => {
+                                    setState(prev => {
+                                      const next = structuredClone(prev);
+                                      if (next.coins < parcel.cost) return next;
+                                      
+                                      next.coins -= parcel.cost;
+                                      if (!next.purchasedLands) next.purchasedLands = [];
+                                      next.purchasedLands.push(parcel.id);
+                                      
+                                      // Apply terrain changes for this parcel
+                                      applyLandPurchase(next.tiles, parcel);
+                                      
+                                      toast.success(`Purchased ${parcel.name}! The land has been cleared and prepared.`);
+                                      gameAudio.playCoin();
+                                      return next;
+                                    });
+                                  }}
+                                  className={`px-3 py-1.5 text-[10px] font-bold rounded ${
+                                    canAfford 
+                                      ? "bg-amber-600 text-black hover:bg-amber-500" 
+                                      : "bg-stone-800 text-stone-500 cursor-not-allowed"
+                                  }`}
+                                >
+                                  PURCHASE DEED
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               )}
             </div>

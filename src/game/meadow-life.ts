@@ -1406,7 +1406,7 @@ export function updateEntities(state: GameState, dt: number): void {
     let targetX = -1;
     let targetY = -1;
 
-    if (worker.role !== "idle") {
+    if (true) {
       let searchOptions: Array<"water" | "harvest" | "clear" | "chop" | "mine" | "fetch_water"> = [];
       if (worker.role === "farming") searchOptions = ["water", "harvest"];
       else if (worker.role === "woodcutting") searchOptions = ["chop", "clear"];
@@ -2942,7 +2942,24 @@ export function draw(
             ctx.arc(0, 0, 1.2, 0, Math.PI * 2);
             ctx.fill();
           }
-          ctx.restore();
+        
+  // 9. Time of day lighting overlay
+  if (!state.inHouse && !state.inMine) {
+    const hours = state.time / 60;
+    let alpha = 0;
+    let color = "0,0,0";
+    if (hours < 6) { alpha = 0.55; color = "10,10,40"; } // deep night
+    else if (hours < 8) { alpha = 0.35 - ((hours - 6) / 2) * 0.35; color = "255,140,50"; } // sunrise
+    else if (hours >= 17 && hours < 20) { alpha = ((hours - 17) / 3) * 0.45; color = "255,90,0"; } // sunset
+    else if (hours >= 20) { alpha = 0.45 + Math.min(1, (hours - 20) / 4) * 0.1; color = "10,10,40"; } // night
+
+    if (alpha > 0) {
+      ctx.fillStyle = `rgba(${color}, ${alpha})`;
+      ctx.fillRect(cameraX, cameraY, viewWidth, viewHeight);
+    }
+  }
+
+  ctx.restore();
         }
       } else if (t.kind === "soil" || t.kind === "watered" || t.cropId !== undefined) {
         // Draw connected soil plots with a darker shadow/border first
@@ -3292,7 +3309,24 @@ export function draw(
           });
         }
 
-        ctx.restore();
+      
+  // 9. Time of day lighting overlay
+  if (!state.inHouse && !state.inMine) {
+    const hours = state.time / 60;
+    let alpha = 0;
+    let color = "0,0,0";
+    if (hours < 6) { alpha = 0.55; color = "10,10,40"; } // deep night
+    else if (hours < 8) { alpha = 0.35 - ((hours - 6) / 2) * 0.35; color = "255,140,50"; } // sunrise
+    else if (hours >= 17 && hours < 20) { alpha = ((hours - 17) / 3) * 0.45; color = "255,90,0"; } // sunset
+    else if (hours >= 20) { alpha = 0.45 + Math.min(1, (hours - 20) / 4) * 0.1; color = "10,10,40"; } // night
+
+    if (alpha > 0) {
+      ctx.fillStyle = `rgba(${color}, ${alpha})`;
+      ctx.fillRect(cameraX, cameraY, viewWidth, viewHeight);
+    }
+  }
+
+  ctx.restore();
       }
 
       // Render Debris & Ores with hit/rustle shake
@@ -3482,7 +3516,24 @@ export function draw(
           ctx.rotate(Date.now() / 150);
           ctx.fillStyle = "#95a5a6";
           ctx.fillRect(-6, -1, 12, 2);
-          ctx.restore();
+        
+  // 9. Time of day lighting overlay
+  if (!state.inHouse && !state.inMine) {
+    const hours = state.time / 60;
+    let alpha = 0;
+    let color = "0,0,0";
+    if (hours < 6) { alpha = 0.55; color = "10,10,40"; } // deep night
+    else if (hours < 8) { alpha = 0.35 - ((hours - 6) / 2) * 0.35; color = "255,140,50"; } // sunrise
+    else if (hours >= 17 && hours < 20) { alpha = ((hours - 17) / 3) * 0.45; color = "255,90,0"; } // sunset
+    else if (hours >= 20) { alpha = 0.45 + Math.min(1, (hours - 20) / 4) * 0.1; color = "10,10,40"; } // night
+
+    if (alpha > 0) {
+      ctx.fillStyle = `rgba(${color}, ${alpha})`;
+      ctx.fillRect(cameraX, cameraY, viewWidth, viewHeight);
+    }
+  }
+
+  ctx.restore();
         } else if (id === "chicken_egg") {
           ctx.fillStyle = "#f9e79f";
           ctx.beginPath();
@@ -3606,7 +3657,24 @@ export function draw(
           ctx.fill();
         }
 
-        ctx.restore();
+      
+  // 9. Time of day lighting overlay
+  if (!state.inHouse && !state.inMine) {
+    const hours = state.time / 60;
+    let alpha = 0;
+    let color = "0,0,0";
+    if (hours < 6) { alpha = 0.55; color = "10,10,40"; } // deep night
+    else if (hours < 8) { alpha = 0.35 - ((hours - 6) / 2) * 0.35; color = "255,140,50"; } // sunrise
+    else if (hours >= 17 && hours < 20) { alpha = ((hours - 17) / 3) * 0.45; color = "255,90,0"; } // sunset
+    else if (hours >= 20) { alpha = 0.45 + Math.min(1, (hours - 20) / 4) * 0.1; color = "10,10,40"; } // night
+
+    if (alpha > 0) {
+      ctx.fillStyle = `rgba(${color}, ${alpha})`;
+      ctx.fillRect(cameraX, cameraY, viewWidth, viewHeight);
+    }
+  }
+
+  ctx.restore();
 
         if (t.watered || state.weather === "rainy") {
           const cropGlisten = Math.sin(Date.now() / 400 + (x * 13 + y * 7));
@@ -3658,7 +3726,24 @@ export function draw(
         ctx.fillRect(4, -15, 6, 6);
       }
 
-      ctx.restore();
+    
+  // 9. Time of day lighting overlay
+  if (!state.inHouse && !state.inMine) {
+    const hours = state.time / 60;
+    let alpha = 0;
+    let color = "0,0,0";
+    if (hours < 6) { alpha = 0.55; color = "10,10,40"; } // deep night
+    else if (hours < 8) { alpha = 0.35 - ((hours - 6) / 2) * 0.35; color = "255,140,50"; } // sunrise
+    else if (hours >= 17 && hours < 20) { alpha = ((hours - 17) / 3) * 0.45; color = "255,90,0"; } // sunset
+    else if (hours >= 20) { alpha = 0.45 + Math.min(1, (hours - 20) / 4) * 0.1; color = "10,10,40"; } // night
+
+    if (alpha > 0) {
+      ctx.fillStyle = `rgba(${color}, ${alpha})`;
+      ctx.fillRect(cameraX, cameraY, viewWidth, viewHeight);
+    }
+  }
+
+  ctx.restore();
 
       if (animal.hasProduce && animal.type === "calf") {
         ctx.fillStyle = "#fff";
@@ -3700,7 +3785,24 @@ export function draw(
         ctx.rotate(tailAngle);
         ctx.fillStyle = "#ffb74d";
         ctx.fillRect(-4, -2, 4, 3);
-        ctx.restore();
+      
+  // 9. Time of day lighting overlay
+  if (!state.inHouse && !state.inMine) {
+    const hours = state.time / 60;
+    let alpha = 0;
+    let color = "0,0,0";
+    if (hours < 6) { alpha = 0.55; color = "10,10,40"; } // deep night
+    else if (hours < 8) { alpha = 0.35 - ((hours - 6) / 2) * 0.35; color = "255,140,50"; } // sunrise
+    else if (hours >= 17 && hours < 20) { alpha = ((hours - 17) / 3) * 0.45; color = "255,90,0"; } // sunset
+    else if (hours >= 20) { alpha = 0.45 + Math.min(1, (hours - 20) / 4) * 0.1; color = "10,10,40"; } // night
+
+    if (alpha > 0) {
+      ctx.fillStyle = `rgba(${color}, ${alpha})`;
+      ctx.fillRect(cameraX, cameraY, viewWidth, viewHeight);
+    }
+  }
+
+  ctx.restore();
       } else {
         ctx.fillStyle = "#b0bec5";
         ctx.fillRect(-5, -9, 10, 9);
@@ -3717,7 +3819,24 @@ export function draw(
         ctx.fill();
       }
 
-      ctx.restore();
+    
+  // 9. Time of day lighting overlay
+  if (!state.inHouse && !state.inMine) {
+    const hours = state.time / 60;
+    let alpha = 0;
+    let color = "0,0,0";
+    if (hours < 6) { alpha = 0.55; color = "10,10,40"; } // deep night
+    else if (hours < 8) { alpha = 0.35 - ((hours - 6) / 2) * 0.35; color = "255,140,50"; } // sunrise
+    else if (hours >= 17 && hours < 20) { alpha = ((hours - 17) / 3) * 0.45; color = "255,90,0"; } // sunset
+    else if (hours >= 20) { alpha = 0.45 + Math.min(1, (hours - 20) / 4) * 0.1; color = "10,10,40"; } // night
+
+    if (alpha > 0) {
+      ctx.fillStyle = `rgba(${color}, ${alpha})`;
+      ctx.fillRect(cameraX, cameraY, viewWidth, viewHeight);
+    }
+  }
+
+  ctx.restore();
 
       if (pet.pettedToday) {
         ctx.fillStyle = "#fff";
@@ -3745,15 +3864,42 @@ export function draw(
       ctx.fill();
 
       // Shirt + overalls
-      ctx.fillStyle = "#2196f3";
-      ctx.fillRect(wx + 8, wy + 14, 16, 14);
-      ctx.fillStyle = "#8d6e63";
-      ctx.fillRect(wx + 10, wy + 24, 12, 8);
-      ctx.fillStyle = "#ffdbac";
-      ctx.fillRect(wx + 10, wy + 4, 12, 10);
+      const isMovingW = Math.abs(worker.x - worker.subX) > 0.01 || Math.abs(worker.y - worker.subY) > 0.01;
+      const walkTimeW = isMovingW ? Date.now() / 80 : 0;
+      const leftLegW = isMovingW ? Math.sin(walkTimeW) * 3 : 0;
+      const rightLegW = isMovingW ? -Math.sin(walkTimeW) * 3 : 0;
+      
+      let dirW = "down";
+      const dxW = worker.x - worker.subX;
+      const dyW = worker.y - worker.subY;
+      if (Math.abs(dxW) > Math.abs(dyW)) dirW = dxW < 0 ? "left" : "right";
+      else if (Math.abs(dyW) > 0) dirW = dyW < 0 ? "up" : "down";
+      
+      ctx.fillStyle = "#2c3e50"; // legs
+      ctx.fillRect(wx + 9, wy + 26 + leftLegW, 6, 8 - leftLegW);
+      ctx.fillRect(wx + 17, wy + 26 + rightLegW, 6, 8 - rightLegW);
+
+      ctx.fillStyle = "#2196f3"; // overalls
+      ctx.fillRect(wx + 8, wy + 12, 16, 14);
+
+      ctx.fillStyle = "#ffdbac"; // head
+      ctx.fillRect(wx + 10, wy + 2, 12, 10);
+
       ctx.fillStyle = "#f4d03f"; // hat brim
-      ctx.fillRect(wx + 6, wy + 4, 20, 2);
-      ctx.fillRect(wx + 11, wy, 10, 4); // hat top
+      ctx.fillRect(wx + 6, wy + 1, 20, 2);
+      ctx.fillRect(wx + 11, wy - 3, 10, 4); // hat top
+      
+      // Eyes
+      ctx.fillStyle = "#000";
+      if (dirW === "down") {
+        ctx.fillRect(wx + 13, wy + 7, 2, 2);
+        ctx.fillRect(wx + 17, wy + 7, 2, 2);
+      } else if (dirW === "left") {
+        ctx.fillRect(wx + 12, wy + 7, 2, 2);
+      } else if (dirW === "right") {
+        ctx.fillRect(wx + 18, wy + 7, 2, 2);
+      }
+
       
       // Determine AI Icon
       let icon = "🚶";
@@ -3839,7 +3985,24 @@ export function draw(
       ctx.fillRect(-5, -9, 2, 2);
       ctx.fillRect(3, -9, 2, 2);
 
-      ctx.restore();
+    
+  // 9. Time of day lighting overlay
+  if (!state.inHouse && !state.inMine) {
+    const hours = state.time / 60;
+    let alpha = 0;
+    let color = "0,0,0";
+    if (hours < 6) { alpha = 0.55; color = "10,10,40"; } // deep night
+    else if (hours < 8) { alpha = 0.35 - ((hours - 6) / 2) * 0.35; color = "255,140,50"; } // sunrise
+    else if (hours >= 17 && hours < 20) { alpha = ((hours - 17) / 3) * 0.45; color = "255,90,0"; } // sunset
+    else if (hours >= 20) { alpha = 0.45 + Math.min(1, (hours - 20) / 4) * 0.1; color = "10,10,40"; } // night
+
+    if (alpha > 0) {
+      ctx.fillStyle = `rgba(${color}, ${alpha})`;
+      ctx.fillRect(cameraX, cameraY, viewWidth, viewHeight);
+    }
+  }
+
+  ctx.restore();
 
       if (slime.hp < slime.maxHp) {
         ctx.fillStyle = "rgba(0,0,0,0.5)";
@@ -3988,6 +4151,23 @@ export function draw(
         ctx.textAlign = "center";
         ctx.fillText("!", bx, by - 12 + bBob);
       }
+    }
+  }
+
+
+  // 9. Time of day lighting overlay
+  if (!state.inHouse && !state.inMine) {
+    const hours = state.time / 60;
+    let alpha = 0;
+    let color = "0,0,0";
+    if (hours < 6) { alpha = 0.55; color = "10,10,40"; } // deep night
+    else if (hours < 8) { alpha = 0.35 - ((hours - 6) / 2) * 0.35; color = "255,140,50"; } // sunrise
+    else if (hours >= 17 && hours < 20) { alpha = ((hours - 17) / 3) * 0.45; color = "255,90,0"; } // sunset
+    else if (hours >= 20) { alpha = 0.45 + Math.min(1, (hours - 20) / 4) * 0.1; color = "10,10,40"; } // night
+
+    if (alpha > 0) {
+      ctx.fillStyle = `rgba(${color}, ${alpha})`;
+      ctx.fillRect(cameraX, cameraY, viewWidth, viewHeight);
     }
   }
 

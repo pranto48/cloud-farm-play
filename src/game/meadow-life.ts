@@ -3825,6 +3825,24 @@ export function draw(
     });
   }
 
+
+  // Render Zones overlay
+  for (let y = startRow; y < endRow; y++) {
+    for (let x = startCol; x < endCol; x++) {
+      const t = currentGrid[y][x];
+      if (t.zone) {
+         const px = x * TILE;
+         const py = y * TILE;
+         ctx.fillStyle = 
+           t.zone === "farming" ? "rgba(46, 204, 113, 0.3)" :
+           t.zone === "mining" ? "rgba(149, 165, 166, 0.3)" :
+           t.zone === "woodcutting" ? "rgba(211, 84, 0, 0.3)" :
+           "rgba(52, 152, 219, 0.3)";
+         ctx.fillRect(px, py, TILE, TILE);
+      }
+    }
+  }
+
   // 6. Draw Player
   const isMoving = Math.abs(p.x - (p.subX ?? p.x)) > 0.01 || Math.abs(p.y - (p.subY ?? p.y)) > 0.01;
   const walkTime = isMoving ? Date.now() / 80 : 0;

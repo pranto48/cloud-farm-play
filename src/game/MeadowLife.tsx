@@ -1369,31 +1369,42 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
     hoveredTileRef.current = coords;
 
     if (zoningMode !== "none" && isDraggingZone.current && coords) {
-      setState(prev => {
-        const next = structuredClone(prev);
-        const grid = next.inHouse ? next.houseGrid! : (next.inMine ? next.mineGrid : next.tiles);
-        if (grid[coords.y]?.[coords.x]) {
-          grid[coords.y][coords.x].zone = zoningMode === "erase" ? undefined : zoningMode;
-        }
-        return next;
-      });
+      const curState = stateRef.current;
+      const grid = curState.inHouse ? curState.houseGrid! : (curState.inMine ? curState.mineGrid : curState.tiles);
+      const targetZone = zoningMode === "erase" ? undefined : zoningMode;
+      
+      if (grid[coords.y]?.[coords.x] && grid[coords.y][coords.x].zone !== targetZone) {
+        setState(prev => {
+          const next = structuredClone(prev);
+          const gridNext = next.inHouse ? next.houseGrid! : (next.inMine ? next.mineGrid : next.tiles);
+          if (gridNext[coords.y]?.[coords.x]) {
+            gridNext[coords.y][coords.x].zone = targetZone;
+          }
+          return next;
+        });
+      }
     }
   };
 
   const handleCanvasMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
     if (zoningMode !== "none" && e.button === 0) {
       isDraggingZone.current = true;
-      // Paint first tile immediately
       const coords = getMouseTileCoords(e.clientX, e.clientY);
       if (coords) {
-        setState(prev => {
-          const next = structuredClone(prev);
-          const grid = next.inHouse ? next.houseGrid! : (next.inMine ? next.mineGrid : next.tiles);
-          if (grid[coords.y]?.[coords.x]) {
-            grid[coords.y][coords.x].zone = zoningMode === "erase" ? undefined : zoningMode;
-          }
-          return next;
-        });
+        const curState = stateRef.current;
+        const grid = curState.inHouse ? curState.houseGrid! : (curState.inMine ? curState.mineGrid : curState.tiles);
+        const targetZone = zoningMode === "erase" ? undefined : zoningMode;
+        
+        if (grid[coords.y]?.[coords.x] && grid[coords.y][coords.x].zone !== targetZone) {
+          setState(prev => {
+            const next = structuredClone(prev);
+            const gridNext = next.inHouse ? next.houseGrid! : (next.inMine ? next.mineGrid : next.tiles);
+            if (gridNext[coords.y]?.[coords.x]) {
+              gridNext[coords.y][coords.x].zone = targetZone;
+            }
+            return next;
+          });
+        }
       }
     }
   };

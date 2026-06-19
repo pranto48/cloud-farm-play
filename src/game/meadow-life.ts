@@ -1429,8 +1429,8 @@ export function updateEntities(state: GameState, dt: number): void {
         const tx = worker.x + d[0];
         const ty = worker.y + d[1];
         if (
-          Math.abs(tx - worker.cabinX) <= zoneRadius &&
-          Math.abs(ty - worker.cabinY) <= zoneRadius &&
+          Math.abs(tx - worker.cabinX) <= roleRadius &&
+          Math.abs(ty - worker.cabinY) <= roleRadius &&
           tx >= 0 && ty >= 0 && tx < COLS && ty < ROWS &&
           isWorkerWalkable(grid[ty]?.[tx])
         ) {
@@ -2221,13 +2221,12 @@ export function interact(
       } else if (heldItem.id === "worker_cabin") {
         tile.chestInventory = Array.from({ length: 12 }, () => null);
         if (!state.workers) state.workers = [];
-        state.workers.push({
-          id: `worker_${Date.now()}`,
-          name: "Helper Bob",
+        const newWorker: FarmWorker = {
+          id: `worker_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
+          name: WORKER_NAMES[Math.floor(Math.random() * WORKER_NAMES.length)],
           cabinX: f.x,
           cabinY: f.y,
           x: f.x,
-          y: f.y,
           subX: f.x,
           subY: f.y,
           task: "idle",

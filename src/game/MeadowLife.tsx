@@ -14,7 +14,6 @@ import {
   frontTile,
   CRAFTING_RECIPES,
   craftItem,
-  shipItem,
   generateMineFloor,
   STATIC_POINTS,
   sortInventory,
@@ -23,8 +22,11 @@ import {
   updateEntities,
   migrateState,
   addItem,
+  removeItem,
   deductItems,
   TECHNOLOGIES,
+  LAND_PARCELS,
+  applyLandPurchase,
   type GameState,
   type Tile,
   type Enemy,
@@ -37,7 +39,7 @@ import {
 } from "./meadow-life";
 import { shopInventoryForSeason, CROPS } from "./data/crops";
 import { ITEM_DEFS, createItem, type Item } from "./data/items";
-import { NPCS, giftReaction, type NPCDef } from "./npcs";
+import { NPCS, giftReaction, getNPCDestination, type NPCDef } from "./npcs";
 import { FISH_TYPES, initFishing, updateFishingPhysics } from "./fishing";
 import { gameAudio } from "./audio";
 
@@ -2413,7 +2415,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                         </div>
                       </div>
                       <Button
-                        size="xs"
+                        size="sm"
                         className="text-xs bg-[#3a3f44] border border-slate-700 text-slate-200 hover:bg-[#ff9200]/25 hover:border-[#ff9200] rounded-none font-mono"
                         onClick={() => handleBuy(seedId, crop.seedPrice)}
                       >
@@ -2450,7 +2452,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                       </div>
                     </div>
                     <Button
-                      size="xs"
+                      size="sm"
                       className="bg-[#3a3f44] border border-slate-700 text-slate-200 hover:bg-[#ff9200]/25 hover:border-[#ff9200] rounded-none font-mono"
                       onClick={() => handleBuy(item.id, item.price)}
                     >
@@ -2489,7 +2491,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                       )}
 
                       <Button
-                        size="xs"
+                        size="sm"
                         variant="outline"
                         disabled={lvl >= 4}
                         className="w-full text-xs bg-[#3a3f44] border-slate-750 text-slate-200 hover:bg-[#ff9200]/25 hover:border-[#ff9200] font-mono mt-auto rounded-none"
@@ -2548,7 +2550,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                     </span>
                   </div>
                   <Button
-                    size="xs"
+                    size="sm"
                     disabled={readingLetter.claimed}
                     onClick={() => handleClaimMailGift(readingLetter.id)}
                   >
@@ -2558,7 +2560,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
               )}
 
               <div className="flex justify-end gap-2">
-                <Button size="xs" variant="outline" onClick={() => setReadingLetter(null)}>
+                <Button size="sm" variant="outline" onClick={() => setReadingLetter(null)}>
                   Back
                 </Button>
               </div>
@@ -2659,7 +2661,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
             {(["inventory", "crafting", "workers", "social", "skills"] as const).map((tab) => (
               <button
                 key={tab}
-                onClick={() => setActiveTab(tab)}
+                onClick={() => setActiveTab(tab as any)}
                 className={`px-4 py-1.5 text-xs font-bold uppercase transition-all rounded-none ${
                   activeTab === tab
                     ? "bg-[#141517] text-[#ff9200] border-t-2 border-[#ff9200]"
@@ -2676,7 +2678,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
               <div className="space-y-3">
                 <div className="flex justify-end">
                   <Button 
-                    size="xs" 
+                    size="sm" 
                     variant="outline" 
                     className="text-[10px] h-6 px-2.5 bg-[#3a3f44] border-slate-700 text-slate-200 hover:bg-[#ff9200]/25 hover:border-[#ff9200] rounded-none font-mono" 
                     onClick={handleSortInventory}
@@ -2722,7 +2724,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                 {heldItem && (
                   <div className="p-2 bg-[#ff9200]/10 border border-[#ff9200]/20 rounded-none text-[10px] text-[#ff9200] flex items-center justify-between font-mono">
                     <span>Holding: {heldItem.item.name} ({heldItem.item.count}x)</span>
-                    <Button size="xs" variant="outline" className="text-[10px] h-5 px-1.5 rounded-none border-slate-700 hover:bg-slate-800" onClick={() => setHeldItem(null)}>
+                    <Button size="sm" variant="outline" className="text-[10px] h-5 px-1.5 rounded-none border-slate-700 hover:bg-slate-800" onClick={() => setHeldItem(null)}>
                       Clear
                     </Button>
                   </div>
@@ -3058,7 +3060,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                     <h4 className="text-xs font-bold text-amber-500 font-mono">{isCabin ? "Cabin Feed Box Contents" : "Chest Contents"}</h4>
                     <div className="flex gap-2">
                       <Button 
-                        size="xs" 
+                        size="sm" 
                         variant="outline" 
                         className="text-[10px] h-6 px-2 bg-[#5d4037]/20 border-stone-850 text-stone-300 hover:bg-[#5d4037]/40 font-mono" 
                         onClick={handleSortChest}
@@ -3066,7 +3068,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                         Sort Chest
                       </Button>
                       <Button 
-                        size="xs" 
+                        size="sm" 
                         variant="outline" 
                         className="text-[10px] h-6 px-2 bg-[#5d4037]/20 border-stone-850 text-stone-300 hover:bg-[#5d4037]/40 font-mono" 
                         onClick={handleQuickStack}
@@ -3110,7 +3112,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                   <div className="flex justify-between items-center mb-2">
                     <h4 className="text-xs font-bold text-stone-400 font-mono">Your Pack Pack</h4>
                     <Button 
-                      size="xs" 
+                      size="sm" 
                       variant="outline" 
                       className="text-[10px] h-6 px-2 bg-[#5d4037]/20 border-stone-850 text-stone-300 hover:bg-[#5d4037]/40 font-mono" 
                       onClick={handleSortInventory}
@@ -3499,7 +3501,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
 
             <DialogFooter className="flex-col gap-2 sm:flex-row mt-3 justify-between">
               {state.inventory[state.hotbarIndex] ? (
-                <Button size="xs" variant="outline" className="text-xs" onClick={handleGiveGift}>
+                <Button size="sm" variant="outline" className="text-xs" onClick={handleGiveGift}>
                   🎁 Give Held Gift ({state.inventory[state.hotbarIndex]?.name})
                 </Button>
               ) : (
@@ -3507,7 +3509,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                   Hold an item to offer a gift
                 </span>
               )}
-              <Button size="xs" onClick={() => setNpcDialogue(null)}>
+              <Button size="sm" onClick={() => setNpcDialogue(null)}>
                 Good Bye
               </Button>
             </DialogFooter>
@@ -4063,7 +4065,9 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                                 y: cabin.y,
                                 subX: cabin.x,
                                 subY: cabin.y,
-                                task: "auto",
+                                task: "idle",
+                  role: "farming",
+                  inventory: null,
                                 energy: 100,
                                 hasEatenToday: false,
                                 walkTimer: Math.random() * 3 + 2,

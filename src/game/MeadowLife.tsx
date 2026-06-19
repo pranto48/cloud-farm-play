@@ -2137,6 +2137,31 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
         addHistory(`Added ${pts} Research Points ⚗️ (Total: ${next.researchPoints})`);
         return next;
       });
+    } else if (command === "/worker") {
+      setState(prev => {
+        const next = structuredClone(prev);
+        if (!next.workers) next.workers = [];
+        next.workers.push({
+          id: `worker_${Date.now()}`,
+          name: `Cheat Worker #${next.workers.length + 1}`,
+          cabinX: next.player.x,
+          cabinY: next.player.y,
+          x: next.player.x,
+          y: next.player.y,
+          subX: next.player.x,
+          subY: next.player.y,
+          task: "idle",
+          role: "idle",
+          inventory: null,
+          energy: 100,
+          hasEatenToday: false,
+          walkTimer: Math.random() * 3 + 2,
+          actionTimer: 0,
+          statusText: "Spawned via cheat!",
+        });
+        addHistory(`Spawned a worker at your location! 👷`, "#a78bfa");
+        return next;
+      });
     } else if (command === "/help") {
       addHistory("=== CHEAT CODES ===", "#fbbf24");
       addHistory("/god — Toggle God Mode (infinite energy + invincibility)", "#e2e8f0");
@@ -2148,6 +2173,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
       addHistory("/research <tech_id> — Unlock a technology", "#e2e8f0");
       addHistory("/research_all — Unlock all technologies", "#e2e8f0");
       addHistory("/rp <n> — Add research points", "#e2e8f0");
+      addHistory("/worker — Spawn a worker at your location", "#e2e8f0");
     } else {
       addHistory(`Unknown command: ${command}. Type /help for a list.`, "#f87171");
     }
@@ -4102,6 +4128,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                   ["/research <tech_id>", "Instantly unlock a technology"],
                   ["/research_all", "Unlock all technologies at once"],
                   ["/rp <n>", "Add research points"],
+                  ["/worker", "Instantly spawn a worker at your location"],
                   ["/help", "List all cheat commands in console"],
                 ].map(([cmd, desc]) => (
                   <div key={cmd} className="flex gap-3 items-start p-1.5 bg-[#1e293b]/80 border border-purple-900/40 rounded">

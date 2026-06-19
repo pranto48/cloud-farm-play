@@ -2221,9 +2221,9 @@ export function interact(
       } else if (heldItem.id === "worker_cabin") {
         tile.chestInventory = Array.from({ length: 12 }, () => null);
         if (!state.workers) state.workers = [];
-        const newWorker: FarmWorker = {
-          id: `worker_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
-          name: WORKER_NAMES[Math.floor(Math.random() * WORKER_NAMES.length)],
+        state.workers.push({
+          id: `worker_${Date.now()}`,
+          name: "Helper Bob",
           cabinX: f.x,
           cabinY: f.y,
           x: f.x,
@@ -2232,14 +2232,11 @@ export function interact(
           subY: f.y,
           task: "idle",
           energy: 100,
-          role: "farming",
-          inventory: null,
           hasEatenToday: false,
           walkTimer: Math.random() * 3 + 2,
           actionTimer: 0,
           statusText: "Idle",
-        };
-        state.workers.push(newWorker);
+        });
       } else if (heldItem.id === "pet_bowl_dog" || heldItem.id === "pet_bowl_cat") {
         if (!state.pets) state.pets = [];
         const isDog = heldItem.id === "pet_bowl_dog";
@@ -2844,7 +2841,7 @@ export function draw(
           ctx.fillStyle = "#bd9e72";
           ctx.fillRect(px + 8 + pathR * 12, py + 8 + pathR * 12, 2, 2);
         }
-            } else if (t.kind === "water") {
+      } else if (t.kind === "water") {
         // 1. Sandy beach shoreline
         drawOrganicBlob(ctx, y, x, currentGrid, TILE, isWater, "#e5cbb3", 0.75);
         // 2. Shallow water transition
@@ -2871,7 +2868,8 @@ export function draw(
           ctx.fill();
         }
 
-        // Stepping water lily pads with bobbing and rotationif ((x * 13 + y * 9) % 23 === 0) {
+        // Stepping water lily pads with bobbing and rotation
+        if ((x * 13 + y * 9) % 23 === 0) {
           const lilyBob = Math.sin(Date.now() / 700 + (x * 13 + y * 9)) * 1.2;
           const lilyAngle = Math.sin(Date.now() / 1400 + x) * 0.06;
           ctx.save();
@@ -3682,11 +3680,10 @@ export function draw(
     });
   }
 
-    // 3c. Draw Hired Workers
+  // 3c. Draw Hired Workers
   if (!state.inMine && state.workers) {
     state.workers.forEach((worker) => {
       if (!worker) return;
-      
       const bounce = (Math.abs(worker.x - worker.subX) > 0.01 || Math.abs(worker.y - worker.subY) > 0.01) ? Math.sin(Date.now() / 100) * 2 : 0;
       
       const wx = worker.subX * TILE;

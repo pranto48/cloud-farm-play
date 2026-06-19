@@ -569,6 +569,7 @@ export const ITEM_DEFS: Record<string, Omit<Item, "count">> = {
     type: "furniture",
     description: "Stores water collected by workers. Interact to refill your watering can instantly.",
     price: 300,
+    iconColor: "#3498db",
     iconSymbol: "🛢️",
   },
   water_bucket: {

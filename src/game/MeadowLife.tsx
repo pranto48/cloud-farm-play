@@ -78,7 +78,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
 
   // Menu Overlays
   const [inventoryOpen, setInventoryOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState<"inventory" | "crafting" | "social" | "skills">("inventory");
+  const [activeTab, setActiveTab] = useState<"inventory" | "crafting" | "social" | "skills" | "workers">("inventory");
   const [shopOpen, setShopOpen] = useState(false);
   const [shopTab, setShopTab] = useState<"seeds" | "animals" | "upgrades">("seeds");
 
@@ -191,7 +191,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
   };
 
   // Inventory holding slot
-  const [heldItem, setHeldItem] = useState<{ item: Item; originalSlot: number; source: "inventory" | "chest" } | null>(null);
+  const [heldItem, setHeldItem] = useState<{ item: Item; originalSlot: number; source: "inventory" | "chest" | "shipping" | "furnace" } | null>(null);
 
   // Spacebar trigger for Reel minigame
   const [isSpacePressed, setIsSpacePressed] = useState(false);
@@ -1539,7 +1539,37 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
   };
 
   // Inventory slot clicks
-  const handleSlotClick = (index: number, source: "inventory" | "chest" | "shipping" | "furnace") => {
+  const handleSlotClick = (index: number, source: "inventory" | "chest" | "shipping" | "furnace", e?: React.MouseEvent) => {
+    if (e && e.shiftKey && chestOpenTile && (source === "inventory" || source === "chest")) {
+      e.preventDefault();
+      setState(prev => {
+        const next = structuredClone(prev);
+        const grid = next.inHouse ? next.houseGrid! : (next.inMine ? next.mineGrid : next.tiles);
+        const chestInv = grid[chestOpenTile.y][chestOpenTile.x].chestInventory!;
+        
+        if (source === "inventory") {
+          const itm = next.inventory[index];
+          if (itm) {
+            const success = addItem(chestInv, structuredClone(itm));
+            if (success) {
+              next.inventory[index] = null;
+              gameAudio.playLevelUp();
+            } else toast.error("Chest is full!");
+          }
+        } else if (source === "chest") {
+          const itm = chestInv[index];
+          if (itm) {
+            const success = addItem(next.inventory, structuredClone(itm));
+            if (success) {
+              chestInv[index] = null;
+              gameAudio.playLevelUp();
+            } else toast.error("Inventory is full!");
+          }
+        }
+        return next;
+      });
+      return;
+    }
     if (heldItem === null) {
       let item = null;
       if (source === "inventory") {
@@ -2367,9 +2397,9 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
 
       {/* A. PIERRE'S OVERHAULED SHOP MODAL */}
       <Dialog open={shopOpen} onOpenChange={setShopOpen}>
-        <DialogContent container={mainContainerRef.current} className="max-w-xl bg-[#242628] border-2 border-slate-700 text-slate-100 rounded-none font-mono">
+        <DialogContent container={mainContainerRef.current} className="max-w-3xl bg-[#141517] border-[3px] border-[#4a5568] text-slate-100 rounded-sm font-mono shadow-[0_0_20px_rgba(0,0,0,0.8)]">
           <DialogHeader>
-            <DialogTitle className="text-lg font-bold flex items-center gap-2 text-[#ff9200] border-b border-slate-800 pb-2">
+            <DialogTitle className="text-xl font-black uppercase tracking-wider flex items-center gap-2 text-[#e2e8f0] border-b border-[#4a5568] pb-3 bg-[#1e222a] -mt-6 -mx-6 px-6 pt-6">
               <Coins className="h-5 w-5 text-yellow-500" />
               <span>Pierre's Village Depot</span>
             </DialogTitle>
@@ -2383,7 +2413,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                 onClick={() => setShopTab(tab)}
                 className={`px-4 py-1.5 text-xs font-bold uppercase transition-all rounded-none ${
                   shopTab === tab
-                    ? "bg-[#141517] text-[#ff9200] border-t-2 border-[#ff9200]"
+                    ? "bg-[#2d3748] text-white border-t-2 border-[#38b2ac] shadow-inner"
                     : "bg-[#2f3136] text-slate-400 hover:text-slate-200 border-t-2 border-transparent"
                 }`}
               >
@@ -2651,9 +2681,9 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
 
       {/* D. TABBED JOURNAL / BACKPACK */}
       <Dialog open={inventoryOpen} onOpenChange={setInventoryOpen}>
-        <DialogContent container={mainContainerRef.current} className="max-w-xl bg-[#242628] border-2 border-slate-700 text-slate-100 rounded-none font-mono">
+        <DialogContent container={mainContainerRef.current} className="max-w-3xl bg-[#141517] border-[3px] border-[#4a5568] text-slate-100 rounded-sm font-mono shadow-[0_0_20px_rgba(0,0,0,0.8)]">
           <DialogHeader>
-            <DialogTitle className="text-lg font-bold flex items-center gap-2 text-[#ff9200] border-b border-slate-800 pb-2">
+            <DialogTitle className="text-xl font-black uppercase tracking-wider flex items-center gap-2 text-[#e2e8f0] border-b border-[#4a5568] pb-3 bg-[#1e222a] -mt-6 -mx-6 px-6 pt-6">
               <Backpack className="h-5 w-5 text-[#ff9200]" />
               <span>Backpack Journal</span>
             </DialogTitle>
@@ -2666,7 +2696,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                 onClick={() => setActiveTab(tab as any)}
                 className={`px-4 py-1.5 text-xs font-bold uppercase transition-all rounded-none ${
                   activeTab === tab
-                    ? "bg-[#141517] text-[#ff9200] border-t-2 border-[#ff9200]"
+                    ? "bg-[#2d3748] text-white border-t-2 border-[#38b2ac] shadow-inner"
                     : "bg-[#2f3136] text-slate-400 hover:text-slate-200 border-t-2 border-transparent"
                 }`}
               >
@@ -2688,7 +2718,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                     Sort Inventory
                   </Button>
                 </div>
-                <div className="grid grid-cols-10 gap-1 bg-[#141517] p-2 border border-slate-800 rounded-none">
+                <div className="grid grid-cols-10 gap-1 bg-[#1a202c] p-3 border-2 border-[#2d3748] rounded-sm">
                   {state.inventory.map((item, idx) => (
                     <button
                       key={idx}
@@ -2698,8 +2728,8 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                       onMouseLeave={() => setHoveredItem(null)}
                       className={`relative flex items-center justify-center h-[44px] transition-all rounded-none ${
                         item
-                          ? "bg-[#2f3136] hover:bg-[#3f4248] border border-slate-600 text-slate-100"
-                          : "bg-[#181a1c] border border-slate-800/80 text-slate-600"
+                          ? "bg-[#2d3748] hover:bg-[#4a5568] border-2 border-[#4a5568] hover:border-[#38b2ac] shadow-[inset_0_2px_4px_rgba(0,0,0,0.4)] text-slate-100"
+                          : "bg-[#1a202c] border-2 border-[#2d3748] shadow-[inset_0_2px_4px_rgba(0,0,0,0.6)] text-slate-600"
                       }`}
                     >
                       {idx < 10 && (

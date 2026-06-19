@@ -884,6 +884,8 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
             next.player.subX = 5;
             next.player.subY = 8;
             toast("Entered Farm House");
+                    } else if (!next.inHouse && !next.inMine && x === 70 && y === 40) {
+            setTimeout(() => setShopOpen(true), 0);
           } else if (x >= 0 && y >= 0 && x < gridCols && y < gridRows && isWalkable(grid[y][x])) {
             next.player.x = x;
             next.player.y = y;

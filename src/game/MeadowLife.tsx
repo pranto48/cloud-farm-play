@@ -4294,7 +4294,6 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                     <div className="grid grid-cols-3 gap-2">
                       {["Helper Bob", "Farmer Joe", "Ranch Hand Mary", "Plowman Steve", "Harvester Lucy"].map(name => (
                         <button key={name}
-                          disabled={state.coins < 1000}
                           onClick={() => {
                             if (state.coins < 1000) { toast.error("Not enough gold! Need 1,000g."); return; }
                             // Check if a worker cabin is placed

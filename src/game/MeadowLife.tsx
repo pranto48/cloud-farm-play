@@ -137,6 +137,10 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [canvasSize, setCanvasSize] = useState({ width: 704, height: 480 });
   const mainContainerRef = useRef<HTMLDivElement | null>(null);
+  // Zoning Mode
+  const [zoningMode, setZoningMode] = useState<"none" | "farming" | "mining" | "woodcutting" | "water" | "erase">("none");
+  const isDraggingZone = useRef(false);
+
 
   // Hovered item for tooltips inspection
   const [hoveredItem, setHoveredItem] = useState<Item | null>(null);
@@ -1361,13 +1365,48 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
   const handleCanvasMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const coords = getMouseTileCoords(e.clientX, e.clientY);
     hoveredTileRef.current = coords;
+
+    if (zoningMode !== "none" && isDraggingZone.current && coords) {
+      setState(prev => {
+        const next = structuredClone(prev);
+        const grid = next.inHouse ? next.houseGrid! : (next.inMine ? next.mineGrid : next.tiles);
+        if (grid[coords.y]?.[coords.x]) {
+          grid[coords.y][coords.x].zone = zoningMode === "erase" ? undefined : zoningMode;
+        }
+        return next;
+      });
+    }
   };
+
+  const handleCanvasMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (zoningMode !== "none" && e.button === 0) {
+      isDraggingZone.current = true;
+      // Paint first tile immediately
+      const coords = getMouseTileCoords(e.clientX, e.clientY);
+      if (coords) {
+        setState(prev => {
+          const next = structuredClone(prev);
+          const grid = next.inHouse ? next.houseGrid! : (next.inMine ? next.mineGrid : next.tiles);
+          if (grid[coords.y]?.[coords.x]) {
+            grid[coords.y][coords.x].zone = zoningMode === "erase" ? undefined : zoningMode;
+          }
+          return next;
+        });
+      }
+    }
+  };
+
+  const handleCanvasMouseUp = () => {
+    isDraggingZone.current = false;
+  };
+
 
   const handleCanvasMouseLeave = () => {
     hoveredTileRef.current = null;
   };
 
   const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (zoningMode !== "none") return;
     const coords = getMouseTileCoords(e.clientX, e.clientY);
     if (!coords) return;
 
@@ -2130,10 +2169,42 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
           height={canvasSize.height}
           onContextMenu={handleCanvasContextMenu}
           onMouseMove={handleCanvasMouseMove}
-          onMouseLeave={handleCanvasMouseLeave}
+          onMouseDown={handleCanvasMouseDown}
+          onMouseUp={handleCanvasMouseUp}
+          onMouseLeave={() => { handleCanvasMouseLeave(); isDraggingZone.current = false; }}
           onClick={handleCanvasClick}
           style={{ width: "100%", height: "100%", display: "block", imageRendering: "pixelated", cursor: "crosshair" }}
         />
+
+                {/* Zoning Toolbar */}
+        {zoningMode !== "none" && (
+          <div className="absolute top-16 left-1/2 -translate-x-1/2 z-20 flex gap-2 bg-[#202224]/90 border-[3px] border-[#4a5568] p-2 font-mono shadow-[0_0_15px_rgba(0,0,0,0.8)] rounded-sm">
+            <div className="flex items-center text-[#ff9200] font-bold text-xs uppercase px-2 border-r border-[#4a5568] mr-1">
+              Zone Painter
+            </div>
+            {(["farming", "mining", "woodcutting", "water", "erase"] as const).map(mode => (
+              <Button
+                key={mode}
+                size="sm"
+                onClick={() => setZoningMode(mode)}
+                className={`text-[10px] font-bold uppercase rounded-none transition-all ${
+                  zoningMode === mode 
+                    ? "bg-[#38b2ac] text-white border-2 border-white shadow-[0_0_10px_#38b2ac]" 
+                    : "bg-[#2f3136] text-slate-400 border-2 border-slate-600 hover:border-[#38b2ac]"
+                }`}
+              >
+                {mode === "erase" ? "🧹 Erase" : `${mode === 'farming' ? '💧' : mode === 'mining' ? '⛏️' : mode === 'woodcutting' ? '🪓' : '🪣'} ${mode}`}
+              </Button>
+            ))}
+            <Button
+              size="sm"
+              onClick={() => setZoningMode("none")}
+              className="bg-red-900/50 text-red-300 hover:bg-red-900 border border-red-800 text-[10px] font-bold uppercase ml-2 rounded-none"
+            >
+              Exit (X)
+            </Button>
+          </div>
+        )}
 
         {/* Floating Top-Left Action Bar */}
         <div className="absolute top-3 left-3 z-20 flex items-center gap-1.5 bg-[#202224]/80 border border-slate-700 p-1 font-mono shadow-md">
@@ -3071,7 +3142,19 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
 
                         {activeTab === "workers" && (
               <div className="space-y-3">
-                <h3 className="text-[#ff9200] font-bold border-b border-[#ff9200]/30 pb-1 mb-2">Worker Management</h3>
+                                <div className="flex justify-between items-center border-b border-[#ff9200]/30 pb-2 mb-2">
+                  <h3 className="text-[#ff9200] font-bold">Worker Management</h3>
+                  <Button 
+                    size="sm"
+                    className="bg-[#2a2c2e] border border-[#ff9200]/50 text-[#ff9200] hover:bg-[#ff9200] hover:text-white text-[10px] font-bold uppercase rounded-none px-3"
+                    onClick={() => {
+                      setZoningMode("farming");
+                      setInventoryOpen(false);
+                    }}
+                  >
+                    🖌️ Paint Work Zones
+                  </Button>
+                </div>
                 <div className="grid grid-cols-1 gap-2">
                   {state.workers && state.workers.length > 0 ? state.workers.map(w => (
                     <div key={w.id} className="bg-[#141517] p-2 border border-slate-700 rounded-none flex items-center gap-3">

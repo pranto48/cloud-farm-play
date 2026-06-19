@@ -2264,10 +2264,11 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
           {/* About / Game Guide Button (H) */}
           <button
             onClick={() => setAboutOpen(true)}
-            title="Game Guide (H)"
-            className="w-8 h-8 flex items-center justify-center bg-[#2a2c2e] hover:bg-[#22d3ee]/20 border border-slate-600 hover:border-[#22d3ee] text-slate-100 transition-all cursor-pointer font-bold text-xs"
+            title="About & Cheats (H)"
+            className="h-8 px-2 flex items-center justify-center gap-1 bg-[#2a2c2e] hover:bg-[#22d3ee]/20 border border-slate-600 hover:border-[#22d3ee] text-slate-100 transition-all cursor-pointer font-bold text-xs"
           >
             <HelpCircle className="h-4 w-4 text-[#22d3ee]" />
+            <span className="text-[#22d3ee]">About & Cheats (H)</span>
           </button>
 
           {/* Cheat Console Button (/) */}

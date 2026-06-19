@@ -3160,9 +3160,12 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                     <div key={w.id} className="bg-[#141517] p-2 border border-slate-700 rounded-none flex items-center gap-3">
                       <div className="w-8 h-8 flex items-center justify-center bg-[#2f3136] border border-slate-600">👷</div>
                       <div className="flex-1 text-xs">
-                        <div className="font-bold text-[#ff9200]">{w.name}</div>
+                        <div className="font-bold text-[#ff9200]">{w.name} <span className="text-[9px] text-slate-500 font-normal">({w.role})</span></div>
                         <div className="text-slate-400 text-[10px]">Energy: {Math.floor(w.energy)}%</div>
                         <div className="text-slate-400 text-[10px]">Status: {w.statusText}</div>
+                        <div className="text-slate-500 text-[9px] mt-1 italic">
+                          {w.role === "idle" ? "Assign a role and paint a zone to start." : `Searching for work inside painted zones.`}
+                        </div>
                         {w.inventory && (
                           <div className="text-emerald-400 text-[10px]">Holding: {w.inventory.name} ({w.inventory.count}x)</div>
                         )}
@@ -3193,7 +3196,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                       </div>
                     </div>
                   )) : (
-                    <div className="text-center text-slate-500 text-xs py-4">No workers hired. Buy them at the Player Store.</div>
+                    <div className="text-center text-slate-500 text-xs py-4">No workers hired. Hire them from the Shop tab.</div>
                   )}
                 </div>
               </div>

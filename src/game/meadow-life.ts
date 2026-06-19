@@ -1069,6 +1069,13 @@ export function isWalkable(t: Tile): boolean {
   );
 }
 
+function isTileInWorkerZone(t: Tile, role: string): boolean {
+  if (!t) return false;
+  if (t.zone === role) return true;
+  if (role === "water_collector" && t.zone === "water") return true;
+  return false;
+}
+
 export function isWorkerWalkable(t: Tile, workerRole?: string, workerX?: number, workerY?: number, cabinX?: number, cabinY?: number): boolean {
   if (!t) return false;
   
@@ -1320,7 +1327,7 @@ export function updateEntities(state: GameState, dt: number): void {
     }
 
     // Inventory full check -> find chest
-    if (worker.inventory, worker.role, worker.x, worker.y, worker.cabinX, worker.cabinY) {
+    if (worker.inventory) {
       worker.statusText = "Inventory full, seeking Chest...";
       let nearestChestX = -1;
       let nearestChestY = -1;
@@ -1365,7 +1372,7 @@ export function updateEntities(state: GameState, dt: number): void {
             if (dx !== 0 && isWorkerWalkable(grid[nextY]?.[nextX], worker.role, worker.x, worker.y, worker.cabinX, worker.cabinY)) { worker.x = nextX; }
             else {
               nextX = worker.x; nextY = worker.y + dy;
-              if (dy !== 0 && isWorkerWalkable(grid[nextY]?.[nextX], worker.role, worker.x, worker.y, worker.cabinX, worker.cabinY), worker.role, worker.x, worker.y, worker.cabinX, worker.cabinY) { worker.y = nextY; }
+              if (dy !== 0 && isWorkerWalkable(grid[nextY]?.[nextX], worker.role, worker.x, worker.y, worker.cabinX, worker.cabinY)) { worker.y = nextY; }
             }
           }
           return;

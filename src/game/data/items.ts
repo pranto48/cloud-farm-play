@@ -563,6 +563,14 @@ export const ITEM_DEFS: Record<string, Omit<Item, "count">> = {
     iconColor: "#8e44ad",
     iconSymbol: "🧰",
   },
+  water_tank: {
+    id: "water_tank",
+    name: "Water Tank",
+    type: "furniture",
+    description: "Stores water collected by workers. Interact to refill your watering can instantly.",
+    price: 300,
+    iconSymbol: "🛢️",
+  },
   water_bucket: {
     id: "water_bucket",
     name: "Water Bucket",

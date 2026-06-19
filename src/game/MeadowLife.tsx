@@ -2365,7 +2365,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
 
       {/* A. PIERRE'S OVERHAULED SHOP MODAL */}
       <Dialog open={shopOpen} onOpenChange={setShopOpen}>
-        <DialogContent className="max-w-xl bg-[#242628] border-2 border-slate-700 text-slate-100 rounded-none font-mono">
+        <DialogContent container={mainContainerRef.current} className="max-w-xl bg-[#242628] border-2 border-slate-700 text-slate-100 rounded-none font-mono">
           <DialogHeader>
             <DialogTitle className="text-lg font-bold flex items-center gap-2 text-[#ff9200] border-b border-slate-800 pb-2">
               <Coins className="h-5 w-5 text-yellow-500" />
@@ -2519,7 +2519,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
 
       {/* B. MAILBOX LETTERS DIALOG OVERLAY */}
       <Dialog open={mailboxOpen} onOpenChange={setMailboxOpen}>
-        <DialogContent className="max-w-md bg-[#2d1e18] border-[#5d4037] text-stone-100">
+        <DialogContent container={mainContainerRef.current} className="max-w-md bg-[#2d1e18] border-[#5d4037] text-stone-100">
           <DialogHeader>
             <DialogTitle className="text-lg font-bold flex items-center gap-2 text-amber-400 border-b border-[#5d4037] pb-2">
               <Mail className="h-5 w-5 text-amber-500" />
@@ -2604,7 +2604,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
       {/* C. SLEEP OVERNIGHT LEDGER (STAYS FOR CONSISTENCY) */}
       <Dialog open={sleepSummary !== null} onOpenChange={handleCloseSleepSummary}>
         {sleepSummary && (
-          <DialogContent className="max-w-md bg-[#2d1e18] border-[#5d4037] text-stone-100">
+          <DialogContent container={mainContainerRef.current} className="max-w-md bg-[#2d1e18] border-[#5d4037] text-stone-100">
             <DialogHeader>
               <DialogTitle className="text-lg font-bold text-center text-amber-400 border-b border-[#5d4037] pb-2">
                 🌾 Meadow Valley Shipping Ledger 🌾
@@ -2649,7 +2649,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
 
       {/* D. TABBED JOURNAL / BACKPACK */}
       <Dialog open={inventoryOpen} onOpenChange={setInventoryOpen}>
-        <DialogContent className="max-w-xl bg-[#242628] border-2 border-slate-700 text-slate-100 rounded-none font-mono">
+        <DialogContent container={mainContainerRef.current} className="max-w-xl bg-[#242628] border-2 border-slate-700 text-slate-100 rounded-none font-mono">
           <DialogHeader>
             <DialogTitle className="text-lg font-bold flex items-center gap-2 text-[#ff9200] border-b border-slate-800 pb-2">
               <Backpack className="h-5 w-5 text-[#ff9200]" />
@@ -3046,7 +3046,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
 
         return (
           <Dialog open={true} onOpenChange={() => setChestOpenTile(null)}>
-            <DialogContent className="max-w-md bg-stone-900 border-stone-850 text-stone-100 rounded-lg">
+            <DialogContent container={mainContainerRef.current} className="max-w-md bg-stone-900 border-stone-850 text-stone-100 rounded-lg">
               <DialogHeader>
                 <DialogTitle className="text-lg font-bold flex items-center gap-2 text-amber-500 border-b border-stone-800 pb-2">
                   <Compass className="h-5 w-5" />
@@ -3193,7 +3193,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
       {/* STARDEW VALLEY SLEEP CONFIRMATION DIALOG */}
       {sleepConfirmOpen && (
         <Dialog open={true} onOpenChange={() => setSleepConfirmOpen(false)}>
-          <DialogContent className="max-w-xs bg-[#2d1e18] border-2 border-[#5d4037] text-stone-100 rounded-lg font-mono">
+          <DialogContent container={mainContainerRef.current} className="max-w-xs bg-[#2d1e18] border-2 border-[#5d4037] text-stone-100 rounded-lg font-mono">
             <DialogHeader>
               <DialogTitle className="text-sm font-bold text-center text-amber-400">
                 Go to sleep for the night?
@@ -3222,7 +3222,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
       {/* SHIPPING BIN STORAGE INTERFACE */}
       {shippingBinOpen && (
         <Dialog open={true} onOpenChange={() => setShippingBinOpen(false)}>
-          <DialogContent className="max-w-md bg-[#2d1e18] border-2 border-[#5d4037] text-stone-100 rounded-lg font-mono">
+          <DialogContent container={mainContainerRef.current} className="max-w-md bg-[#2d1e18] border-2 border-[#5d4037] text-stone-100 rounded-lg font-mono">
             <DialogHeader>
               <DialogTitle className="text-lg font-bold flex items-center gap-2 text-amber-400 border-b border-[#5d4037] pb-2">
                 <span>🌾 Shipping Bin 🌾</span>
@@ -3327,7 +3327,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
 
         return (
           <Dialog open={true} onOpenChange={() => setFurnaceOpenTile(null)}>
-            <DialogContent className="max-w-md bg-zinc-900 border-2 border-zinc-700 text-zinc-100 rounded-none font-mono">
+            <DialogContent container={mainContainerRef.current} className="max-w-md bg-zinc-900 border-2 border-zinc-700 text-zinc-100 rounded-none font-mono">
               <DialogHeader>
                 <DialogTitle className="text-lg font-bold flex items-center gap-2 text-orange-400 border-b border-zinc-700 pb-2">
                   <Flame className={`h-5 w-5 ${isActive ? "text-orange-500 animate-pulse" : "text-zinc-500"}`} />
@@ -3481,7 +3481,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
 
       <Dialog open={npcDialogue !== null} onOpenChange={() => setNpcDialogue(null)}>
         {npcDialogue && (
-          <DialogContent className="max-w-md bg-stone-900 border-stone-850 text-stone-100">
+          <DialogContent container={mainContainerRef.current} className="max-w-md bg-stone-900 border-stone-850 text-stone-100">
             <div className="flex gap-4 py-2">
               <div
                 className="w-16 h-16 rounded-lg border-2 border-amber-500 flex items-center justify-center text-3xl font-extrabold text-white shrink-0"
@@ -3519,7 +3519,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
 
       {/* G. WORKER SETTINGS DIALOG */}
       <Dialog open={selectedWorkerId !== null} onOpenChange={() => setSelectedWorkerId(null)}>
-        <DialogContent className="max-w-md bg-stone-900 border-stone-850 text-stone-100 font-mono">
+        <DialogContent container={mainContainerRef.current} className="max-w-md bg-stone-900 border-stone-850 text-stone-100 font-mono">
           {selectedWorkerId && (() => {
             const activeWorker = state.workers?.find((w) => w.id === selectedWorkerId);
             if (!activeWorker) return null;
@@ -3781,7 +3781,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
 
       {/* === ABOUT PAGE DIALOG === */}
       <Dialog open={aboutOpen} onOpenChange={setAboutOpen}>
-        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto bg-[#0f1117] border-2 border-[#334155] text-slate-100 rounded-xl font-mono">
+        <DialogContent container={mainContainerRef.current} className="max-w-3xl max-h-[85vh] overflow-y-auto bg-[#0f1117] border-2 border-[#334155] text-slate-100 rounded-xl font-mono">
           <DialogHeader>
             <DialogTitle className="text-2xl font-black flex items-center gap-3 text-emerald-400">
               <span>🌿</span>
@@ -3910,7 +3910,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
       {/* === PLAYER STORE DIALOG === */}
       {playerStoreOpen && (
         <Dialog open={true} onOpenChange={() => setPlayerStoreOpen(false)}>
-          <DialogContent className="max-w-2xl max-h-[85vh] overflow-hidden flex flex-col bg-[#1a0f05] border-2 border-[#d97706] text-stone-100 rounded-xl font-mono">
+          <DialogContent container={mainContainerRef.current} className="max-w-2xl max-h-[85vh] overflow-hidden flex flex-col bg-[#1a0f05] border-2 border-[#d97706] text-stone-100 rounded-xl font-mono">
             <DialogHeader className="shrink-0">
               <DialogTitle className="text-xl font-black flex items-center gap-2 text-amber-400 border-b border-amber-900/40 pb-2">
                 <span>🏪</span> Player Store
@@ -4212,7 +4212,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
       {/* === RESEARCH CENTER DIALOG === */}
       {researchCenterOpen && (
         <Dialog open={true} onOpenChange={() => setResearchCenterOpen(false)}>
-          <DialogContent className="max-w-3xl max-h-[85vh] overflow-hidden flex flex-col bg-[#0d0a1a] border-2 border-[#7c3aed] text-slate-100 rounded-xl font-mono">
+          <DialogContent container={mainContainerRef.current} className="max-w-3xl max-h-[85vh] overflow-hidden flex flex-col bg-[#0d0a1a] border-2 border-[#7c3aed] text-slate-100 rounded-xl font-mono">
             <DialogHeader className="shrink-0">
               <DialogTitle className="text-xl font-black flex items-center gap-2 text-violet-400 border-b border-violet-900/50 pb-2">
                 <span>🔬</span> Research Center

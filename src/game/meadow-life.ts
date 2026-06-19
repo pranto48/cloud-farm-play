@@ -1076,6 +1076,13 @@ function isTileInWorkerZone(t: Tile, role: string): boolean {
   return false;
 }
 
+
+function getWorkerSpeed(t?: Tile): number {
+  if (!t) return 0.8;
+  const isRoad = t.placedItemId === "stone_path" || t.kind === "path";
+  return isRoad ? 0.2 : 0.8;
+}
+
 export function isWorkerWalkable(t: Tile, workerRole?: string, workerX?: number, workerY?: number, cabinX?: number, cabinY?: number): boolean {
   if (!t) return false;
   
@@ -1098,26 +1105,7 @@ export function isWorkerWalkable(t: Tile, workerRole?: string, workerX?: number,
     (t.kind !== "placed_item" || t.cropId !== undefined || t.placedItemId === "chicken_egg" || t.placedItemId === "stone_path")
   );
 
-  if (!isBaseWalkable) return false;
-
-  // If worker context is provided, enforce zoning and road restrictions
-  if (workerRole && workerRole !== "idle") {
-    const isRoad = t.placedItemId === "stone_path" || t.kind === "path";
-    const isInZone = t.zone === workerRole || (workerRole === "water_collector" && t.zone === "water");
-    // Let them walk around their cabin so they don't get permanently stuck
-    let isNearCabin = false;
-    if (workerX !== undefined && workerY !== undefined && cabinX !== undefined && cabinY !== undefined) {
-       // We can't easily get t.x/t.y here unless we pass it, but if they are offroad, they can only move towards a road.
-       // For simplicity, we just check if the tile is a road or in zone.
-    }
-    
-    // Workers MUST walk on roads or inside their assigned zone
-    if (!isRoad && !isInZone) {
-      return false; // Blocking movement off-road
-    }
-  }
-
-  return true;
+  return isBaseWalkable;
 }
 
 export function tickFurnace(tile: Tile, dt: number): void {
@@ -1298,7 +1286,7 @@ export function updateEntities(state: GameState, dt: number): void {
       if (worker.x !== worker.cabinX || worker.y !== worker.cabinY) {
         worker.walkTimer -= dt;
         if (worker.walkTimer <= 0) {
-          worker.walkTimer = 0.5;
+          worker.walkTimer = getWorkerSpeed(grid[worker.y]?.[worker.x]);
           const dx = Math.sign(worker.cabinX - worker.x);
           const dy = Math.sign(worker.cabinY - worker.y);
 
@@ -1364,7 +1352,7 @@ export function updateEntities(state: GameState, dt: number): void {
           // Move to chest
           worker.walkTimer -= dt;
           if (worker.walkTimer <= 0) {
-            worker.walkTimer = 0.4;
+            worker.walkTimer = getWorkerSpeed(grid[worker.y]?.[worker.x]);
             const dx = Math.sign(nearestChestX - worker.x);
             const dy = Math.sign(nearestChestY - worker.y);
             let nextX = worker.x + dx;
@@ -1478,7 +1466,7 @@ export function updateEntities(state: GameState, dt: number): void {
     if (dist > 1) {
       worker.walkTimer -= dt;
       if (worker.walkTimer <= 0) {
-        worker.walkTimer = 0.4;
+        worker.walkTimer = getWorkerSpeed(grid[worker.y]?.[worker.x]);
         const dx = Math.sign(targetX - worker.x);
         const dy = Math.sign(targetY - worker.y);
 

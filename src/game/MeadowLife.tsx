@@ -1403,6 +1403,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
       (tile.kind === "placed_item" && (
         tile.placedItemId === "furnace" ||
         tile.placedItemId === "chest" ||
+        tile.placedItemId === "water_tank" ||
         tile.placedItemId === "mailbox" ||
         tile.placedItemId === "worker_cabin" ||
         tile.placedItemId === "chicken_egg"
@@ -1481,7 +1482,8 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
           setFurnaceOpenTile({ x: coords.x, y: coords.y });
         } else if (tile.kind === "placed_item" && tile.placedItemId === "mailbox") {
           setMailboxOpen(true);
-        } else if (tile.kind === "placed_item" && (tile.placedItemId === "chest" || tile.placedItemId === "worker_cabin")) {
+        } else if (tile.kind === "placed_item" && (tile.placedItemId === "chest" ||
+        tile.placedItemId === "water_tank" || tile.placedItemId === "worker_cabin")) {
           setChestOpenTile({ x: coords.x, y: coords.y });
         } else if (!curState.inMine && !curState.inHouse && coords.x === 18 && coords.y === 29) {
           setShippingBinOpen(true);
@@ -2690,7 +2692,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                   {state.inventory.map((item, idx) => (
                     <button
                       key={idx}
-                      onClick={() => handleSlotClick(idx, "inventory")}
+                      onClick={(e) => handleSlotClick(idx, "inventory", e)}
                       onContextMenu={(e) => handleSlotRightClick(e, idx, "inventory")}
                       onMouseEnter={() => item && setHoveredItem(item)}
                       onMouseLeave={() => setHoveredItem(null)}
@@ -3081,7 +3083,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                     {chestInventory.map((item, idx) => (
                       <button
                         key={idx}
-                        onClick={() => handleSlotClick(idx, "chest")}
+                        onClick={(e) => handleSlotClick(idx, "chest", e)}
                         onContextMenu={(e) => handleSlotRightClick(e, idx, "chest")}
                         onMouseEnter={() => item && setHoveredItem(item)}
                         onMouseLeave={() => setHoveredItem(null)}
@@ -3124,7 +3126,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                     {state.inventory.map((item, idx) => (
                       <button
                         key={idx}
-                        onClick={() => handleSlotClick(idx, "inventory")}
+                        onClick={(e) => handleSlotClick(idx, "inventory", e)}
                         onContextMenu={(e) => handleSlotRightClick(e, idx, "inventory")}
                         onMouseEnter={() => item && setHoveredItem(item)}
                         onMouseLeave={() => setHoveredItem(null)}
@@ -3272,7 +3274,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                   {state.inventory.slice(0, 30).map((item, idx) => (
                     <button
                       key={idx}
-                      onClick={() => handleSlotClick(idx, "inventory")}
+                      onClick={(e) => handleSlotClick(idx, "inventory", e)}
                       onContextMenu={(e) => handleSlotRightClick(e, idx, "inventory")}
                       onMouseEnter={() => item && setHoveredItem(item)}
                       onMouseLeave={() => setHoveredItem(null)}
@@ -3439,7 +3441,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                     {state.inventory.slice(0, 30).map((item, idx) => (
                       <button
                         key={idx}
-                        onClick={() => handleSlotClick(idx, "inventory")}
+                        onClick={(e) => handleSlotClick(idx, "inventory", e)}
                         onContextMenu={(e) => handleSlotRightClick(e, idx, "inventory")}
                         onMouseEnter={() => item && setHoveredItem(item)}
                         onMouseLeave={() => setHoveredItem(null)}

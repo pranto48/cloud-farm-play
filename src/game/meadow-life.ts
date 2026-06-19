@@ -2844,22 +2844,34 @@ export function draw(
           ctx.fillStyle = "#bd9e72";
           ctx.fillRect(px + 8 + pathR * 12, py + 8 + pathR * 12, 2, 2);
         }
-      } else if (t.kind === "water") {
+            } else if (t.kind === "water") {
         // 1. Sandy beach shoreline
         drawOrganicBlob(ctx, y, x, currentGrid, TILE, isWater, "#e5cbb3", 0.75);
         // 2. Shallow water transition
-        drawOrganicBlob(ctx, y, x, currentGrid, TILE, isWater, "#4c81a3", 0.6);
+        drawOrganicBlob(ctx, y, x, currentGrid, TILE, isWater, "rgba(76, 129, 163, 0.8)", 0.6);
         // 3. Deep water core
-        drawOrganicBlob(ctx, y, x, currentGrid, TILE, isWater, "#2980b9", 0.46);
+        drawOrganicBlob(ctx, y, x, currentGrid, TILE, isWater, "rgba(41, 128, 185, 0.8)", 0.46);
 
-        // Animated wave ripples inside the deep water core
-        const wave = Math.sin(Date.now() / 250 + x * 0.4 + y * 0.2) * 1.5;
-        ctx.fillStyle = "#aed6f1";
-        ctx.fillRect(px + 10, py + 12 + wave, 6, 1.2);
-        ctx.fillRect(px + 16, py + 22 - wave, 6, 1.2);
+        // Animated wave ripples intersecting across the whole pond
+        const timeOffset = Date.now() / 600;
+        const waveX = Math.sin(timeOffset + y * 0.3) * 3;
+        const waveY = Math.cos(timeOffset + x * 0.3) * 3;
+        const alpha = Math.max(0, Math.sin(timeOffset * 2 + x + y)) * 0.3;
+        
+        ctx.fillStyle = `rgba(174, 214, 241, ${alpha})`;
+        ctx.fillRect(px + 8 + waveX, py + 12 + waveY, 12, 1.5);
+        ctx.fillRect(px + 14 - waveX, py + 22 - waveY, 8, 1.5);
 
-        // Stepping water lily pads with bobbing and rotation
-        if ((x * 13 + y * 9) % 23 === 0) {
+        // Animated foam edge where it touches non-water
+        if (y > 0 && currentGrid[y-1] && currentGrid[y-1][x].kind !== "water") {
+          const foamBob = Math.sin(Date.now() / 400 + x) * 1.5;
+          ctx.fillStyle = "rgba(255,255,255,0.4)";
+          ctx.beginPath();
+          ctx.ellipse(px + TILE/2, py + 4 + foamBob, TILE/2, 2, 0, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        // Stepping water lily pads with bobbing and rotationif ((x * 13 + y * 9) % 23 === 0) {
           const lilyBob = Math.sin(Date.now() / 700 + (x * 13 + y * 9)) * 1.2;
           const lilyAngle = Math.sin(Date.now() / 1400 + x) * 0.06;
           ctx.save();
@@ -3670,17 +3682,20 @@ export function draw(
     });
   }
 
-  // 3c. Draw Hired Workers
+    // 3c. Draw Hired Workers
   if (!state.inMine && state.workers) {
     state.workers.forEach((worker) => {
       if (!worker) return;
+      
+      const bounce = (Math.abs(worker.x - worker.subX) > 0.01 || Math.abs(worker.y - worker.subY) > 0.01) ? Math.sin(Date.now() / 100) * 2 : 0;
+      
       const wx = worker.subX * TILE;
-      const wy = worker.subY * TILE;
+      const wy = worker.subY * TILE - Math.abs(bounce);
 
-      // Draw shadow under worker feet
+      // Draw shadow under worker feet (static on ground)
       ctx.fillStyle = "rgba(0, 0, 0, 0.25)";
       ctx.beginPath();
-      ctx.ellipse(wx + 16, wy + 26, 8, 3.5, 0, 0, Math.PI * 2);
+      ctx.ellipse(worker.subX * TILE + 16, worker.subY * TILE + 26, 8, 3.5, 0, 0, Math.PI * 2);
       ctx.fill();
 
       // Shirt + overalls
@@ -3690,17 +3705,33 @@ export function draw(
       ctx.fillRect(wx + 10, wy + 24, 12, 8);
       ctx.fillStyle = "#ffdbac";
       ctx.fillRect(wx + 10, wy + 4, 12, 10);
-      ctx.fillStyle = "#f4d03f";
+      ctx.fillStyle = "#f4d03f"; // hat brim
       ctx.fillRect(wx + 6, wy + 4, 20, 2);
-      ctx.fillRect(wx + 11, wy, 10, 4);
+      ctx.fillRect(wx + 11, wy, 10, 4); // hat top
+      
+      // Determine AI Icon
+      let icon = "🚶";
+      if (worker.energy <= 0) icon = "💤";
+      else if (worker.inventory) icon = worker.inventory.iconSymbol || "📦";
+      else if (worker.actionTimer > 0) {
+        if (worker.role === "farming") icon = "💧";
+        else if (worker.role === "woodcutting") icon = "🪓";
+        else if (worker.role === "mining") icon = "⛏️";
+        else if (worker.role === "water") icon = "🪣";
+      } else if (worker.statusText.includes("Idle")) icon = "💤";
+      else if (worker.statusText.includes("Seeking")) icon = "🔍";
+
+      // Draw AI Status Icon floating above head
+      ctx.font = "12px serif";
+      ctx.textAlign = "center";
+      ctx.fillText(icon, wx + 16, wy - 14);
 
       // Status text banner
       ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
-      ctx.fillRect(wx - 24, wy - 18, TILE + 48, 11);
+      ctx.fillRect(wx - 24, wy - 10, TILE + 48, 11);
       ctx.fillStyle = "#fff";
       ctx.font = "bold 7px monospace";
-      ctx.textAlign = "center";
-      ctx.fillText(`${worker.name}: ${worker.statusText}`, wx + TILE / 2, wy - 10);
+      ctx.fillText(`${worker.name}: ${worker.statusText}`, wx + TILE / 2, wy - 2);
     });
   }
 

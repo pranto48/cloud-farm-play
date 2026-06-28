@@ -361,11 +361,6 @@ export const ITEM_DEFS: Record<string, Omit<Item, "count">> = {
     description: "Raw silver. Can be smelted into bars.",
     price: 20, iconColor: "#e5e4e2", iconSymbol: "🪨"
   },
-  coal: {
-    id: "coal", name: "Coal", type: "resource",
-    description: "A combustible black rock used as fuel.",
-    price: 15, iconColor: "#2f4f4f", iconSymbol: "🌑"
-  },
   silver_bar: {
     id: "silver_bar", name: "Silver Bar", type: "resource",
     description: "A precious silver bar.",

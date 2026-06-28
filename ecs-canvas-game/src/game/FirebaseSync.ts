@@ -8,7 +8,7 @@ import {
   getDoc,
   Bytes
 } from "firebase/firestore";
-import { getAuth, signInAnonymously, onAuthStateChanged, User } from "firebase/auth";
+import { getAuth, signInAnonymously, onAuthStateChanged, type User } from "firebase/auth";
 import pako from "pako";
 
 const firebaseConfig = {

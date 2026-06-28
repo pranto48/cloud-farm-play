@@ -7,7 +7,7 @@ import {
   MapComponent,
   StructureComponent,
   PlayerComponent,
-  ItemType,
+  type ItemType,
 } from "../components/GameComponents";
 import { spawnCrop, spawnParticle, spawnResourceBurst } from "../Spawner";
 import { toast } from "../utils/Toast";

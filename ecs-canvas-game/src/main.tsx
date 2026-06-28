@@ -1,5 +1,4 @@
 import "./style.css";
-import React from "react";
 import { createRoot } from "react-dom/client";
 import { ToolBuilderOverlay } from "./components/ToolBuilderOverlay";
 import { Game } from "./game/Game";

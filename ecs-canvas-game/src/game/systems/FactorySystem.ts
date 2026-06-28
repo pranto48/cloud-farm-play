@@ -7,7 +7,7 @@ import {
   ItemComponent,
   MapComponent,
   RECIPES,
-  ItemType,
+  type ItemType,
 } from "../components/GameComponents";
 import { spawnItemEntity, spawnParticle, spawnResourceBurst } from "../Spawner";
 

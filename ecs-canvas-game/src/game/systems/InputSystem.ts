@@ -7,8 +7,8 @@ import {
   PlayerComponent,
   MapComponent,
   StructureComponent,
-  BuildTool,
-  TileType,
+  type BuildTool,
+  type TileType,
   WorkerComponent,
 } from "../components/GameComponents";
 import { 
@@ -295,7 +295,7 @@ export class InputSystem extends System {
               const wComp = world.getComponent(workerEnt, WorkerComponent)!;
               if (wComp.houseEntityId === occupiedStructureEntity) {
                 world.destroyEntity(workerEnt);
-                toast.warning("Associated worker dismissed due to cottage demolition!");
+                toast.info("Associated worker dismissed due to cottage demolition!");
               }
             }
           }

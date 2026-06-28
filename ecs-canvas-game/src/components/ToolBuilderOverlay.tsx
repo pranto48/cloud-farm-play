@@ -1,10 +1,9 @@
-import React, { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   WorkerComponent,
   PositionComponent,
   PlayerComponent,
-  StructureComponent,
-  BuildTool,
+  type BuildTool,
 } from "../game/components/GameComponents";
 import { spawnWorker } from "../game/Spawner";
 import { toast } from "../game/utils/Toast";

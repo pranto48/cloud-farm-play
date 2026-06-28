@@ -25,7 +25,7 @@ export const analytics = typeof window !== "undefined"
   ? isSupported().then((supported) => (supported ? getAnalytics(app) : null)).catch(() => null)
   : Promise.resolve(null);
 
-// Seeding function to ensure Meadow Life game exists in Firestore
+// Seeding function to ensure Meadow Life and Arcane Survivors exist in Firestore
 export async function seedDefaultGames() {
   try {
     const meadowRef = doc(db, "games", "meadow-life");
@@ -41,6 +41,21 @@ export async function seedDefaultGames() {
         created_at: new Date().toISOString(),
       });
       console.log("[Firebase] Seeded Meadow Life default game");
+    }
+
+    const arcaneRef = doc(db, "games", "arcane-survivors");
+    const arcaneSnap = await getDoc(arcaneRef);
+    if (!arcaneSnap.exists()) {
+      await setDoc(arcaneRef, {
+        id: "arcane-survivors",
+        title: "Arcane Survivors",
+        slug: "arcane-survivors",
+        description: "A premium HTML5 Canvas survivors rogue-lite shooter powered by a high-performance Entity-Component-System (ECS) engine.",
+        genre: "Action Roguelike",
+        cover_url: null,
+        created_at: new Date().toISOString(),
+      });
+      console.log("[Firebase] Seeded Arcane Survivors default game");
     }
   } catch (err) {
     console.warn("[Firebase] Seeding checked/ignored:", err);

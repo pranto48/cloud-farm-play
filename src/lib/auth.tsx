@@ -77,7 +77,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           });
         }
 
-        // 3. Grant Meadow Life game access
+        // 3. Grant default game access (Meadow Life and Arcane Survivors)
         const userGameRef = doc(db, "user_games", `${firebaseUser.uid}_meadow-life`);
         await setDoc(userGameRef, {
           id: `${firebaseUser.uid}_meadow-life`,
@@ -86,7 +86,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           added_at: new Date().toISOString(),
           last_played_at: null,
         });
-        console.log("[Auth] Provisioned default Meadow Life access");
+
+        const arcaneUserGameRef = doc(db, "user_games", `${firebaseUser.uid}_arcane-survivors`);
+        await setDoc(arcaneUserGameRef, {
+          id: `${firebaseUser.uid}_arcane-survivors`,
+          user_id: firebaseUser.uid,
+          game_id: "arcane-survivors",
+          added_at: new Date().toISOString(),
+          last_played_at: null,
+        });
+        console.log("[Auth] Provisioned default game access (Meadow Life & Arcane Survivors)");
       }
     } catch (err) {
       console.warn("[Auth] Profile self-healing checked/ignored:", err);

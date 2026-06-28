@@ -66,6 +66,10 @@ function PlayPage() {
 
   // Decide whether to ask resume vs new
   useEffect(() => {
+    if (slug === "arcane-survivors") {
+      setChosen({} as any);
+      return;
+    }
     if (!userId || !game.data || save.isLoading) return;
     if (chosen) return;
     if (save.data) {
@@ -73,7 +77,7 @@ function PlayPage() {
     } else {
       setChosen(newGame());
     }
-  }, [game.data, save.data, save.isLoading, chosen, userId]);
+  }, [game.data, save.data, save.isLoading, chosen, userId, slug]);
 
   // Play session lifecycle
   useEffect(() => {
@@ -205,10 +209,17 @@ function PlayPage() {
         </header>
       )}
 
-      <main className={`flex flex-1 items-start justify-center ${isFullscreen ? "p-0 w-screen h-screen bg-[#18110e]" : "p-4 md:p-8"}`}>
+      <main className={`flex flex-1 items-start justify-center ${isFullscreen ? "p-0 w-screen h-screen bg-[#18110e]" : "p-4 md:p-8"} w-full`}>
         {chosen ? (
           slug === "meadow-life" ? (
             <MeadowLife initialState={chosen} onStateChange={handleStateChange} />
+          ) : slug === "arcane-survivors" ? (
+            <iframe
+              src={typeof window !== "undefined" && window.location.hostname === "localhost" ? "http://localhost:8081/" : "/arcane-survivors/"}
+              className="w-full min-h-[80vh] border-0 rounded-lg shadow-lg bg-black"
+              title="Arcane Survivors"
+              allow="fullscreen; keyboard"
+            />
           ) : (
             <div className="rounded-lg border border-dashed p-10 text-muted-foreground">
               This game isn't playable yet.

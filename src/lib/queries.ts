@@ -99,6 +99,25 @@ export async function fetchGameBySlug(slug: string): Promise<GameRow | null> {
     }
   }
 
+  if (slug === "arcane-survivors") {
+    try {
+      const arcaneRef = doc(db, "games", "arcane-survivors");
+      const defaultGame: GameRow = {
+        id: "arcane-survivors",
+        title: "Arcane Survivors",
+        slug: "arcane-survivors",
+        description: "A premium HTML5 Canvas survivors rogue-lite shooter powered by a high-performance Entity-Component-System (ECS) engine.",
+        genre: "Action Roguelike",
+        cover_url: null,
+        created_at: new Date().toISOString()
+      };
+      await setDoc(arcaneRef, defaultGame);
+      return defaultGame;
+    } catch (err) {
+      console.warn("[Firebase] Seeding arcane-survivors on fetchGameBySlug failed:", err);
+    }
+  }
+
   const q = query(collection(db, "games"), where("slug", "==", slug));
   const qSnap = await getDocs(q);
   if (!qSnap.empty) return qSnap.docs[0].data() as GameRow;
@@ -288,6 +307,26 @@ export async function fetchAllGames(): Promise<GameRow[]> {
       games.push(defaultGame);
     } catch (err) {
       console.warn("[Firebase] Seeding meadow-life on fetchAllGames failed:", err);
+    }
+  }
+
+  const hasArcane = games.some(g => g.id === "arcane-survivors" || g.slug === "arcane-survivors");
+  if (!hasArcane) {
+    try {
+      const arcaneRef = doc(db, "games", "arcane-survivors");
+      const defaultGame: GameRow = {
+        id: "arcane-survivors",
+        title: "Arcane Survivors",
+        slug: "arcane-survivors",
+        description: "A premium HTML5 Canvas survivors rogue-lite shooter powered by a high-performance Entity-Component-System (ECS) engine.",
+        genre: "Action Roguelike",
+        cover_url: null,
+        created_at: new Date().toISOString()
+      };
+      await setDoc(arcaneRef, defaultGame);
+      games.push(defaultGame);
+    } catch (err) {
+      console.warn("[Firebase] Seeding arcane-survivors on fetchAllGames failed:", err);
     }
   }
 

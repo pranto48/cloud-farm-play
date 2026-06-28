@@ -4,6 +4,8 @@ import { dirname, resolve } from 'node:path';
 import { nodeFileTrace } from '@vercel/nft';
 
 execSync('npm run build', { stdio: 'inherit' });
+console.log('[vercel-build] Building subproject ecs-canvas-game...');
+execSync('cd ecs-canvas-game && npm install && npm run build', { stdio: 'inherit' });
 
 // Build Vercel output API v3 layout (.vercel/output)
 // - static client assets -> .vercel/output/static
@@ -17,6 +19,10 @@ const staticDir = `${outRoot}/static`;
 mkdirSync(staticDir, { recursive: true });
 if (existsSync('dist/client')) {
   cpSync('dist/client', staticDir, { recursive: true });
+}
+if (existsSync('ecs-canvas-game/dist')) {
+  cpSync('ecs-canvas-game/dist', `${staticDir}/arcane-survivors`, { recursive: true });
+  console.log('[vercel-build] Copied ecs-canvas-game/dist to Vercel output static/arcane-survivors');
 }
 
 // 2. SSR function (Node serverless). Copy the SSR output as-is, then trace

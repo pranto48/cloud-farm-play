@@ -158,7 +158,6 @@ export class CharacterTextureLoader {
       shadowColor = "#27ae60";
     }
 
-    const _isIdle = col === 0;
     const isWalk1 = col === 1;
     const isWalk2 = col === 2;
     const isWork1 = col === 3;
@@ -616,9 +615,6 @@ export class CharacterTextureLoader {
   private drawProceduralTool(ctx: CanvasRenderingContext2D, row: number, col: number, toolStyle: string): void {
     if (toolStyle === "none" || !toolStyle) return;
 
-    const _isIdle = col === 0;
-    const _isWalk1 = col === 1;
-    const _isWalk2 = col === 2;
     const isWork1 = col === 3;
     const isWork2 = col === 4;
 

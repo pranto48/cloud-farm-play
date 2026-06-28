@@ -68,7 +68,7 @@ export class CharacterTextureLoader {
 
     const hexToRgb = (hex: string) => {
       const shorthandRegex = /^#?([a-f\d])([a-f\d])([a-f\d])$/i;
-      const fullHex = hex.replace(shorthandRegex, (m, r, g, b) => r + r + g + g + b + b);
+      const fullHex = hex.replace(shorthandRegex, (_m, r, g, b) => r + r + g + g + b + b);
       const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(fullHex);
       return result ? {
         r: parseInt(result[1], 16),
@@ -158,7 +158,7 @@ export class CharacterTextureLoader {
       shadowColor = "#27ae60";
     }
 
-    const isIdle = col === 0;
+    const _isIdle = col === 0;
     const isWalk1 = col === 1;
     const isWalk2 = col === 2;
     const isWork1 = col === 3;
@@ -477,7 +477,7 @@ export class CharacterTextureLoader {
   private drawProceduralHair(
     ctx: CanvasRenderingContext2D,
     row: number,
-    col: number,
+    _col: number,
     style: string,
     color: string
   ): void {
@@ -551,7 +551,7 @@ export class CharacterTextureLoader {
   private drawProceduralAccessory(
     ctx: CanvasRenderingContext2D,
     row: number,
-    col: number,
+    _col: number,
     style: string,
     color: string
   ): void {
@@ -604,7 +604,7 @@ export class CharacterTextureLoader {
 
   private darkenColor(hex: string, percent: number): string {
     const shorthandRegex = /^#?([a-f\d])([a-f\d])([a-f\d])$/i;
-    const fullHex = hex.replace(shorthandRegex, (m, r, g, b) => r + r + g + g + b + b);
+    const fullHex = hex.replace(shorthandRegex, (_m, r, g, b) => r + r + g + g + b + b);
     const num = parseInt(fullHex.replace("#",""), 16);
     const amt = Math.round(2.55 * percent);
     const R = (num >> 16) - amt;
@@ -616,9 +616,9 @@ export class CharacterTextureLoader {
   private drawProceduralTool(ctx: CanvasRenderingContext2D, row: number, col: number, toolStyle: string): void {
     if (toolStyle === "none" || !toolStyle) return;
 
-    const isIdle = col === 0;
-    const isWalk1 = col === 1;
-    const isWalk2 = col === 2;
+    const _isIdle = col === 0;
+    const _isWalk1 = col === 1;
+    const _isWalk2 = col === 2;
     const isWork1 = col === 3;
     const isWork2 = col === 4;
 
@@ -1721,7 +1721,7 @@ export class RenderSystem extends System {
     ctx.restore();
   }
 
-  private drawStructure(ctx: CanvasRenderingContext2D, px: number, py: number, s: StructureComponent, entId: string): void {
+  private drawStructure(ctx: CanvasRenderingContext2D, px: number, py: number, s: StructureComponent, _entId: string): void {
     const ts = 64;
     ctx.save();
     ctx.translate(px, py);

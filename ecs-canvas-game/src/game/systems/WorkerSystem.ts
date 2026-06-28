@@ -81,14 +81,12 @@ export class WorkerSystem extends System {
         });
 
         if (storageHouses.length > 0) {
-          if (wComp.state !== "eating") {
-            wComp.previousState = wComp.state as any;
-            wComp.state = "eating";
-            wComp.path = [];
-            wComp.pathIndex = 0;
-            vel.vx = 0;
-            vel.vy = 0;
-          }
+          wComp.previousState = wComp.state as any;
+          wComp.state = "eating";
+          wComp.path = [];
+          wComp.pathIndex = 0;
+          vel.vx = 0;
+          vel.vy = 0;
         }
       }
 
@@ -672,7 +670,7 @@ export class WorkerSystem extends System {
     wComp: WorkerComponent,
     map: MapComponent,
     ts: number,
-    dt: number,
+    _dt: number,
     onReach: () => void
   ): void {
     if (wComp.pathIndex >= wComp.path.length) {

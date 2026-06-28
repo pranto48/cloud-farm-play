@@ -137,18 +137,18 @@ export class MapComponent extends Component {
     
     // Proxy for tiles: tiles[row][col]
     this.tiles = new Proxy([] as any, {
-      get(target, rowStr) {
+      get(_target, rowStr) {
         if (rowStr === "length") return self.height;
         const row = Number(rowStr);
-        if (isNaN(row)) return (target as any)[rowStr];
+        if (isNaN(row)) return (_target as any)[rowStr];
         return new Proxy([] as any, {
-          get(rowTarget, colStr) {
+          get(_rowTarget, colStr) {
             if (colStr === "length") return self.width;
             const col = Number(colStr);
-            if (isNaN(col)) return (rowTarget as any)[colStr];
+            if (isNaN(col)) return (_rowTarget as any)[colStr];
             return self.getTile(row, col);
           },
-          set(rowTarget, colStr, value) {
+          set(_rowTarget, colStr, value) {
             const col = Number(colStr);
             if (isNaN(col)) return false;
             self.setTile(row, col, value);
@@ -160,18 +160,18 @@ export class MapComponent extends Component {
 
     // Proxy for weights: weights[row][col]
     this.weights = new Proxy([] as any, {
-      get(target, rowStr) {
+      get(_target, rowStr) {
         if (rowStr === "length") return self.height;
         const row = Number(rowStr);
-        if (isNaN(row)) return (target as any)[rowStr];
+        if (isNaN(row)) return (_target as any)[rowStr];
         return new Proxy([] as any, {
-          get(rowTarget, colStr) {
+          get(_rowTarget, colStr) {
             if (colStr === "length") return self.width;
             const col = Number(colStr);
-            if (isNaN(col)) return (rowTarget as any)[colStr];
+            if (isNaN(col)) return (_rowTarget as any)[colStr];
             return self.getTileWeightAt(row, col);
           },
-          set(rowTarget, colStr, value) {
+          set(_rowTarget, _colStr, _value) {
             return false; // read-only weights proxy
           }
         });
@@ -411,6 +411,7 @@ export class StructureComponent extends Component {
   // Crop growth progress
   public cropGrowth: number = 0;
   public isWatered: boolean = false;
+  public workDuration: number = 0;
 
   constructor(
     type: StructureType,

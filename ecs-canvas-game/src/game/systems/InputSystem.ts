@@ -230,6 +230,7 @@ export class InputSystem extends System {
                 case "road":
                   mapComp.updateTile(row, col, "road");
                   spawnedEntity = "road_placed";
+                  this.triggerWorkerPathRecalculations(world);
                   break;
                 case "storage_house":
                   spawnedEntity = spawnStorageHouse(world, spawnX, spawnY, col, row);
@@ -246,6 +247,7 @@ export class InputSystem extends System {
                 case "fast_road":
                   mapComp.updateTile(row, col, "fast_road");
                   spawnedEntity = "fast_road_placed";
+                  this.triggerWorkerPathRecalculations(world);
                   break;
               }
 
@@ -304,6 +306,7 @@ export class InputSystem extends System {
         } else if (mapComp.tiles[row][col] === "road" || mapComp.tiles[row][col] === "fast_road") {
           const isFast = mapComp.tiles[row][col] === "fast_road";
           mapComp.updateTile(row, col, "grass");
+          this.triggerWorkerPathRecalculations(world);
           if (isFast) {
             player.inventory["iron_plate"] = (player.inventory["iron_plate"] || 0) + 2; // refund 2 iron plates
             toast.info("Deconstructed FAST ROAD");
@@ -385,6 +388,17 @@ export class InputSystem extends System {
       case "advanced_furnace": return 15;
       case "fast_road": return 2;
       default: return 0;
+    }
+  }
+
+  private triggerWorkerPathRecalculations(world: World): void {
+    const workers = world.getEntitiesWith([WorkerComponent]);
+    for (const wEnt of workers) {
+      const w = world.getComponent(wEnt, WorkerComponent)!;
+      if (w.path && w.path.length > 0) {
+        w.path = [];
+        w.pathIndex = 0;
+      }
     }
   }
 }

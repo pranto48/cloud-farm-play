@@ -14,7 +14,7 @@ import {
   ItemComponent,
   VelocityComponent,
   ParticleComponent,
-  BuildTool,
+  type BuildTool,
   BoxColliderComponent,
   WorkerComponent,
   AnimationComponent,
@@ -659,7 +659,7 @@ export class Game {
         if (!houseId || !world) return;
 
         const workers = world.getEntitiesWith([WorkerComponent]);
-        const workerEnt = workers.find(w => world.getComponent(w, WorkerComponent)!.houseEntityId === houseId);
+        const workerEnt = workers.find((w: string) => world.getComponent(w, WorkerComponent)!.houseEntityId === houseId);
 
         if (workerEnt) {
           const playerEnt = world.getEntitiesWith([PlayerComponent])[0];
@@ -683,7 +683,7 @@ export class Game {
         if (!houseId || !world) return;
 
         const workers = world.getEntitiesWith([WorkerComponent]);
-        const workerEnt = workers.find(w => world.getComponent(w, WorkerComponent)!.houseEntityId === houseId);
+        const workerEnt = workers.find((w: string) => world.getComponent(w, WorkerComponent)!.houseEntityId === houseId);
 
         if (workerEnt) {
           const wComp = world.getComponent(workerEnt, WorkerComponent)!;

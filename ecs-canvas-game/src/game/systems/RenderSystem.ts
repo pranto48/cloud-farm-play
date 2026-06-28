@@ -2543,14 +2543,22 @@ export class RenderSystem extends System {
     vel: VelocityComponent,
     anim?: AnimationComponent
   ): void {
-    const skinColor     = w.skinColor     || "pale";
-    const hairStyle     = w.hairStyle     || "short";
-    const hairColor     = w.hairColor     || "#34495e";
-    const clothingStyle = w.clothingStyle || "shirt";
-    const clothingColor = w.clothingColor || "#e67e22";
-    const shirtColor    = w.shirtColor    || "#2c3e50";
-    const accessoryStyle = w.accessoryStyle || "none";
-    const accessoryColor = w.accessoryColor || "#e74c3c";
+    let skinColor     = w.skinColor     || "pale";
+    let clothingStyle = w.clothingStyle || "shirt";
+    let clothingColor = w.clothingColor || "#e67e22";
+    let shirtColor    = w.shirtColor    || "#2c3e50";
+    let accessoryStyle = w.accessoryStyle || "none";
+    let accessoryColor = w.accessoryColor || "#e74c3c";
+
+    // Dynamic appearance adjustments based on FSM work state
+    if (w.state === "sleeping") {
+      clothingStyle = "tunic"; // nightgown
+      accessoryStyle = "none";  // sleep without hats
+    } else if (w.state === "starving" || w.isStarving) {
+      skinColor = "green"; // look pale/sick
+    } else if (w.state === "working") {
+      clothingStyle = "apron"; // wear work apron
+    }
 
     // Use direction from AnimationComponent if available (more accurate than velocity)
     let direction: "down" | "up" | "left" | "right" = anim?.direction || "down";
@@ -2568,12 +2576,15 @@ export class RenderSystem extends System {
     const isWalking = pos.moveDuration !== undefined && pos.moveDuration > 0;
     const isWorking = w.state === "working";
 
+    // Hide tool when not working
+    const toolType = w.state === "working" ? w.role : null;
+
     this.drawLayeredCharacter(
       ctx, px, py,
-      skinColor, hairStyle, hairColor,
+      skinColor, w.hairStyle || "short", w.hairColor || "#34495e",
       clothingStyle, clothingColor, shirtColor,
       accessoryStyle, accessoryColor,
-      w.role, isWalking, isWorking, direction,
+      toolType, isWalking, isWorking, direction,
       anim
     );
 

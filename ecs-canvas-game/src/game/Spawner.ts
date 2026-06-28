@@ -1,5 +1,4 @@
 import { World } from "./ecs/World";
-import { ImprovedNoise } from "./utils/Noise";
 import {
   PositionComponent,
   VelocityComponent,
@@ -14,7 +13,7 @@ import {
   AnimationComponent,
   TimeWeatherComponent,
 } from "./components/GameComponents";
-import type { TileType, ItemType, StructureType } from "./components/GameComponents";
+import type { ItemType } from "./components/GameComponents";
 
 export function spawnPlayer(world: World, x: number, y: number): string {
   const entity = world.createEntity();

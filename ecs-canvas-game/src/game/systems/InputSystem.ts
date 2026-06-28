@@ -250,7 +250,11 @@ export class InputSystem extends System {
               }
 
               if (spawnedEntity) {
-                this.placementDebounceTimer = 0.15; // 150ms debounce
+                if (tool === "road" || tool === "fast_road" || tool === "belt") {
+                  this.placementDebounceTimer = 0.04; // 40ms debounce for smooth dragging / painting
+                } else {
+                  this.placementDebounceTimer = 0.15; // 150ms debounce
+                }
               }
             } else {
               toast.error(`Not enough materials to build ${tool}! Requires ${costCount}x ${costItem?.replace("_", " ")}`);

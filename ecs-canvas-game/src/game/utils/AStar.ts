@@ -105,9 +105,8 @@ export function findPath(
   }
 
   const openSet = new MinHeap<PathNode>((a, b) => a.f - b.f || a.h - b.h);
-  const closedSet = new Uint8Array(map.width * map.height);
-  const openGValues = new Float32Array(map.width * map.height);
-  openGValues.fill(Infinity);
+  const closedSet = new Set<number>();
+  const openGValues = new Map<number, number>();
 
   const startH = Math.abs(start.c - end.c) + Math.abs(start.r - end.r);
   const startNode: PathNode = {
@@ -120,7 +119,7 @@ export function findPath(
   };
 
   openSet.push(startNode);
-  openGValues[start.r * map.width + start.c] = 0;
+  openGValues.set(start.r * map.width + start.c, 0);
 
   const dr = [-1, 1, 0, 0];
   const dc = [0, 0, -1, 1];
@@ -154,7 +153,7 @@ export function findPath(
     }
 
     const currIdx = curr.r * map.width + curr.c;
-    closedSet[currIdx] = 1;
+    closedSet.add(currIdx);
 
     for (let i = 0; i < 4; i++) {
       const nr = curr.r + dr[i];
@@ -165,7 +164,7 @@ export function findPath(
       }
 
       const nIdx = nr * map.width + nc;
-      if (closedSet[nIdx] === 1) {
+      if (closedSet.has(nIdx)) {
         continue;
       }
 
@@ -176,7 +175,8 @@ export function findPath(
       }
 
       const gScore = curr.g + weight;
-      if (gScore >= openGValues[nIdx]) {
+      const neighborG = openGValues.get(nIdx) ?? Infinity;
+      if (gScore >= neighborG) {
         continue;
       }
 
@@ -192,10 +192,11 @@ export function findPath(
         parent: curr,
       };
 
-      openGValues[nIdx] = gScore;
+      openGValues.set(nIdx, gScore);
       openSet.push(neighbor);
     }
   }
 
   return null;
 }
+

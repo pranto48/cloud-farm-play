@@ -12,6 +12,7 @@ import {
   ItemComponent,
   WorkerComponent,
   AnimationComponent,
+  TimeWeatherComponent,
 } from "./components/GameComponents";
 import type { TileType, ItemType, StructureType } from "./components/GameComponents";
 
@@ -45,74 +46,39 @@ export function spawnParticle(
   return entity;
 }
 
-// Procedural Perlin noise map generation
+// Procedural Perlin noise map generation for chunk-based infinite map
 export function spawnMap(world: World): { entity: string; playerX: number; playerY: number } {
-  const width = 100;
-  const height = 100;
+  const width = 2000;
+  const height = 2000;
   const tileSize = 64;
-  const tiles: TileType[][] = [];
 
-  const noiseBase = new ImprovedNoise();
-  const noiseOre = new ImprovedNoise();
-  const scale = 0.07;
+  const mapEntity = world.createEntity();
+  const mapComp = new MapComponent([], width, height, tileSize);
+  world.addComponent(mapEntity, mapComp);
 
-  for (let r = 0; r < height; r++) {
-    const row: TileType[] = [];
-    for (let c = 0; c < width; c++) {
-      const val = noiseBase.noise(c * scale, r * scale, 0);
-      const oreVal1 = noiseOre.noise(c * 0.15, r * 0.15, 10.0);
-      const oreVal2 = noiseOre.noise(c * 0.15, r * 0.15, 20.0);
-      const oreVal3 = noiseOre.noise(c * 0.15, r * 0.15, 30.0);
-
-      // Winding river noise overlay
-      const riverVal = noiseBase.noise(c * 0.025, r * 0.025, 45.0);
-      const isRiver = Math.abs(riverVal) < 0.035;
-
-      let type: TileType = "grass";
-
-      if (isRiver) {
-        type = "river";
-      } else if (val < -0.25) {
-        type = "water";
-      } else if (val < -0.15) {
-        // Sand/shoreline, walkable
-        type = "grass";
-      } else if (val > 0.4) {
-        type = "forest";
-      } else if (val > 0.2) {
-        type = "stone";
-      } else {
-        type = "grass";
-      }
-
-      // Overlay ores in grass/stone areas
-      if (type === "grass" || type === "stone") {
-        if (oreVal1 > 0.45) {
-          type = "iron";
-        } else if (oreVal2 > 0.45) {
-          type = "copper";
-        } else if (oreVal3 > 0.45) {
-          type = "coal";
-        }
-      }
-
-      row.push(type);
+  // Pre-generate 5x5 chunks around center (1000, 1000)
+  const centerChunkRow = Math.floor(1000 / 16);
+  const centerChunkCol = Math.floor(1000 / 16);
+  for (let dr = -2; dr <= 2; dr++) {
+    for (let dc = -2; dc <= 2; dc++) {
+      const cr = centerChunkRow + dr;
+      const cc = centerChunkCol + dc;
+      mapComp.getTile(cr * 16, cc * 16); // Reading a tile triggers chunk generation
     }
-    tiles.push(row);
   }
 
   // Find a grass tile starting coordinate near the center
-  let playerCol = 50;
-  let playerRow = 50;
+  let playerCol = 1000;
+  let playerRow = 1000;
   let found = false;
 
   for (let searchRad = 0; searchRad < 35; searchRad++) {
     for (let dr = -searchRad; dr <= searchRad; dr++) {
       for (let dc = -searchRad; dc <= searchRad; dc++) {
-        const tc = 50 + dc;
-        const tr = 50 + dr;
+        const tc = 1000 + dc;
+        const tr = 1000 + dr;
         if (tc >= 0 && tc < width && tr >= 0 && tr < height) {
-          if (tiles[tr][tc] === "grass") {
+          if (mapComp.getTile(tr, tc) === "grass") {
             playerCol = tc;
             playerRow = tr;
             found = true;
@@ -125,15 +91,13 @@ export function spawnMap(world: World): { entity: string; playerX: number; playe
     if (found) break;
   }
 
-  const mapEntity = world.createEntity();
-  world.addComponent(mapEntity, new MapComponent(tiles, width, height, tileSize));
-
   return {
     entity: mapEntity,
     playerX: playerCol * tileSize + tileSize / 2,
     playerY: playerRow * tileSize + tileSize / 2,
   };
 }
+
 
 // Spawners for placeable factory structures
 export function spawnBelt(world: World, x: number, y: number, gridX: number, gridY: number, rotation: 0 | 90 | 180 | 270): string {
@@ -314,5 +278,11 @@ export function spawnResourceBurst(
     world.addComponent(entity, new VelocityComponent(vx, vy));
     world.addComponent(entity, new ParticleComponent(color, size, vx, vy, 1.0, decay));
   }
+}
+
+export function spawnTimeWeather(world: World): string {
+  const entity = world.createEntity();
+  world.addComponent(entity, new TimeWeatherComponent());
+  return entity;
 }
 

@@ -1,5 +1,6 @@
 import { Component } from "../ecs/Component";
 import { findPath as aStarFindPath } from "../utils/AStar";
+import { ImprovedNoise } from "../utils/Noise";
 
 export class PositionComponent extends Component {
   public x: number;
@@ -108,22 +109,113 @@ export class MapComponent extends Component {
   public tiles: TileType[][];
   public weights: number[][];
 
-  constructor(tiles: TileType[][], width: number = 100, height: number = 100, tileSize: number = 64) {
+  // Plain JSON-serializable chunk database
+  public chunks: Record<string, TileType[][]> = {};
+  private noiseBase = new ImprovedNoise();
+  private noiseOre = new ImprovedNoise();
+  private scale = 0.07;
+  private chunkSize = 16;
+
+  constructor(tiles: TileType[][], width: number = 2000, height: number = 2000, tileSize: number = 64) {
     super();
-    this.tiles = tiles;
     this.width = width;
     this.height = height;
     this.tileSize = tileSize;
     
-    // Initialize weights
-    this.weights = [];
-    for (let r = 0; r < height; r++) {
-      const row: number[] = [];
-      for (let c = 0; c < width; c++) {
-        row.push(this.getTileWeight(tiles[r][c]));
+    // Set up existing tiles if passed (e.g. from loaded save)
+    if (tiles && tiles.length > 0) {
+      const h = tiles.length;
+      const w = tiles[0].length;
+      for (let r = 0; r < h; r++) {
+        for (let c = 0; c < w; c++) {
+          this.setTile(r, c, tiles[r][c]);
+        }
       }
-      this.weights.push(row);
     }
+
+    const self = this;
+    
+    // Proxy for tiles: tiles[row][col]
+    this.tiles = new Proxy([] as any, {
+      get(target, rowStr) {
+        if (rowStr === "length") return self.height;
+        const row = Number(rowStr);
+        if (isNaN(row)) return (target as any)[rowStr];
+        return new Proxy([] as any, {
+          get(rowTarget, colStr) {
+            if (colStr === "length") return self.width;
+            const col = Number(colStr);
+            if (isNaN(col)) return (rowTarget as any)[colStr];
+            return self.getTile(row, col);
+          },
+          set(rowTarget, colStr, value) {
+            const col = Number(colStr);
+            if (isNaN(col)) return false;
+            self.setTile(row, col, value);
+            return true;
+          }
+        });
+      }
+    });
+
+    // Proxy for weights: weights[row][col]
+    this.weights = new Proxy([] as any, {
+      get(target, rowStr) {
+        if (rowStr === "length") return self.height;
+        const row = Number(rowStr);
+        if (isNaN(row)) return (target as any)[rowStr];
+        return new Proxy([] as any, {
+          get(rowTarget, colStr) {
+            if (colStr === "length") return self.width;
+            const col = Number(colStr);
+            if (isNaN(col)) return (rowTarget as any)[colStr];
+            return self.getTileWeightAt(row, col);
+          },
+          set(rowTarget, colStr, value) {
+            return false; // read-only weights proxy
+          }
+        });
+      }
+    });
+  }
+
+  public getTile(row: number, col: number): TileType {
+    if (row < 0 || row >= this.height || col < 0 || col >= this.width) {
+      return "water"; // Out of bounds is water
+    }
+    const chunkRow = Math.floor(row / this.chunkSize);
+    const chunkCol = Math.floor(col / this.chunkSize);
+    const key = `${chunkRow},${chunkCol}`;
+    let chunk = this.chunks[key];
+    if (!chunk) {
+      chunk = this.generateChunk(chunkRow, chunkCol);
+      this.chunks[key] = chunk;
+    }
+    const localRow = row - chunkRow * this.chunkSize;
+    const localCol = col - chunkCol * this.chunkSize;
+    return chunk[localRow][localCol];
+  }
+
+  public setTile(row: number, col: number, type: TileType): void {
+    if (row < 0 || row >= this.height || col < 0 || col >= this.width) {
+      return;
+    }
+    const chunkRow = Math.floor(row / this.chunkSize);
+    const chunkCol = Math.floor(col / this.chunkSize);
+    const key = `${chunkRow},${chunkCol}`;
+    let chunk = this.chunks[key];
+    if (!chunk) {
+      chunk = this.generateChunk(chunkRow, chunkCol);
+      this.chunks[key] = chunk;
+    }
+    const localRow = row - chunkRow * this.chunkSize;
+    const localCol = col - chunkCol * this.chunkSize;
+    chunk[localRow][localCol] = type;
+  }
+
+  public getTileWeightAt(row: number, col: number): number {
+    const tile = this.getTile(row, col);
+    return this.getTileWeight(tile);
   }
 
   public getTileWeight(type: TileType): number {
@@ -131,15 +223,66 @@ export class MapComponent extends Component {
     if (type === "road") return 1.0;
     if (type === "grass") return 3.0;
     if (type === "water" || type === "river" || type === "forest" || type === "stone") return Infinity;
-    return 3.0; // ores / veins behave like grass
+    return 3.0; // ores
   }
 
   public updateTile(row: number, col: number, type: TileType): void {
-    if (row >= 0 && row < this.height && col >= 0 && col < this.width) {
-      this.tiles[row][col] = type;
-      this.weights[row][col] = this.getTileWeight(type);
-      console.log(`[Pathfinding Graph] Updated tile at (${row}, ${col}) to ${type}. Weight: ${this.weights[row][col]}`);
+    this.setTile(row, col, type);
+    console.log(`[Dynamic Map] Updated tile at (${row}, ${col}) to ${type}.`);
+  }
+
+  private generateChunk(chunkRow: number, chunkCol: number): TileType[][] {
+    const chunk: TileType[][] = [];
+    const startRow = chunkRow * this.chunkSize;
+    const startCol = chunkCol * this.chunkSize;
+
+    for (let r = 0; r < this.chunkSize; r++) {
+      const row: TileType[] = [];
+      const globalRow = startRow + r;
+      for (let c = 0; c < this.chunkSize; c++) {
+        const globalCol = startCol + c;
+
+        const val = this.noiseBase.noise(globalCol * this.scale, globalRow * this.scale, 0);
+        const oreVal1 = this.noiseOre.noise(globalCol * 0.15, globalRow * 0.15, 10.0);
+        const oreVal2 = this.noiseOre.noise(globalCol * 0.15, globalRow * 0.15, 20.0);
+        const oreVal3 = this.noiseOre.noise(globalCol * 0.15, globalRow * 0.15, 30.0);
+
+        // Winding river noise overlay
+        const riverVal = this.noiseBase.noise(globalCol * 0.025, globalRow * 0.025, 45.0);
+        const isRiver = Math.abs(riverVal) < 0.035;
+
+        let type: TileType = "grass";
+
+        if (isRiver) {
+          type = "river";
+        } else if (val < -0.25) {
+          type = "water";
+        } else if (val < -0.15) {
+          type = "grass";
+        } else if (val > 0.4) {
+          type = "forest";
+        } else if (val > 0.2) {
+          type = "stone";
+        } else {
+          type = "grass";
+        }
+
+        // Overlay ores in grass/stone areas
+        if (type === "grass" || type === "stone") {
+          if (oreVal1 > 0.45) {
+            type = "iron";
+          } else if (oreVal2 > 0.45) {
+            type = "copper";
+          } else if (oreVal3 > 0.45) {
+            type = "coal";
+          }
+        }
+
+        row.push(type);
+      }
+      chunk.push(row);
     }
+    return chunk;
   }
 
   public findPath(startRow: number, startCol: number, goalRow: number, goalCol: number): [number, number][] | null {
@@ -148,6 +291,7 @@ export class MapComponent extends Component {
     return path.map(node => [node.r, node.c]);
   }
 }
+
 
 export type ItemType = 
   | "wood"
@@ -448,3 +592,11 @@ export class AnimationComponent extends Component {
   get sourceX(): number { return this.col * this.frameWidth; }
   get sourceY(): number { return this.row * this.frameHeight; }
 }
+
+export class TimeWeatherComponent extends Component {
+  public timeOfDay: number = 6.0; // 0.0 to 24.0 hours (starts at 6:00 AM)
+  public timeScale: number = 0.0833; // 24 hours takes 288 seconds
+  public isRaining: boolean = false;
+  public weatherTimer: number = 60.0; // weather changes every 60-90s
+}
+

@@ -3,6 +3,7 @@ import {
   spawnMap,
   spawnParticle,
   spawnWorker,
+  spawnTimeWeather,
 } from "./Spawner";
 import {
   InputComponent,
@@ -29,6 +30,7 @@ import { ParticleSystem } from "./systems/ParticleSystem";
 import { RenderSystem } from "./systems/RenderSystem";
 import { WorkerSystem } from "./systems/WorkerSystem";
 import { AnimationSystem } from "./systems/AnimationSystem";
+import { TimeWeatherSystem } from "./systems/TimeWeatherSystem";
 import { toast } from "./utils/Toast";
 import { ensureAuthenticated, saveToCloud, loadFromCloud, compressToBinaryString, decompressFromBinaryString } from "./FirebaseSync";
 
@@ -45,9 +47,10 @@ export class Game {
   private factorySystem!: FactorySystem;
   private movementSystem!: MovementSystem;
   private particleSystem!: ParticleSystem;
-  private renderSystem!: RenderSystem;
+  public renderSystem!: RenderSystem;
 
   // Fixed Timestep variables (separating update loop from render loop)
+
   private lastTime: number = 0;
   private lag: number = 0;
   private readonly MS_PER_UPDATE = 1000 / 60; // 60 FPS Logic updates (16.67ms)
@@ -152,6 +155,7 @@ export class Game {
     this.world.addSystem(this.particleSystem);
     this.world.addSystem(new WorkerSystem());
     this.world.addSystem(new AnimationSystem());
+    this.world.addSystem(new TimeWeatherSystem());
 
     this.saveTimer = 0;
   }
@@ -160,8 +164,10 @@ export class Game {
     console.log("[Save/Load] Initializing fresh procedural map.");
     const mapData = spawnMap(this.world);
     this.playerEntityId = spawnPlayer(this.world, mapData.playerX, mapData.playerY);
+    spawnTimeWeather(this.world);
 
     // Equip player with items for placing
+
     const playerEnt = this.world.getEntitiesWith([PlayerComponent])[0];
     if (playerEnt) {
       const playerComp = this.world.getComponent(playerEnt, PlayerComponent)!;
@@ -205,9 +211,12 @@ export class Game {
       this.screenMouseY = e.clientY;
       if (!this.isLoaded) return;
       const input = this.world.getComponent(this.playerEntityId, InputComponent);
-      if (input) {
-        input.mouseX = this.screenMouseX + this.renderSystem.camX;
-        input.mouseY = this.screenMouseY + this.renderSystem.camY;
+      if (input && this.renderSystem) {
+        const width = this.canvas.width;
+        const height = this.canvas.height;
+        const zoom = this.renderSystem.zoom || 1.0;
+        input.mouseX = this.renderSystem.camX + width / 2 + (this.screenMouseX - width / 2) / zoom;
+        input.mouseY = this.renderSystem.camY + height / 2 + (this.screenMouseY - height / 2) / zoom;
       }
     });
 
@@ -235,6 +244,15 @@ export class Game {
         }
       }
     });
+
+    // Camera scroll-wheel zoom
+    window.addEventListener("wheel", (e) => {
+      if (!this.isLoaded || !this.renderSystem) return;
+      const zoomSpeed = 0.08;
+      let newZoom = this.renderSystem.zoom - Math.sign(e.deltaY) * zoomSpeed;
+      newZoom = Math.max(0.5, Math.min(4.0, newZoom));
+      this.renderSystem.zoom = newZoom;
+    }, { passive: true });
   }
 
   private loop(currentTime: number): void {
@@ -249,9 +267,12 @@ export class Game {
 
     // Sync mouse world coordinates based on the current camera position, since the camera moves
     const input = this.world.getComponent(this.playerEntityId, InputComponent);
-    if (input) {
-      input.mouseX = this.screenMouseX + this.renderSystem.camX;
-      input.mouseY = this.screenMouseY + this.renderSystem.camY;
+    if (input && this.renderSystem) {
+      const width = this.canvas.width;
+      const height = this.canvas.height;
+      const zoom = this.renderSystem.zoom || 1.0;
+      input.mouseX = this.renderSystem.camX + width / 2 + (this.screenMouseX - width / 2) / zoom;
+      input.mouseY = this.renderSystem.camY + height / 2 + (this.screenMouseY - height / 2) / zoom;
     }
 
     const elapsed = currentTime - this.lastTime;

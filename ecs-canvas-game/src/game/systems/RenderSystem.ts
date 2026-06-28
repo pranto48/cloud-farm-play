@@ -14,6 +14,7 @@ import {
   TileType,
   WorkerComponent,
   AnimationComponent,
+  TimeWeatherComponent,
 } from "../components/GameComponents";
 
 export class CharacterTextureLoader {
@@ -835,6 +836,7 @@ export class RenderSystem extends System {
   public camX: number = 0;
   public camY: number = 0;
   private camInitialized: boolean = false;
+  public zoom: number = 1.5;
 
   constructor(
     canvas: HTMLCanvasElement,
@@ -1022,10 +1024,13 @@ export class RenderSystem extends System {
     this.ctx.fillStyle = "#1b1e22";
     this.ctx.fillRect(0, 0, width, height);
 
-    // Translate view relative to camera (using exact coordinates for smooth sliding)
+    // Translate and scale relative to canvas center
     this.ctx.save();
     this.ctx.imageSmoothingEnabled = false; // Set it again inside the saved state
-    this.ctx.translate(-this.camX, -this.camY);
+    this.ctx.translate(width / 2, height / 2);
+    this.ctx.scale(this.zoom, this.zoom);
+    this.ctx.translate(-this.camX - width / 2, -this.camY - height / 2);
+
 
     // 3. Render Map
     const maps = world.getEntitiesWith([MapComponent]);
@@ -1034,11 +1039,17 @@ export class RenderSystem extends System {
       const map = world.getComponent(mapEntity, MapComponent)!;
       const ts = map.tileSize;
 
-      // Visible bounds culling
-      const startCol = Math.max(0, Math.floor(this.camX / ts));
-      const endCol = Math.min(map.width - 1, Math.ceil((this.camX + width) / ts));
-      const startRow = Math.max(0, Math.floor(this.camY / ts));
-      const endRow = Math.min(map.height - 1, Math.ceil((this.camY + height) / ts));
+      // Visible bounds culling adjusted for zoom scale
+      const halfW = (width / 2) / this.zoom;
+      const halfH = (height / 2) / this.zoom;
+      const camCenterX = this.camX + width / 2;
+      const camCenterY = this.camY + height / 2;
+
+      const startCol = Math.max(0, Math.floor((camCenterX - halfW) / ts));
+      const endCol = Math.min(map.width - 1, Math.ceil((camCenterX + halfW) / ts));
+      const startRow = Math.max(0, Math.floor((camCenterY - halfH) / ts));
+      const endRow = Math.min(map.height - 1, Math.ceil((camCenterY + halfH) / ts));
+
 
       for (let r = startRow; r <= endRow; r++) {
         for (let c = startCol; c <= endCol; c++) {
@@ -1445,6 +1456,100 @@ export class RenderSystem extends System {
     }
 
     this.ctx.restore(); // restore transform
+
+    // 6.5. Render Time & Weather Tints and Rain on screen overlay
+    const timeWeatherEntities = world.getEntitiesWith([TimeWeatherComponent]);
+    if (timeWeatherEntities.length > 0) {
+      const tw = world.getComponent(timeWeatherEntities[0], TimeWeatherComponent)!;
+      
+      // Draw ambient day/night overlay
+      let ambientColor = "rgba(0,0,0,0)";
+      const hour = tw.timeOfDay;
+      
+      if (hour < 5 || hour > 21) {
+        // Deep night
+        ambientColor = "rgba(10, 15, 30, 0.65)";
+      } else if (hour >= 5 && hour < 7) {
+        // Sunrise: interpolate from Night to Day
+        const t = (hour - 5) / 2; // 0 to 1
+        ambientColor = `rgba(${Math.round(10 * (1-t) + 230 * t * 0.15)}, ${Math.round(15 * (1-t) + 126 * t * 0.1)}, ${Math.round(30 * (1-t) + 34 * t * 0.1)}, ${0.65 * (1-t) + 0.15 * t})`;
+      } else if (hour >= 7 && hour < 17) {
+        // Day
+        ambientColor = "rgba(0,0,0,0)";
+      } else if (hour >= 17 && hour < 19) {
+        // Sunset: interpolate from Day to Purple Sunset
+        const t = (hour - 17) / 2; // 0 to 1
+        ambientColor = `rgba(${Math.round(155 * t * 0.2)}, ${Math.round(89 * t * 0.1)}, ${Math.round(182 * t * 0.2)}, ${0.25 * t})`;
+      } else if (hour >= 19 && hour <= 21) {
+        // Dusk to Night: interpolate from Purple Sunset to Night
+        const t = (hour - 19) / 2; // 0 to 1
+        ambientColor = `rgba(${Math.round(155 * (1-t) + 10 * t)}, ${Math.round(89 * (1-t) + 15 * t)}, ${Math.round(182 * (1-t) + 30 * t)}, ${0.25 * (1-t) + 0.65 * t})`;
+      }
+
+      if (ambientColor !== "rgba(0,0,0,0)") {
+        this.ctx.fillStyle = ambientColor;
+        this.ctx.fillRect(0, 0, width, height);
+      }
+
+      // Apply Rain overlay and draw drops
+      if (tw.isRaining) {
+        this.ctx.fillStyle = "rgba(45, 60, 75, 0.25)";
+        this.ctx.fillRect(0, 0, width, height);
+
+        // Draw falling rain drop streaks in screen space
+        this.ctx.save();
+        this.ctx.strokeStyle = "rgba(180, 200, 220, 0.4)";
+        this.ctx.lineWidth = 1.0;
+        this.ctx.beginPath();
+        for (let i = 0; i < 60; i++) {
+          const seed = i * 29.3 + Math.floor(this.time * 24) * 1.7; // 24fps rain frames
+          const rx = (this.seedRandom(seed) * width);
+          const ry = (this.seedRandom(seed + 13.5) * height);
+          this.ctx.moveTo(rx, ry);
+          this.ctx.lineTo(rx - 5, ry + 18);
+        }
+        this.ctx.stroke();
+        this.ctx.restore();
+      }
+
+      // Draw clock HUD overlay at top-left
+      this.ctx.save();
+      const clockX = 16;
+      const clockY = 16;
+      const clockW = 160;
+      const clockH = 46;
+
+      this.ctx.fillStyle = "rgba(30, 39, 44, 0.85)";
+      this.ctx.strokeStyle = "rgba(255, 255, 255, 0.15)";
+      this.ctx.lineWidth = 1.5;
+      this.ctx.beginPath();
+      this.ctx.roundRect(clockX, clockY, clockW, clockH, 6);
+      this.ctx.fill();
+      this.ctx.stroke();
+
+      // Format time
+      const totalMin = Math.floor(tw.timeOfDay * 60);
+      const hoursNum = Math.floor(totalMin / 60);
+      const minsNum = totalMin % 60;
+      const ampm = hoursNum >= 12 ? "PM" : "AM";
+      const displayHours = hoursNum % 12 === 0 ? 12 : hoursNum % 12;
+      const displayMins = minsNum < 10 ? "0" + minsNum : minsNum;
+      
+      const timeStr = `${displayHours}:${displayMins} ${ampm}`;
+      const weatherEmoji = tw.isRaining ? "☔" : "☀️";
+      const weatherStr = tw.isRaining ? "RAINING" : "CLEAR SKY";
+
+      this.ctx.fillStyle = "#ffffff";
+      this.ctx.font = "bold 13px sans-serif";
+      this.ctx.textAlign = "left";
+      this.ctx.fillText(`${timeStr}`, clockX + 12, clockY + 20);
+
+      this.ctx.fillStyle = tw.isRaining ? "#3498db" : "#f1c40f";
+      this.ctx.font = "bold 10px sans-serif";
+      this.ctx.fillText(`${weatherEmoji} ${weatherStr}`, clockX + 12, clockY + 36);
+
+      this.ctx.restore();
+    }
 
     // 7. HUD Rendering (Inventory, Selected Blueprint)
     this.drawFactoryHUD(width, height, playerInventory);

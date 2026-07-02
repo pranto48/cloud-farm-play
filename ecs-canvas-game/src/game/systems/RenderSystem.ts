@@ -1098,12 +1098,29 @@ export class RenderSystem extends System {
               this.ctx.fill();
             }
           } else if (type === "water" || type === "river") {
-            // Draw sandy shore underneath
-            this.drawOrganicBlob(this.ctx, r, c, map, ts, "water", "#e5cbb3", 0.70);
-            // Draw shallow water edge
-            this.drawOrganicBlob(this.ctx, r, c, map, ts, "water", "#4c81a3", 0.66);
-            // Draw deep water body
-            this.drawOrganicBlob(this.ctx, r, c, map, ts, "water", "#3b6e8c", 0.62);
+            // Count cardinally adjacent water/river neighbors
+            let waterNeighbors = 0;
+            for (const [dr, dc] of [[-1,0], [1,0], [0,-1], [0,1]]) {
+              const nr = r + dr;
+              const nc = c + dc;
+              if (nr >= 0 && nr < map.height && nc >= 0 && nc < map.width) {
+                const nt = map.tiles[nr][nc];
+                if (nt === "water" || nt === "river") {
+                  waterNeighbors++;
+                }
+              }
+            }
+
+            if (waterNeighbors === 4) {
+              // Solid water inside the body
+              this.ctx.fillStyle = "#3b6e8c";
+              this.ctx.fillRect(tx, ty, ts + 1, ts + 1);
+            } else {
+              // Shore tile: draw rounded organic layers
+              this.drawOrganicBlob(this.ctx, r, c, map, ts, "water", "#e5cbb3", 0.70);
+              this.drawOrganicBlob(this.ctx, r, c, map, ts, "water", "#4c81a3", 0.66);
+              this.drawOrganicBlob(this.ctx, r, c, map, ts, "water", "#3b6e8c", 0.62);
+            }
 
             // 3-frame looping animation offset by grid coordinates for natural variety
             const tileOffset = (r * 3 + c * 5) % 3;

@@ -891,16 +891,16 @@ export class RenderSystem extends System {
 
     const width = rad * 2;
     if (checkType(r - 1, c)) {
-      ctx.fillRect(cx - rad, ty, width, ts / 2);
+      ctx.fillRect(cx - rad, ty, width, ts / 2 + 1);
     }
     if (checkType(r + 1, c)) {
-      ctx.fillRect(cx - rad, cy, width, ts / 2);
+      ctx.fillRect(cx - rad, cy - 1, width, ts / 2 + 1);
     }
     if (checkType(r, c - 1)) {
-      ctx.fillRect(tx, cy - rad, ts / 2, width);
+      ctx.fillRect(tx, cy - rad, ts / 2 + 1, width);
     }
     if (checkType(r, c + 1)) {
-      ctx.fillRect(cx, cy - rad, ts / 2, width);
+      ctx.fillRect(cx - 1, cy - rad, ts / 2 + 1, width);
     }
   }
 
@@ -1057,7 +1057,7 @@ export class RenderSystem extends System {
           if (type === "grass") {
             // Smooth noise-based grass color
             this.ctx.fillStyle = this.getGrassColor(c, r);
-            this.ctx.fillRect(tx, ty, ts, ts);
+            this.ctx.fillRect(tx, ty, ts + 1, ts + 1);
 
             // Draw organic grass tufts
             const seed = c * 13 + r * 37;

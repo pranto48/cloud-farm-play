@@ -1017,7 +1017,7 @@ export class RenderSystem extends System {
     this.ctx.imageSmoothingEnabled = false;
 
     // 2. Background slate
-    this.ctx.fillStyle = "#1b1e22";
+    this.ctx.fillStyle = "#387a3c";
     this.ctx.fillRect(0, 0, width, height);
 
     // Translate and scale relative to canvas center
@@ -1164,7 +1164,7 @@ export class RenderSystem extends System {
           } else if (type === "forest") {
             // Forest grass background
             this.ctx.fillStyle = this.getGrassColor(c, r);
-            this.ctx.fillRect(tx, ty, ts, ts);
+            this.ctx.fillRect(tx, ty, ts + 1, ts + 1);
 
             // Dense trees sorted by Y coordinate
             const seed = c * 53 + r * 29;

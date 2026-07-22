@@ -71,7 +71,7 @@ export class InputComponent extends Component {
   }
 }
 
-export type BuildTool = "belt" | "inserter" | "drill" | "furnace" | "assembler" | "chest" | "pole" | "generator" | "road" | "storage_house" | "worker_house" | "advanced_drill" | "advanced_furnace" | "fast_road";
+export type BuildTool = "belt" | "inserter" | "drill" | "furnace" | "assembler" | "chest" | "pole" | "generator" | "road" | "storage_house" | "worker_house" | "advanced_drill" | "advanced_furnace" | "fast_road" | "splitter" | "underground_belt" | "gun_turret" | "laser_turret" | "wall" | "solar_panel" | "battery";
 
 export class PlayerComponent extends Component {
   public inventory: Record<string, number> = {};
@@ -361,7 +361,38 @@ export type StructureType =
   | "worker_house"
   | "crop"
   | "advanced_drill"
-  | "advanced_furnace";
+  | "advanced_furnace"
+  | "splitter"
+  | "underground_belt"
+  | "gun_turret"
+  | "laser_turret"
+  | "wall"
+  | "solar_panel"
+  | "battery";
+
+export class HealthComponent extends Component {
+  public hp: number;
+  public maxHp: number;
+  constructor(maxHp: number = 100) {
+    super();
+    this.hp = maxHp;
+    this.maxHp = maxHp;
+  }
+}
+
+export class EnemyComponent extends Component {
+  public type: "biter_small" | "biter_medium" | "biter_boss";
+  public damage: number;
+  public speed: number;
+  public targetStructureId: string | null = null;
+  public attackTimer: number = 0;
+  constructor(type: "biter_small" | "biter_medium" | "biter_boss" = "biter_small") {
+    super();
+    this.type = type;
+    this.damage = type === "biter_boss" ? 25 : type === "biter_medium" ? 12 : 6;
+    this.speed = type === "biter_small" ? 120 : type === "biter_medium" ? 90 : 60;
+  }
+}
 
 export interface Recipe {
   name: string;
@@ -493,7 +524,7 @@ export class BoxColliderComponent extends Component {
 
 export class WorkerComponent extends Component {
   public state: "idle" | "seeking" | "working" | "returning" | "eating" | "sleeping" | "starving";
-  public role: "farmer" | "miner" | "fisher" | "woodcutter" | null;
+  public role: "farmer" | "miner" | "fisher" | "woodcutter" | "hauler" | "combat" | "repair" | null;
   public houseEntityId: string;
   public path: [number, number][]; // [row, col] grid path or flight trajectory
   public pathIndex: number;

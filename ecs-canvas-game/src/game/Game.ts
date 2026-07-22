@@ -31,6 +31,7 @@ import { RenderSystem } from "./systems/RenderSystem";
 import { WorkerSystem } from "./systems/WorkerSystem";
 import { AnimationSystem } from "./systems/AnimationSystem";
 import { TimeWeatherSystem } from "./systems/TimeWeatherSystem";
+import { CombatSystem } from "./systems/CombatSystem";
 import { toast } from "./utils/Toast";
 import { ensureAuthenticated, saveToCloud, loadFromCloud, compressToBinaryString, decompressFromBinaryString } from "./FirebaseSync";
 
@@ -156,6 +157,7 @@ export class Game {
     this.world.addSystem(new WorkerSystem());
     this.world.addSystem(new AnimationSystem());
     this.world.addSystem(new TimeWeatherSystem());
+    this.world.addSystem(new CombatSystem());
 
     this.saveTimer = 0;
   }

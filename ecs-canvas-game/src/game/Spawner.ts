@@ -285,3 +285,57 @@ export function spawnTimeWeather(world: World): string {
   return entity;
 }
 
+export function spawnSplitter(world: World, x: number, y: number, gridX: number, gridY: number, rotation: 0 | 90 | 180 | 270): string {
+  const entity = world.createEntity();
+  world.addComponent(entity, new PositionComponent(x, y));
+  world.addComponent(entity, new StructureComponent("splitter", gridX, gridY, rotation));
+  return entity;
+}
+
+export function spawnUndergroundBelt(world: World, x: number, y: number, gridX: number, gridY: number, rotation: 0 | 90 | 180 | 270): string {
+  const entity = world.createEntity();
+  world.addComponent(entity, new PositionComponent(x, y));
+  world.addComponent(entity, new StructureComponent("underground_belt", gridX, gridY, rotation));
+  return entity;
+}
+
+export function spawnGunTurret(world: World, x: number, y: number, gridX: number, gridY: number): string {
+  const entity = world.createEntity();
+  world.addComponent(entity, new PositionComponent(x, y));
+  world.addComponent(entity, new StructureComponent("gun_turret", gridX, gridY, 90));
+  world.addComponent(entity, new BoxColliderComponent(48, 48));
+  return entity;
+}
+
+export function spawnLaserTurret(world: World, x: number, y: number, gridX: number, gridY: number): string {
+  const entity = world.createEntity();
+  world.addComponent(entity, new PositionComponent(x, y));
+  world.addComponent(entity, new StructureComponent("laser_turret", gridX, gridY, 90));
+  world.addComponent(entity, new BoxColliderComponent(48, 48));
+  return entity;
+}
+
+export function spawnWall(world: World, x: number, y: number, gridX: number, gridY: number): string {
+  const entity = world.createEntity();
+  world.addComponent(entity, new PositionComponent(x, y));
+  world.addComponent(entity, new StructureComponent("wall", gridX, gridY, 90));
+  world.addComponent(entity, new BoxColliderComponent(60, 60));
+  return entity;
+}
+
+export function spawnSolarPanel(world: World, x: number, y: number, gridX: number, gridY: number): string {
+  const entity = world.createEntity();
+  world.addComponent(entity, new PositionComponent(x, y));
+  world.addComponent(entity, new StructureComponent("solar_panel", gridX, gridY, 90));
+  world.addComponent(entity, new BoxColliderComponent(60, 60));
+  return entity;
+}
+
+export function spawnBattery(world: World, x: number, y: number, gridX: number, gridY: number): string {
+  const entity = world.createEntity();
+  world.addComponent(entity, new PositionComponent(x, y));
+  world.addComponent(entity, new StructureComponent("battery", gridX, gridY, 90));
+  world.addComponent(entity, new BoxColliderComponent(60, 60));
+  return entity;
+}
+

@@ -2131,6 +2131,89 @@ export class RenderSystem extends System {
         break;
       }
 
+      case "splitter": {
+        ctx.fillStyle = "#e67e22";
+        ctx.fillRect(-28, -20, 56, 40);
+        ctx.fillStyle = "#2c3e50";
+        ctx.fillRect(-24, -16, 48, 32);
+        ctx.fillStyle = "#f1c40f";
+        ctx.font = "bold 9px sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText("SPLITTER", 0, 4);
+        break;
+      }
+
+      case "underground_belt": {
+        ctx.fillStyle = "#27ae60";
+        ctx.fillRect(-20, -20, 40, 40);
+        ctx.fillStyle = "#111";
+        ctx.fillRect(-14, -14, 28, 28);
+        ctx.fillStyle = "#f1c40f";
+        ctx.font = "bold 8px sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText("TUNNEL", 0, 4);
+        break;
+      }
+
+      case "gun_turret": {
+        ctx.fillStyle = "#7f8c8d";
+        ctx.beginPath();
+        ctx.arc(0, 0, 22, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = "#2c3e50";
+        ctx.fillRect(-4, -22, 8, 20); // Gun barrel
+        ctx.fillStyle = "#e74c3c";
+        ctx.beginPath();
+        ctx.arc(0, 0, 8, 0, Math.PI * 2);
+        ctx.fill();
+        break;
+      }
+
+      case "laser_turret": {
+        ctx.fillStyle = "#2c3e50";
+        ctx.beginPath();
+        ctx.arc(0, 0, 24, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = "#00f3ff";
+        ctx.fillRect(-3, -26, 6, 24); // Laser cannon
+        ctx.beginPath();
+        ctx.arc(0, 0, 10, 0, Math.PI * 2);
+        ctx.fill();
+        break;
+      }
+
+      case "wall": {
+        ctx.fillStyle = "#7f8c8d";
+        ctx.fillRect(-24, -24, 48, 48);
+        ctx.strokeStyle = "#34495e";
+        ctx.lineWidth = 3;
+        ctx.strokeRect(-24, -24, 48, 48);
+        break;
+      }
+
+      case "solar_panel": {
+        ctx.fillStyle = "#1e3799";
+        ctx.fillRect(-26, -26, 52, 52);
+        ctx.strokeStyle = "#4a69bd";
+        ctx.lineWidth = 2;
+        ctx.strokeRect(-26, -26, 52, 52);
+        ctx.strokeStyle = "#78e08f";
+        ctx.strokeRect(-20, -20, 40, 40);
+        break;
+      }
+
+      case "battery": {
+        ctx.fillStyle = "#2c3e50";
+        ctx.fillRect(-22, -22, 44, 44);
+        ctx.fillStyle = "#2ecc71";
+        ctx.fillRect(-16, -16, 32, 32);
+        ctx.fillStyle = "#fff";
+        ctx.font = "bold 12px sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText("⚡", 0, 4);
+        break;
+      }
+
       case "pole": {
         // Wooden post shadow
         ctx.fillStyle = "rgba(0,0,0,0.2)";

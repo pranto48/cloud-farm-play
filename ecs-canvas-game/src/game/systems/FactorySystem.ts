@@ -45,6 +45,9 @@ export class FactorySystem extends System {
           s.maxFuel = 30.0;
           activeGenerators.add(ent);
         }
+      } else if (s.type === "solar_panel") {
+        // Solar panels generate clean power continuously
+        activeGenerators.add(ent);
       }
     }
 

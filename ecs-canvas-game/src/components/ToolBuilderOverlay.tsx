@@ -562,8 +562,11 @@ export function ToolBuilderOverlay() {
                     style={{ width: "100%", padding: "6px", background: "#2c3e50", color: "#fff", border: "1px solid #34495e" }}
                   >
                     <option value="">-- Select Drone Role --</option>
-                    <option value="farmer">🌾 Crop Harvesting Drone (Plants, Waters & Stores Crops in Box)</option>
+                    <option value="hauler">📦 Logistics Hauler Drone (Transports items between boxes & assemblers)</option>
                     <option value="miner">⛏️ Mining & Extraction Drone (Mines Ores/Stone & Stores in Box)</option>
+                    <option value="combat">🛡️ Laser Combat Drone (Patrols perimeter & shoots biter waves)</option>
+                    <option value="repair">🛠️ Repair Drone (Automated factory infrastructure maintenance)</option>
+                    <option value="farmer">🌾 Crop Harvesting Drone (Plants, Waters & Stores Crops in Box)</option>
                     <option value="fisher">🎣 Fisher Drone (Collects Fish & Stores in Box)</option>
                   </select>
                 </div>

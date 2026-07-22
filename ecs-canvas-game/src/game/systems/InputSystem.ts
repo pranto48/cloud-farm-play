@@ -23,7 +23,14 @@ import {
   spawnStorageHouse,
   spawnWorkerHouse,
   spawnAdvancedDrill,
-  spawnAdvancedFurnace
+  spawnAdvancedFurnace,
+  spawnSplitter,
+  spawnUndergroundBelt,
+  spawnGunTurret,
+  spawnLaserTurret,
+  spawnWall,
+  spawnSolarPanel,
+  spawnBattery
 } from "../Spawner";
 import { toast } from "../utils/Toast";
 
@@ -249,6 +256,27 @@ export class InputSystem extends System {
                   spawnedEntity = "fast_road_placed";
                   this.triggerWorkerPathRecalculations(world);
                   break;
+                case "splitter":
+                  spawnedEntity = spawnSplitter(world, spawnX, spawnY, col, row, player.buildRotation);
+                  break;
+                case "underground_belt":
+                  spawnedEntity = spawnUndergroundBelt(world, spawnX, spawnY, col, row, player.buildRotation);
+                  break;
+                case "gun_turret":
+                  spawnedEntity = spawnGunTurret(world, spawnX, spawnY, col, row);
+                  break;
+                case "laser_turret":
+                  spawnedEntity = spawnLaserTurret(world, spawnX, spawnY, col, row);
+                  break;
+                case "wall":
+                  spawnedEntity = spawnWall(world, spawnX, spawnY, col, row);
+                  break;
+                case "solar_panel":
+                  spawnedEntity = spawnSolarPanel(world, spawnX, spawnY, col, row);
+                  break;
+                case "battery":
+                  spawnedEntity = spawnBattery(world, spawnX, spawnY, col, row);
+                  break;
               }
 
               if (spawnedEntity) {
@@ -367,6 +395,13 @@ export class InputSystem extends System {
       case "advanced_drill": return "iron_plate";
       case "advanced_furnace": return "iron_plate";
       case "fast_road": return "iron_plate";
+      case "splitter": return "electronic_circuit";
+      case "underground_belt": return "iron_plate";
+      case "gun_turret": return "iron_plate";
+      case "laser_turret": return "electronic_circuit";
+      case "wall": return "stone";
+      case "solar_panel": return "electronic_circuit";
+      case "battery": return "iron_plate";
       default: return null;
     }
   }
@@ -387,6 +422,13 @@ export class InputSystem extends System {
       case "advanced_drill": return 12;
       case "advanced_furnace": return 15;
       case "fast_road": return 2;
+      case "splitter": return 2;
+      case "underground_belt": return 3;
+      case "gun_turret": return 10;
+      case "laser_turret": return 8;
+      case "wall": return 5;
+      case "solar_panel": return 5;
+      case "battery": return 5;
       default: return 0;
     }
   }

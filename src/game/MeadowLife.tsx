@@ -3171,43 +3171,77 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                       <Shield className="h-3.5 w-3.5" />
                       Materials
                     </button>
+                    <button
+                      onClick={() => setCraftingCategory("cheats" as any)}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 text-xs border font-bold transition-all ${
+                        (craftingCategory as any) === "cheats"
+                          ? "bg-purple-950 border-amber-400 text-amber-300 font-extrabold animate-pulse"
+                          : "bg-purple-950/40 border-purple-900 text-purple-300 hover:bg-purple-900"
+                      }`}
+                    >
+                      <Zap className="h-3.5 w-3.5 text-amber-400" />
+                      ⚡ All Items Cheat
+                    </button>
                   </div>
 
-                  {/* Recipes Grid */}
-                  <div className="grid grid-cols-6 gap-2 p-3 bg-zinc-950/80 rounded border border-zinc-800/80 min-h-[160px]">
-                    {(recipesByCategory[craftingCategory] || []).map((recipe) => {
-                      const itemDef = ITEM_DEFS[recipe.outputId];
-                      const isTechLocked = recipe.techRequired && !(state.unlockedTechs || []).includes(recipe.techRequired);
-                      const canCraft = !isTechLocked && recipe.inputs.every((input) =>
-                        checkGlobalItems(state, input.itemId, input.count)
-                      );
-
-                      return (
+                  {/* Recipes Grid / Cheats All Items Grid */}
+                  <div className="grid grid-cols-6 gap-2 p-3 bg-zinc-950/80 rounded border border-zinc-800/80 min-h-[220px] max-h-[280px] overflow-y-auto">
+                    {(craftingCategory as any) === "cheats" ? (
+                      Object.values(ITEM_DEFS).map((itemDef) => (
                         <button
-                          key={recipe.id}
-                          onMouseEnter={() => setHoveredRecipe(recipe)}
-                          onMouseLeave={() => setHoveredRecipe(null)}
-                          onClick={() => handleStartCrafting(recipe)}
-                          className={`relative flex flex-col items-center justify-center h-14 w-14 rounded border-2 transition-all ${
-                            isTechLocked
-                              ? "bg-purple-950/40 border-violet-900/60 opacity-60 text-purple-300 hover:border-violet-500 cursor-pointer"
-                              : canCraft
-                              ? "bg-zinc-900 border-zinc-700 hover:bg-zinc-800 hover:border-orange-500 text-zinc-200"
-                              : "bg-zinc-950/60 border-zinc-900 opacity-45 desaturate-50 text-zinc-500 cursor-not-allowed"
-                          }`}
+                          key={itemDef.id}
+                          onClick={() => {
+                            setState((prev) => {
+                              const next = structuredClone(prev);
+                              const newItem = createItem(itemDef.id, 50);
+                              addItem(next.inventory, newItem);
+                              return next;
+                            });
+                          }}
+                          title={`Spawn 50x ${itemDef.name} (Click to cheat)`}
+                          className="relative flex flex-col items-center justify-center h-14 w-14 rounded border-2 bg-purple-950/50 border-amber-500/60 hover:bg-amber-950/60 hover:border-amber-400 text-amber-200 transition-all cursor-pointer shadow-md"
                         >
-                          <span className="text-2xl">{itemDef?.iconSymbol || "⚙"}</span>
-                          {isTechLocked && (
-                            <span className="absolute top-0.5 right-0.5 text-xs animate-pulse">🔒</span>
-                          )}
-                          {recipe.outputCount > 1 && (
-                            <span className="absolute bottom-0.5 right-1 px-1 bg-black/60 rounded text-[9px] font-bold text-white">
-                              {recipe.outputCount}
-                            </span>
-                          )}
+                          <span className="text-2xl">{itemDef.iconSymbol || "📦"}</span>
+                          <span className="absolute bottom-0.5 right-1 px-1 bg-amber-950/80 rounded text-[9px] font-bold text-amber-300">
+                            +50
+                          </span>
                         </button>
-                      );
-                    })}
+                      ))
+                    ) : (
+                      (recipesByCategory[craftingCategory] || []).map((recipe) => {
+                        const itemDef = ITEM_DEFS[recipe.outputId];
+                        const isTechLocked = recipe.techRequired && !(state.unlockedTechs || []).includes(recipe.techRequired);
+                        const canCraft = !isTechLocked && recipe.inputs.every((input) =>
+                          checkGlobalItems(state, input.itemId, input.count)
+                        );
+
+                        return (
+                          <button
+                            key={recipe.id}
+                            onMouseEnter={() => setHoveredRecipe(recipe)}
+                            onMouseLeave={() => setHoveredRecipe(null)}
+                            onClick={() => handleStartCrafting(recipe)}
+                            className={`relative flex flex-col items-center justify-center h-14 w-14 rounded border-2 transition-all ${
+                              isTechLocked
+                                ? "bg-purple-950/40 border-violet-900/60 opacity-60 text-purple-300 hover:border-violet-500 cursor-pointer"
+                                : canCraft
+                                ? "bg-zinc-900 border-zinc-700 hover:bg-zinc-800 hover:border-orange-500 text-zinc-200"
+                                : "bg-zinc-950/60 border-zinc-900 opacity-45 desaturate-50 text-zinc-500 cursor-not-allowed"
+                            }`}
+                          >
+                            <span className="text-2xl">{itemDef?.iconSymbol || "⚙"}</span>
+                            {isTechLocked && (
+                              <span className="absolute top-0.5 right-0.5 text-xs animate-pulse">🔒</span>
+                            )}
+                            {recipe.outputCount > 1 && (
+                              <span className="absolute bottom-0.5 right-1 px-1 bg-black/60 rounded text-[9px] font-bold text-white">
+                                {recipe.outputCount}
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })
+                    )}
                   </div>
                 </div>
 

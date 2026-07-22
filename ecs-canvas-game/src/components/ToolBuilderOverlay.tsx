@@ -244,11 +244,17 @@ export function ToolBuilderOverlay() {
   // Modal Dialogs
   const [activeCottage, setActiveCottage] = useState<{ houseId: string; world: any } | null>(null);
   const [showTechTree, setShowTechTree] = useState(false);
+  const [isFactorioModalOpen, setIsFactorioModalOpen] = useState(false);
+  const [cheatFilter, setCheatFilter] = useState("");
 
   // Sync state from ECS engine tick
   useEffect(() => {
     (window as any).onGameUpdate = (data: GameData) => {
       setGameData(data);
+    };
+
+    (window as any).toggleFactorioInventoryModal = () => {
+      setIsFactorioModalOpen((prev) => !prev);
     };
 
     // Override the vanilla worker dialog handler
@@ -258,6 +264,7 @@ export function ToolBuilderOverlay() {
 
     return () => {
       delete (window as any).onGameUpdate;
+      delete (window as any).toggleFactorioInventoryModal;
       delete (window as any).refreshWorkerDialog;
     };
   }, []);
@@ -419,6 +426,13 @@ export function ToolBuilderOverlay() {
             onClick={() => setIsWardrobeOpen(true)}
           >
             👗 Wardrobe
+          </button>
+          <button
+            className="tab-btn"
+            style={{ border: "1.5px solid rgba(245, 158, 11, 0.5)", color: "#fbbf24", background: "rgba(245, 158, 11, 0.1)", fontWeight: "bold" }}
+            onClick={() => setIsFactorioModalOpen(true)}
+          >
+            ⌨️ Crafting & Cheats [E]
           </button>
         </div>
 
@@ -831,6 +845,160 @@ export function ToolBuilderOverlay() {
             >
               Save & Close
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Factorio 'E' Key Modal & All Items Cheat Creator Overlay */}
+      {isFactorioModalOpen && (
+        <div className="customization-modal-backdrop" onClick={() => setIsFactorioModalOpen(false)}>
+          <div
+            className="customization-modal-box"
+            onClick={(e) => e.stopPropagation()}
+            style={{ width: "680px", maxWidth: "95vw", background: "rgba(15, 23, 42, 0.96)", border: "2px solid #fbbf24", boxShadow: "0 0 45px rgba(251, 191, 36, 0.25)", color: "#f8fafc", borderRadius: "12px", padding: "20px" }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px", borderBottom: "1px solid rgba(251, 191, 36, 0.3)", paddingBottom: "12px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <span style={{ fontSize: "28px" }}>⌨️</span>
+                <div>
+                  <h3 style={{ margin: 0, color: "#fbbf24", fontSize: "20px", fontWeight: 800 }}>FACTORIO SELECTION & ALL ITEMS CHEAT [E]</h3>
+                  <p style={{ margin: 0, fontSize: "11px", color: "#94a3b8" }}>Press 'E' anytime to toggle this menu. Click any item to spawn infinite stock!</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsFactorioModalOpen(false)}
+                style={{ background: "rgba(239, 68, 68, 0.2)", border: "1px solid #ef4444", color: "#ef4444", borderRadius: "6px", width: "32px", height: "32px", cursor: "pointer", fontWeight: "bold" }}
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Quick God Mode Actions */}
+            <div style={{ display: "flex", gap: "10px", marginBottom: "16px", background: "rgba(30, 41, 59, 0.7)", padding: "10px", borderRadius: "8px", border: "1px solid rgba(255, 255, 255, 0.1)" }}>
+              <button
+                onClick={() => {
+                  if (gameInstance) {
+                    const world = gameInstance.world;
+                    const players = world.getEntitiesWith([PlayerComponent]);
+                    if (players.length > 0) {
+                      const p = world.getComponent(players[0], PlayerComponent);
+                      p.inventory["iron_plate"] = (p.inventory["iron_plate"] || 0) + 100;
+                      p.inventory["copper_wire"] = (p.inventory["copper_wire"] || 0) + 100;
+                      p.inventory["electronic_circuit"] = (p.inventory["electronic_circuit"] || 0) + 100;
+                      p.inventory["steel_plate"] = (p.inventory["steel_plate"] || 0) + 100;
+                      p.inventory["wood"] = (p.inventory["wood"] || 0) + 500;
+                      p.inventory["coal"] = (p.inventory["coal"] || 0) + 500;
+                      toast.success("⚡ God Mode Pack Spawned! (+100 Plates/Circuits/Wood/Coal)");
+                    }
+                  }
+                }}
+                style={{ flex: 1, padding: "8px 12px", background: "linear-gradient(135deg, #d97706, #b45309)", border: "1px solid #f59e0b", color: "#ffffff", fontWeight: "bold", borderRadius: "6px", cursor: "pointer" }}
+              >
+                ⚡ Spawn Starter Cheat Pack (+100 All Materials)
+              </button>
+              <button
+                onClick={() => {
+                  if (gameInstance) {
+                    const world = gameInstance.world;
+                    const players = world.getEntitiesWith([PlayerComponent]);
+                    if (players.length > 0) {
+                      const p = world.getComponent(players[0], PlayerComponent);
+                      p.inventory["rocket_silo"] = 1;
+                      p.inventory["rocket_fuel"] = 50;
+                      p.inventory["satellite"] = 1;
+                      toast.success("🚀 Rocket Escape Pack Spawned! (Silo + Fuel + Satellite)");
+                    }
+                  }
+                }}
+                style={{ padding: "8px 12px", background: "linear-gradient(135deg, #7c3aed, #6d28d9)", border: "1px solid #a855f7", color: "#ffffff", fontWeight: "bold", borderRadius: "6px", cursor: "pointer" }}
+              >
+                🚀 Rocket Win Cheat Pack
+              </button>
+            </div>
+
+            {/* Filter Search */}
+            <div style={{ marginBottom: "12px" }}>
+              <input
+                type="text"
+                placeholder="🔍 Search all items (e.g. belt, turret, solar, silver, gold)..."
+                value={cheatFilter}
+                onChange={(e) => setCheatFilter(e.target.value)}
+                style={{ width: "100%", padding: "10px 14px", background: "rgba(15, 23, 42, 0.9)", border: "1px solid rgba(251, 191, 36, 0.5)", borderRadius: "6px", color: "#f8fafc", fontSize: "14px", outline: "none" }}
+              />
+            </div>
+
+            {/* All Items Grid */}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "10px", maxHeight: "320px", overflowY: "auto", paddingRight: "4px" }}>
+              {[
+                { id: "belt", name: "Conveyor Belt", icon: "🔀", qty: 100 },
+                { id: "inserter", name: "Robotic Inserter", icon: "🦾", qty: 50 },
+                { id: "drill", name: "Electric Mining Drill", icon: "⛏️", qty: 20 },
+                { id: "advanced_drill", name: "Advanced Drill", icon: "⚡⛏️", qty: 10 },
+                { id: "furnace", name: "Smelting Furnace", icon: "🔥", qty: 20 },
+                { id: "advanced_furnace", name: "Electric Furnace", icon: "⚡🔥", qty: 10 },
+                { id: "assembler", name: "Assembling Machine", icon: "⚙️", qty: 20 },
+                { id: "chest", name: "Storage Chest", icon: "📦", qty: 50 },
+                { id: "pole", name: "Electric Power Pole", icon: "⚡", qty: 50 },
+                { id: "generator", name: "Steam Generator", icon: "🏭", qty: 10 },
+                { id: "solar_panel", name: "Solar Panel", icon: "☀️", qty: 20 },
+                { id: "battery", name: "Battery Accumulator", icon: "🔋", qty: 20 },
+                { id: "gun_turret", name: "Automated Gun Turret", icon: "🔫", qty: 10 },
+                { id: "laser_turret", name: "Plasma Laser Turret", icon: "⚡🔫", qty: 10 },
+                { id: "wall", name: "Reinforced Defense Wall", icon: "🧱", qty: 100 },
+                { id: "splitter", name: "Conveyor Splitter", icon: "🔀", qty: 20 },
+                { id: "underground_belt", name: "Underground Belt", icon: "🚇", qty: 20 },
+                { id: "rocket_silo", name: "Rocket Launch Silo", icon: "🚀", qty: 1 },
+                { id: "rocket_fuel", name: "Rocket Solid Fuel", icon: "🔥🚀", qty: 50 },
+                { id: "satellite", name: "Orbital Satellite", icon: "🛰️", qty: 1 },
+                { id: "iron_plate", name: "Iron Plate", icon: "🪙", qty: 200 },
+                { id: "copper_wire", name: "Copper Cable Wire", icon: "🔌", qty: 200 },
+                { id: "electronic_circuit", name: "Electronic Circuit", icon: "🟩", qty: 100 },
+                { id: "steel_plate", name: "Steel Plate", icon: "🔩", qty: 100 },
+                { id: "silver_plate", name: "Silver Plate", icon: "🥈", qty: 100 },
+                { id: "aluminum_plate", name: "Aluminum Plate", icon: "🛡️", qty: 100 },
+                { id: "gold_bar", name: "Gold Ingot Bar", icon: "🪙", qty: 100 },
+                { id: "wood", name: "Lumber Wood", icon: "🪵", qty: 500 },
+                { id: "stone", name: "Quarry Stone", icon: "🪨", qty: 500 },
+                { id: "coal", name: "Coal Ore", icon: "⬛", qty: 500 },
+                { id: "iron_ore", name: "Iron Ore", icon: "⚙️", qty: 500 },
+                { id: "copper_ore", name: "Copper Ore", icon: "🟠", qty: 500 },
+                { id: "silver_ore", name: "Silver Ore", icon: "🥈", qty: 500 },
+                { id: "aluminum_ore", name: "Aluminum Ore", icon: "🛡️", qty: 500 },
+                { id: "gold_ore", name: "Gold Ore", icon: "🪙", qty: 500 },
+              ]
+                .filter((item) => item.name.toLowerCase().includes(cheatFilter.toLowerCase()) || item.id.toLowerCase().includes(cheatFilter.toLowerCase()))
+                .map((item) => (
+                  <button
+                    key={item.id}
+                    onClick={() => {
+                      if (gameInstance) {
+                        const world = gameInstance.world;
+                        const players = world.getEntitiesWith([PlayerComponent]);
+                        if (players.length > 0) {
+                          const p = world.getComponent(players[0], PlayerComponent);
+                          p.inventory[item.id] = (p.inventory[item.id] || 0) + item.qty;
+                          toast.success(`Spawned +${item.qty} ${item.name}! ${item.icon}`);
+                        }
+                      }
+                    }}
+                    style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "10px", background: "rgba(30, 41, 59, 0.8)", border: "1px solid rgba(251, 191, 36, 0.4)", borderRadius: "8px", cursor: "pointer", transition: "all 0.2s" }}
+                  >
+                    <span style={{ fontSize: "24px" }}>{item.icon}</span>
+                    <span style={{ fontSize: "11px", fontWeight: "bold", color: "#f1f5f9", textAlign: "center", marginTop: "4px" }}>{item.name}</span>
+                    <span style={{ fontSize: "10px", color: "#fbbf24", fontWeight: "extrabold", marginTop: "2px" }}>+{item.qty}</span>
+                  </button>
+                ))}
+            </div>
+
+            <div style={{ marginTop: "16px", textAlign: "center" }}>
+              <button
+                className="dialog-btn success"
+                onClick={() => setIsFactorioModalOpen(false)}
+                style={{ width: "100%" }}
+              >
+                Done / Close Menu [E]
+              </button>
+            </div>
           </div>
         </div>
       )}

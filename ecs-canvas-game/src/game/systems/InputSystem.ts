@@ -128,6 +128,18 @@ export class InputSystem extends System {
       this.keyDebounce["r"] = false;
     }
 
+    // 2b. Open Factorio Inventory & Crafting Modal with E key
+    if (input.keys["e"] || input.keys["E"]) {
+      if (!this.keyDebounce["e"]) {
+        this.keyDebounce["e"] = true;
+        if ((window as any).toggleFactorioInventoryModal) {
+          (window as any).toggleFactorioInventoryModal();
+        }
+      }
+    } else {
+      this.keyDebounce["e"] = false;
+    }
+
     // 3. Hotbar Selection via keys 1-9, 0, -, =, [, ]
     const tools: BuildTool[] = [
       "belt", "inserter", "drill", "furnace", "assembler", "chest", "pole", "generator",

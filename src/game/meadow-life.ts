@@ -994,6 +994,35 @@ export function newGame(): GameState {
   };
 }
 
+const TILE_KINDS = new Set<TileKind>([
+  "grass", "soil", "watered", "water", "tree", "house", "path", "shop", "npc",
+  "mine_cave", "mine_dirt", "mine_wall", "mine_ladder", "debris_weed", "debris_branch",
+  "debris_stone", "ore_copper", "ore_iron", "ore_gold", "ore_silver", "ore_coal",
+  "ore_uranium", "house_wall", "house_floor", "house_bed", "house_door", "placed_item",
+]);
+
+function normalizeTile(value: unknown, fallback: Tile): Tile {
+  if (!value || typeof value !== "object") return { ...fallback };
+  const tile = value as Partial<Tile>;
+  return {
+    ...fallback,
+    ...tile,
+    kind: typeof tile.kind === "string" && TILE_KINDS.has(tile.kind as TileKind)
+      ? tile.kind as TileKind
+      : fallback.kind,
+    age: typeof tile.age === "number" ? tile.age : fallback.age,
+    watered: typeof tile.watered === "boolean" ? tile.watered : fallback.watered,
+  };
+}
+
+function normalizeGrid(value: unknown, rows: number, columns: number, fallback: Tile): Tile[][] {
+  const saved = Array.isArray(value) ? value : [];
+  return Array.from({ length: rows }, (_, y) => {
+    const row = Array.isArray(saved[y]) ? saved[y] : [];
+    return Array.from({ length: columns }, (_, x) => normalizeTile(row[x], fallback));
+  });
+}
+
 /**
  * Migrate / patch a raw cloud-save object (potentially from an older game
  * version) so that every field the current code expects is present.
@@ -1048,20 +1077,12 @@ export function migrateState(raw: unknown): GameState {
     workerAssignments: (s.workerAssignments && typeof s.workerAssignments === "object") ? (s.workerAssignments as Record<string, string>) : {},
     purchasedLands: Array.isArray(s.purchasedLands) ? (s.purchasedLands as string[]) : [],
     // Tiles: filter null rows, and within each row, replace null tiles with a safe default
-    tiles: (() => {
-      if (!Array.isArray(s.tiles)) return base.tiles;
-      return (s.tiles as Tile[][]).map((row) => {
-        if (!Array.isArray(row)) return Array.from({ length: COLS }, () => ({ kind: "grass" as TileKind, age: 0, watered: false }));
-        return row.map((tile) => tile ?? { kind: "grass" as TileKind, age: 0, watered: false });
-      });
-    })(),
-    mineGrid: (() => {
-      if (!Array.isArray(s.mineGrid)) return base.mineGrid;
-      return (s.mineGrid as Tile[][]).map((row) => {
-        if (!Array.isArray(row)) return [];
-        return row.map((tile) => tile ?? { kind: "mine_dirt" as TileKind, age: -1, watered: false });
-      });
-    })(),
+    // Always restore a complete rectangular farm grid. Older saves can have
+    // short rows or undefined entries, which used to crash the overnight scan.
+    tiles: normalizeGrid(s.tiles, ROWS, COLS, { kind: "grass", age: 0, watered: false }),
+    mineGrid: Array.isArray(s.mineGrid) && s.mineGrid.length > 0
+      ? normalizeGrid(s.mineGrid, s.mineGrid.length, Math.max(1, ...s.mineGrid.map((row) => Array.isArray(row) ? row.length : 0)), { kind: "mine_dirt", age: -1, watered: false })
+      : base.mineGrid,
 
 
     player: (() => {
@@ -1106,13 +1127,7 @@ export function migrateState(raw: unknown): GameState {
     dailyEarnings: s.dailyEarnings as GameState["dailyEarnings"] ?? undefined,
     fishing: s.fishing as GameState["fishing"] ?? undefined,
     inHouse: typeof s.inHouse === "boolean" ? s.inHouse : false,
-    houseGrid: (() => {
-      if (!Array.isArray(s.houseGrid)) return generateHouseInterior();
-      return (s.houseGrid as Tile[][]).map((row) => {
-        if (!Array.isArray(row)) return Array.from({ length: 10 }, () => ({ kind: "house_floor" as TileKind, age: -1, watered: false }));
-        return row.map((tile) => tile ?? { kind: "house_floor" as TileKind, age: -1, watered: false });
-      });
-    })(),
+    houseGrid: normalizeGrid(s.houseGrid, 10, 10, { kind: "house_floor", age: -1, watered: false }),
   };
 
   return merged;
@@ -2526,8 +2541,8 @@ export function sleep(state: GameState): void {
     if (animal.type === "chick") {
       // 50% chance chick lays an egg on its tile if grass/soil
       if (Math.random() < 0.6) {
-        const farmTile = state.tiles[animal.y][animal.x];
-        if (farmTile.kind === "grass" || farmTile.kind === "soil") {
+        const farmTile = state.tiles[animal.y]?.[animal.x];
+        if (farmTile && (farmTile.kind === "grass" || farmTile.kind === "soil")) {
           farmTile.kind = "placed_item";
           farmTile.placedItemId = "chicken_egg"; // can be picked up
         }
@@ -2544,14 +2559,15 @@ export function sleep(state: GameState): void {
   // 4. Sprinklers automation (Waters surrounding soil BEFORE drying them out)
   for (let y = 0; y < ROWS; y++) {
     for (let x = 0; x < COLS; x++) {
-      const tile = state.tiles[y][x];
-      if (tile.kind === "placed_item" && tile.placedItemId) {
+      const tile = state.tiles[y]?.[x];
+      if (tile?.kind === "placed_item" && tile.placedItemId) {
         if (tile.placedItemId === "sprinkler_basic") {
           const adj = [[0, 1], [0, -1], [1, 0], [-1, 0]];
           adj.forEach(([dy, dx]) => {
             const ny = y + dy, nx = x + dx;
             if (ny >= 0 && ny < ROWS && nx >= 0 && nx < COLS) {
-              const target = state.tiles[ny][nx];
+              const target = state.tiles[ny]?.[nx];
+              if (!target) return;
               target.watered = true;
               if (target.kind === "soil") target.kind = "watered";
             }
@@ -2562,7 +2578,8 @@ export function sleep(state: GameState): void {
               if (dx === 0 && dy === 0) continue;
               const ny = y + dy, nx = x + dx;
               if (ny >= 0 && ny < ROWS && nx >= 0 && nx < COLS) {
-                const target = state.tiles[ny][nx];
+                const target = state.tiles[ny]?.[nx];
+                if (!target) continue;
                 target.watered = true;
                 if (target.kind === "soil") target.kind = "watered";
               }
@@ -2576,7 +2593,8 @@ export function sleep(state: GameState): void {
   // 5. Tilled Soil update (Dries watered soil, advances crop growth)
   for (let y = 0; y < ROWS; y++) {
     for (let x = 0; x < COLS; x++) {
-      const t = state.tiles[y][x];
+      const t = state.tiles[y]?.[x];
+      if (!t) continue;
 
       // Spreading / growing weeds, branches, stones, and trees overnight
       if (t.kind === "debris_weed" && Math.random() < 0.08) {

@@ -2214,6 +2214,47 @@ export class RenderSystem extends System {
         break;
       }
 
+      case "crash_site": {
+        // Crashed alien landing pod wreckage
+        ctx.fillStyle = "#7f8c8d";
+        ctx.beginPath();
+        ctx.ellipse(0, 0, 36, 26, -Math.PI / 6, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = "#e74c3c";
+        ctx.fillRect(-20, -12, 40, 6);
+        ctx.fillStyle = "#fff";
+        ctx.font = "bold 9px sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText("🚀 CRASH POD", 0, 4);
+        break;
+      }
+
+      case "rocket_silo": {
+        // Giant Factorio Rocket Launch Silo
+        ctx.fillStyle = "#1e272e";
+        ctx.beginPath();
+        ctx.arc(0, 0, 48, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = "#ff3f34";
+        ctx.lineWidth = 4;
+        ctx.stroke();
+
+        // Rocket cone in center
+        ctx.fillStyle = "#d2dae2";
+        ctx.beginPath();
+        ctx.moveTo(0, -32);
+        ctx.lineTo(-16, 16);
+        ctx.lineTo(16, 16);
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.fillStyle = "#05c46b";
+        ctx.font = "bold 10px sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText(`SILO ${Math.floor(s.rocketProgress || 0)}%`, 0, 34);
+        break;
+      }
+
       case "pole": {
         // Wooden post shadow
         ctx.fillStyle = "rgba(0,0,0,0.2)";
@@ -2549,9 +2590,9 @@ export class RenderSystem extends System {
 
   private drawFactoryHUD(width: number, height: number, inventory: Record<string, number>): void {
     // 1. Draw Active build preview panel in Top Right
-    const toolW = 200;
-    const toolH = 80;
-    this.ctx.fillStyle = "rgba(44, 62, 80, 0.8)";
+    const toolW = 220;
+    const toolH = 95;
+    this.ctx.fillStyle = "rgba(44, 62, 80, 0.85)";
     this.ctx.strokeStyle = "rgba(255, 255, 255, 0.15)";
     this.ctx.lineWidth = 1.5;
     this.ctx.beginPath();
@@ -2559,17 +2600,21 @@ export class RenderSystem extends System {
     this.ctx.fill();
     this.ctx.stroke();
 
-    this.ctx.fillStyle = "#fff";
-    this.ctx.font = "bold 13px sans-serif";
+    this.ctx.fillStyle = "#00f3ff";
+    this.ctx.font = "bold 10px monospace";
     this.ctx.textAlign = "left";
-    this.ctx.fillText("Active Blueprint", width - toolW, 36);
+    this.ctx.fillText("🪐 PLANET NAUVIS-7 // LONE ENGINEER", width - toolW, 34);
+
+    this.ctx.fillStyle = "#fff";
+    this.ctx.font = "bold 12px sans-serif";
+    this.ctx.fillText("Active Blueprint:", width - toolW, 52);
 
     this.ctx.fillStyle = "#f1c40f";
     this.ctx.font = "bold 15px sans-serif";
-    this.ctx.fillText(this.activeTool.toUpperCase(), width - toolW, 58);
+    this.ctx.fillText(this.activeTool.toUpperCase(), width - toolW, 72);
     this.ctx.fillStyle = "#bdc3c7";
     this.ctx.font = "10px sans-serif";
-    this.ctx.fillText("Press [R] to rotate blueprint", width - toolW, 76);
+    this.ctx.fillText("Press [R] to rotate blueprint", width - toolW, 90);
 
     // 2. Draw Bottom Inventory Grid panel
     const list = Object.entries(inventory).filter(([_, count]) => count > 0);

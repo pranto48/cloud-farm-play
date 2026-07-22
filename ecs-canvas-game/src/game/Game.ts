@@ -4,6 +4,7 @@ import {
   spawnParticle,
   spawnWorker,
   spawnTimeWeather,
+  spawnCrashSite,
 } from "./Spawner";
 import {
   InputComponent,
@@ -167,6 +168,11 @@ export class Game {
     const mapData = spawnMap(this.world);
     this.playerEntityId = spawnPlayer(this.world, mapData.playerX, mapData.playerY);
     spawnTimeWeather(this.world);
+
+    // Spawn crashed spaceship pod next to player spawn
+    const crashCol = Math.floor(mapData.playerX / 64) + 2;
+    const crashRow = Math.floor(mapData.playerY / 64);
+    spawnCrashSite(this.world, crashCol * 64 + 32, crashRow * 64 + 32, crashCol, crashRow);
 
     // Equip player with items for placing
 

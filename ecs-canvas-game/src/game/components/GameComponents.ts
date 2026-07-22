@@ -71,7 +71,7 @@ export class InputComponent extends Component {
   }
 }
 
-export type BuildTool = "belt" | "inserter" | "drill" | "furnace" | "assembler" | "chest" | "pole" | "generator" | "road" | "storage_house" | "worker_house" | "advanced_drill" | "advanced_furnace" | "fast_road" | "splitter" | "underground_belt" | "gun_turret" | "laser_turret" | "wall" | "solar_panel" | "battery";
+export type BuildTool = "belt" | "inserter" | "drill" | "furnace" | "assembler" | "chest" | "pole" | "generator" | "road" | "storage_house" | "worker_house" | "advanced_drill" | "advanced_furnace" | "fast_road" | "splitter" | "underground_belt" | "gun_turret" | "laser_turret" | "wall" | "solar_panel" | "battery" | "rocket_silo";
 
 export class PlayerComponent extends Component {
   public inventory: Record<string, number> = {};
@@ -334,7 +334,10 @@ export type ItemType =
   | "science_pack"
   | "wheat"
   | "food"
-  | "fish";
+  | "fish"
+  | "rocket_fuel"
+  | "rocket_part"
+  | "satellite";
 
 export class ItemComponent extends Component {
   public type: ItemType;
@@ -368,7 +371,9 @@ export type StructureType =
   | "laser_turret"
   | "wall"
   | "solar_panel"
-  | "battery";
+  | "battery"
+  | "rocket_silo"
+  | "crash_site";
 
 export class HealthComponent extends Component {
   public hp: number;

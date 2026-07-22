@@ -339,3 +339,25 @@ export function spawnBattery(world: World, x: number, y: number, gridX: number, 
   return entity;
 }
 
+export function spawnCrashSite(world: World, x: number, y: number, gridX: number, gridY: number): string {
+  const entity = world.createEntity();
+  world.addComponent(entity, new PositionComponent(x, y));
+  const sc = new StructureComponent("crash_site", gridX, gridY, 90);
+  sc.inventory["iron_plate"] = 50;
+  sc.inventory["copper_wire"] = 30;
+  sc.inventory["coal"] = 25;
+  world.addComponent(entity, sc);
+  world.addComponent(entity, new BoxColliderComponent(80, 80));
+  return entity;
+}
+
+export function spawnRocketSilo(world: World, x: number, y: number, gridX: number, gridY: number): string {
+  const entity = world.createEntity();
+  world.addComponent(entity, new PositionComponent(x, y));
+  const sc = new StructureComponent("rocket_silo", gridX, gridY, 90);
+  sc.rocketProgress = 0; // 0 to 100% assembly progress
+  world.addComponent(entity, sc);
+  world.addComponent(entity, new BoxColliderComponent(120, 120));
+  return entity;
+}
+

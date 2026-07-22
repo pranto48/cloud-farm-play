@@ -501,6 +501,14 @@ export function ToolBuilderOverlay() {
                 <span className="tool-icon">🏡</span>
                 <span className="tool-label">Worker House</span>
               </button>
+              <button
+                className={`tool-btn primary ${gameData.activeTool === "rocket_silo" ? "active" : ""}`}
+                onClick={() => selectTool("rocket_silo")}
+                title="Rocket Launch Silo (Planetary Escape Victory Objective!)"
+              >
+                <span className="tool-icon">🚀</span>
+                <span className="tool-label">Rocket Silo</span>
+              </button>
             </div>
           )}
 

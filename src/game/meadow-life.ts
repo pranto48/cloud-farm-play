@@ -1301,6 +1301,36 @@ export function decodeGridRLE(data: unknown, fallbackKind: TileKind = "grass"): 
   return grid;
 }
 
+export function normalizeGrid(
+  rawGrid: unknown,
+  targetRows: number,
+  targetCols: number,
+  defaultTile: Tile
+): Tile[][] {
+  const result: Tile[][] = [];
+  const src = Array.isArray(rawGrid) ? rawGrid : [];
+
+  for (let r = 0; r < targetRows; r++) {
+    const row: Tile[] = [];
+    const srcRow = Array.isArray(src[r]) ? src[r] : [];
+    for (let c = 0; c < targetCols; c++) {
+      const tileObj = srcRow[c];
+      if (tileObj && typeof tileObj === "object" && typeof tileObj.kind === "string") {
+        row.push({
+          kind: tileObj.kind,
+          age: typeof tileObj.age === "number" ? tileObj.age : defaultTile.age,
+          watered: typeof tileObj.watered === "boolean" ? tileObj.watered : false,
+          ...tileObj,
+        });
+      } else {
+        row.push({ ...defaultTile });
+      }
+    }
+    result.push(row);
+  }
+  return result;
+}
+
 export function prepareStateForSave(rawState: unknown): unknown {
   if (!rawState || typeof rawState !== "object") return rawState;
   const s = { ...(rawState as Record<string, any>) };

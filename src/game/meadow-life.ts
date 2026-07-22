@@ -480,6 +480,15 @@ export const TECHNOLOGIES: TechDef[] = [
     unlocks: "Assembling Machine, Electric Mining Drill recipes",
   },
   {
+    id: "tech_electricity",
+    name: "Electrical Grid & Generators",
+    description: "Unlocks Steam Generators, Solar Panels, Power Poles, and Cable connections.",
+    icon: "⚡",
+    cost: 300,
+    prerequisites: ["tech_electronics"],
+    unlocks: "Generator, Solar Panel, Power Pole, Cable recipes",
+  },
+  {
     id: "tech_drone_logistics",
     name: "Logistics Drones & Robotics",
     description: "Unlocks Factorio Flying Logistics Drones and Drone Station Hubs.",
@@ -487,6 +496,15 @@ export const TECHNOLOGIES: TechDef[] = [
     cost: 600,
     prerequisites: ["tech_assembling", "tech_electricity"],
     unlocks: "Logistics Drone & Drone Hub recipes",
+  },
+  {
+    id: "tech_space_rocket",
+    name: "Rocket Silo & Space Exploration",
+    description: "Unlocks Rocket Fuel, Rocket Components, Satellites, and Rocket Silo.",
+    icon: "🚀",
+    cost: 1200,
+    prerequisites: ["tech_drone_logistics"],
+    unlocks: "Rocket Silo, Rocket Fuel, Satellite recipes",
   },
 ];
 
@@ -617,6 +635,36 @@ export const CRAFTING_RECIPES: Recipe[] = [
     description: "Stores excess electricity for night-time.",
     inputs: [{ itemId: "iron_bar", count: 5 }, { itemId: "coal", count: 10 }, { itemId: "gold_bar", count: 1 }],
     outputId: "battery", outputCount: 1,
+  },
+
+  // Space Exploration & Rocket Escape
+  {
+    id: "rocket_fuel", name: "Rocket Fuel",
+    description: "Concentrated high-energy solid rocket fuel.",
+    inputs: [{ itemId: "coal", count: 10 }, { itemId: "electronic_circuit", count: 2 }],
+    outputId: "rocket_fuel", outputCount: 1,
+    techRequired: "tech_space_rocket",
+  },
+  {
+    id: "rocket_part", name: "Rocket Component Part",
+    description: "Precision aerospace rocket component used in silo assembly.",
+    inputs: [{ itemId: "steel_plate", count: 5 }, { itemId: "electronic_circuit", count: 5 }, { itemId: "rocket_fuel", count: 1 }],
+    outputId: "rocket_part", outputCount: 1,
+    techRequired: "tech_space_rocket",
+  },
+  {
+    id: "satellite", name: "Orbital Satellite",
+    description: "High tech communications satellite payload.",
+    inputs: [{ itemId: "electronic_circuit", count: 20 }, { itemId: "steel_plate", count: 10 }, { itemId: "solar_panel", count: 2 }],
+    outputId: "satellite", outputCount: 1,
+    techRequired: "tech_space_rocket",
+  },
+  {
+    id: "rocket_silo", name: "Rocket Launch Silo",
+    description: "Massive Factorio launch pad for planetary escape and victory!",
+    inputs: [{ itemId: "steel_plate", count: 50 }, { itemId: "electronic_circuit", count: 50 }, { itemId: "rocket_part", count: 10 }],
+    outputId: "rocket_silo", outputCount: 1,
+    techRequired: "tech_space_rocket",
   },
   {
     id: "wood_cutter", name: "Sawmill",

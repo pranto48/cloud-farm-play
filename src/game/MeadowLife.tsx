@@ -88,10 +88,10 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
         ["chest", "sprinkler_basic", "sprinkler_quality", "transport_belt", "inserter", "logistics_drone", "drone_hub", "drone_recharger", "power_pole"].includes(r.id)
       ),
       production: CRAFTING_RECIPES.filter((r) =>
-        ["furnace", "seed_maker", "research_center", "assembling_machine", "electric_drill", "generator", "solar_panel", "battery", "wood_cutter", "stone_cutter"].includes(r.id)
+        ["furnace", "seed_maker", "research_center", "assembling_machine", "electric_drill", "generator", "solar_panel", "battery", "wood_cutter", "stone_cutter", "rocket_silo"].includes(r.id)
       ),
       materials: CRAFTING_RECIPES.filter((r) =>
-        ["iron_gear", "copper_wire", "electronic_circuit", "electrical_cable", "steel_plate", "iron_bar", "copper_bar", "silver_bar", "gold_bar", "torch", "scarecrow", "player_store", "bed", "stone_path", "toolset"].includes(r.id)
+        ["iron_gear", "copper_wire", "electronic_circuit", "electrical_cable", "steel_plate", "iron_bar", "copper_bar", "silver_bar", "gold_bar", "rocket_fuel", "rocket_part", "satellite", "torch", "scarecrow", "player_store", "bed", "stone_path", "toolset"].includes(r.id)
       ),
     };
   }, []);

@@ -617,6 +617,26 @@ export const ITEM_DEFS: Record<string, Omit<Item, "count">> = {
     description: "Automated mining drill that excavates ores.",
     price: 1500, iconColor: "#3498db", iconSymbol: "🚜"
   },
+  rocket_fuel: {
+    id: "rocket_fuel", name: "Rocket Fuel", type: "resource",
+    description: "Concentrated high-energy solid rocket fuel.",
+    price: 450, iconColor: "#e74c3c", iconSymbol: "🚀"
+  },
+  rocket_part: {
+    id: "rocket_part", name: "Rocket Component Part", type: "resource",
+    description: "Precision aerospace rocket component used in silo assembly.",
+    price: 800, iconColor: "#95a5a6", iconSymbol: "🛸"
+  },
+  satellite: {
+    id: "satellite", name: "Orbital Satellite", type: "resource",
+    description: "High tech communications satellite payload.",
+    price: 3500, iconColor: "#00f3ff", iconSymbol: "🛰️"
+  },
+  rocket_silo: {
+    id: "rocket_silo", name: "Rocket Launch Silo", type: "furniture",
+    description: "Massive Factorio launch pad for planetary escape and victory!",
+    price: 10000, iconColor: "#ff3f34", iconSymbol: "🚀"
+  },
   logistics_drone: {
     id: "logistics_drone", name: "Logistics Drone", type: "furniture",
     description: "Factorio flying drone that harvests resources & deposits to boxes.",

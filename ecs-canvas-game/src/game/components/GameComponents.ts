@@ -471,8 +471,9 @@ export class StructureComponent extends Component {
   public inserterAngle: number = 0; // Current swing angle
   public inserterCooldown: number = 0;
 
-  // Crop growth progress
+  // Crop growth & rocket progress
   public cropGrowth: number = 0;
+  public rocketProgress: number = 0;
   public isWatered: boolean = false;
   public workDuration: number = 0;
 

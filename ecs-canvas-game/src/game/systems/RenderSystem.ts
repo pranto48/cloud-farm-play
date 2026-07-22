@@ -2688,8 +2688,8 @@ export class RenderSystem extends System {
     px: number,
     py: number,
     w: WorkerComponent,
-    entId: string,
-    pos: PositionComponent,
+    _entId: string,
+    _pos: PositionComponent,
     vel: VelocityComponent,
     _anim?: AnimationComponent
   ): void {
@@ -2703,27 +2703,29 @@ export class RenderSystem extends System {
     ctx.save();
     ctx.fillStyle = "rgba(0, 0, 0, 0.35)";
     ctx.beginPath();
-    ctx.ellipse(px, py + 4, 14, 6, 0, 0, Math.PI * 2);
+    ctx.ellipse(px, py, 14, 6, 0, 0, Math.PI * 2);
     ctx.fill();
-    ctx.restore();
 
-    // 2. Drone Flight Path Beam / Tether when moving or returning
-    if (w.heldItem || w.state === "working") {
-      ctx.save();
-      ctx.strokeStyle = "rgba(0, 243, 255, 0.4)";
-      ctx.lineWidth = 1;
-      ctx.setLineDash([2, 2]);
+    // Scanner Laser Beam (shines down when drone is actively working)
+    if (w.state === "working") {
+      const scanGradient = ctx.createLinearGradient(px, droneY, px, py);
+      scanGradient.addColorStop(0, "rgba(0, 243, 255, 0.6)");
+      scanGradient.addColorStop(1, "rgba(0, 243, 255, 0.0)");
+      ctx.fillStyle = scanGradient;
       ctx.beginPath();
-      ctx.moveTo(px, py);
-      ctx.lineTo(px, droneY + 8);
-      ctx.stroke();
-      ctx.restore();
+      ctx.moveTo(px - 2, droneY + 4);
+      ctx.lineTo(px + 2, droneY + 4);
+      ctx.lineTo(px + 12, py);
+      ctx.lineTo(px - 12, py);
+      ctx.closePath();
+      ctx.fill();
     }
+    ctx.restore();
 
     ctx.translate(px, droneY);
 
     // Drone orientation / banking angle based on horizontal velocity
-    const tilt = Math.max(-0.25, Math.min(0.25, vel.vx * 0.003));
+    const tilt = Math.max(-0.25, Math.min(0.25, (vel?.vx || 0) * 0.003));
     ctx.rotate(tilt);
 
     const mainColor = w.bodyColor || "#2c3e50";

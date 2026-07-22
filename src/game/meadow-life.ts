@@ -282,14 +282,23 @@ export function removeItem(inventory: (Item | null)[], index: number, count = 1)
   }
 }
 
-export function hasItems(inventory: (Item | null)[], itemId: string, count = 1): boolean {
+export function getGlobalItemCount(stateOrInv: any, itemId: string): number {
+  const inv = Array.isArray(stateOrInv)
+    ? stateOrInv
+    : stateOrInv && Array.isArray(stateOrInv.inventory)
+    ? stateOrInv.inventory
+    : [];
   let found = 0;
-  for (const item of inventory) {
+  for (const item of inv) {
     if (item && item.id === itemId) {
       found += item.count;
     }
   }
-  return found >= count;
+  return found;
+}
+
+export function hasItems(inventory: (Item | null)[], itemId: string, count = 1): boolean {
+  return getGlobalItemCount(inventory, itemId) >= count;
 }
 
 export function deductItems(inventory: (Item | null)[], itemId: string, count = 1): void {

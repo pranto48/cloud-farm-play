@@ -19,6 +19,7 @@ import {
   sortInventory,
   quickStackToChest,
   hasItems,
+  getGlobalItemCount,
   updateEntities,
   migrateState,
   addItem,

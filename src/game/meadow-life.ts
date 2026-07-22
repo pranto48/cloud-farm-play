@@ -29,6 +29,7 @@ export type TileKind =
   | "ore_iron"
   | "ore_gold"
   | "ore_silver"
+  | "ore_aluminum"
   | "ore_coal"
   | "ore_uranium"
   | "house_wall"
@@ -450,6 +451,43 @@ export const TECHNOLOGIES: TechDef[] = [
     prerequisites: ["tech_combat_training", "tech_animal_husbandry"],
     unlocks: "Worker speed x2, energy cost -50%",
   },
+  // Factorio Research Tech Tree
+  {
+    id: "tech_factorio_logistics",
+    name: "Factorio Logistics & Components",
+    description: "Unlocks Iron Gear Wheels, Copper Cables, and Transport Belts for automation.",
+    icon: "⚙️",
+    cost: 150,
+    prerequisites: ["tech_advanced_tools"],
+    unlocks: "Iron Gear, Copper Cable, Transport Belt recipes",
+  },
+  {
+    id: "tech_electronics",
+    name: "Electronics & Advanced Circuits",
+    description: "Unlocks Green Electronic Circuits, Steel Plates, and Robotic Inserters.",
+    icon: "🟩",
+    cost: 250,
+    prerequisites: ["tech_factorio_logistics"],
+    unlocks: "Electronic Circuit, Steel Plate, Inserter recipes",
+  },
+  {
+    id: "tech_assembling",
+    name: "Automated Assembly Factories",
+    description: "Unlocks Assembling Machines and Electric Mining Drills.",
+    icon: "🏭",
+    cost: 400,
+    prerequisites: ["tech_electronics"],
+    unlocks: "Assembling Machine, Electric Mining Drill recipes",
+  },
+  {
+    id: "tech_drone_logistics",
+    name: "Logistics Drones & Robotics",
+    description: "Unlocks Factorio Flying Logistics Drones and Drone Station Hubs.",
+    icon: "🚁",
+    cost: 600,
+    prerequisites: ["tech_assembling", "tech_electricity"],
+    unlocks: "Logistics Drone & Drone Hub recipes",
+  },
 ];
 
 // Crafting System recipes
@@ -460,15 +498,119 @@ export interface Recipe {
   inputs: { itemId: string; count: number }[];
   outputId: string;
   outputCount: number;
+  techRequired?: string;
 }
 
 export const CRAFTING_RECIPES: Recipe[] = [
+  // Factorio Tech Components
+  {
+    id: "iron_gear", name: "Iron Gear Wheel",
+    description: "Crucial mechanical gear used in machinery and logistics.",
+    inputs: [{ itemId: "iron_bar", count: 2 }],
+    outputId: "iron_gear", outputCount: 1,
+    techRequired: "tech_factorio_logistics",
+  },
+  {
+    id: "copper_wire", name: "Copper Cable",
+    description: "Conductive copper wire used for electronic circuits.",
+    inputs: [{ itemId: "copper_bar", count: 1 }],
+    outputId: "copper_wire", outputCount: 2,
+    techRequired: "tech_factorio_logistics",
+  },
+  {
+    id: "steel_plate", name: "Steel Plate",
+    description: "High strength dense steel alloy plate.",
+    inputs: [{ itemId: "iron_bar", count: 5 }],
+    outputId: "steel_plate", outputCount: 1,
+    techRequired: "tech_electronics",
+  },
+  {
+    id: "electronic_circuit", name: "Electronic Circuit",
+    description: "Basic green circuit board for automated tech and logic.",
+    inputs: [{ itemId: "iron_bar", count: 1 }, { itemId: "copper_wire", count: 3 }],
+    outputId: "electronic_circuit", outputCount: 1,
+    techRequired: "tech_electronics",
+  },
 
+  // Factorio Factory Machinery & Logistics
+  {
+    id: "transport_belt", name: "Transport Belt",
+    description: "Automated logistics belt moving items continuously.",
+    inputs: [{ itemId: "iron_gear", count: 1 }, { itemId: "iron_bar", count: 1 }],
+    outputId: "transport_belt", outputCount: 2,
+    techRequired: "tech_factorio_logistics",
+  },
+  {
+    id: "inserter", name: "Robotic Inserter",
+    description: "Robotic arm that picks and places items automatically.",
+    inputs: [{ itemId: "electronic_circuit", count: 1 }, { itemId: "iron_gear", count: 1 }, { itemId: "iron_bar", count: 1 }],
+    outputId: "inserter", outputCount: 1,
+    techRequired: "tech_electronics",
+  },
+  {
+    id: "assembling_machine", name: "Assembling Machine",
+    description: "Automated factory machine that crafts recipes continuously.",
+    inputs: [{ itemId: "electronic_circuit", count: 3 }, { itemId: "iron_gear", count: 5 }, { itemId: "iron_bar", count: 9 }],
+    outputId: "assembling_machine", outputCount: 1,
+    techRequired: "tech_assembling",
+  },
+  {
+    id: "electric_drill", name: "Electric Mining Drill",
+    description: "Automated mining drill that excavates ores.",
+    inputs: [{ itemId: "electronic_circuit", count: 3 }, { itemId: "iron_gear", count: 5 }, { itemId: "iron_bar", count: 10 }],
+    outputId: "electric_drill", outputCount: 1,
+    techRequired: "tech_assembling",
+  },
+  {
+    id: "logistics_drone", name: "Logistics Drone",
+    description: "Factorio flying drone that harvests resources & deposits to boxes.",
+    inputs: [{ itemId: "electronic_circuit", count: 2 }, { itemId: "steel_plate", count: 2 }, { itemId: "battery", count: 1 }],
+    outputId: "logistics_drone", outputCount: 1,
+    techRequired: "tech_drone_logistics",
+  },
+  {
+    id: "drone_hub", name: "Drone Station Hub",
+    description: "Central command station for hovering logistics drones.",
+    inputs: [{ itemId: "electronic_circuit", count: 10 }, { itemId: "steel_plate", count: 15 }, { itemId: "battery", count: 5 }],
+    outputId: "drone_hub", outputCount: 1,
+    techRequired: "tech_drone_logistics",
+  },
+  {
+    id: "drone_recharger", name: "Drone Recharge Station",
+    description: "High-speed wireless electrical charging pad for Factorio logistics drones.",
+    inputs: [{ itemId: "electronic_circuit", count: 5 }, { itemId: "copper_wire", count: 10 }, { itemId: "battery", count: 2 }],
+    outputId: "drone_recharger", outputCount: 1,
+    techRequired: "tech_drone_logistics",
+  },
+
+  // Electrical Grid & Power Generators
+  {
+    id: "electrical_cable", name: "Electrical Cable Connection",
+    description: "Insulated copper cable for connecting power poles & electrical grids.",
+    inputs: [{ itemId: "copper_wire", count: 2 }, { itemId: "iron_bar", count: 1 }],
+    outputId: "electrical_cable", outputCount: 5,
+    techRequired: "tech_electricity",
+  },
+  {
+    id: "power_pole", name: "Electric Power Pole",
+    description: "High voltage electrical cable pole that transmits power to nearby machines.",
+    inputs: [{ itemId: "electrical_cable", count: 2 }, { itemId: "wood", count: 5 }, { itemId: "iron_bar", count: 2 }],
+    outputId: "power_pole", outputCount: 1,
+    techRequired: "tech_electricity",
+  },
+  {
+    id: "generator", name: "Steam Power Generator",
+    description: "Burns coal to produce high-voltage electricity for the power grid.",
+    inputs: [{ itemId: "electronic_circuit", count: 5 }, { itemId: "iron_gear", count: 5 }, { itemId: "steel_plate", count: 10 }],
+    outputId: "generator", outputCount: 1,
+    techRequired: "tech_electricity",
+  },
   {
     id: "solar_panel", name: "Solar Panel",
-    description: "Generates electricity during the day.",
-    inputs: [{ itemId: "iron_bar", count: 10 }, { itemId: "gold_bar", count: 2 }],
+    description: "Generates clean electricity during the day for the electrical grid.",
+    inputs: [{ itemId: "electronic_circuit", count: 5 }, { itemId: "copper_bar", count: 5 }, { itemId: "steel_plate", count: 10 }],
     outputId: "solar_panel", outputCount: 1,
+    techRequired: "tech_electricity",
   },
   {
     id: "battery", name: "Battery",
@@ -760,12 +902,29 @@ function makeMap(): Tile[][] {
     }
   }
 
-  // Ensure path connections near house
+  // Dedicated Mining Quarry Area (x: 78..115, y: 6..35) near the mine cave
+  for (let y = 6; y <= 35; y++) {
+    for (let x = 78; x <= 115; x++) {
+      if (t[y][x].kind === "mine_cave") continue;
+      const rand = Math.random();
+      if (rand < 0.20) t[y][x].kind = "debris_stone";     // Rock / Stone
+      else if (rand < 0.35) t[y][x].kind = "ore_iron";     // Iron Ore
+      else if (rand < 0.48) t[y][x].kind = "ore_silver";   // Silver Ore
+      else if (rand < 0.60) t[y][x].kind = "ore_aluminum"; // Aluminum Ore
+      else if (rand < 0.72) t[y][x].kind = "ore_coal";     // Coal Ore
+      else if (rand < 0.84) t[y][x].kind = "ore_copper";   // Copper Ore
+      else if (rand < 0.95) t[y][x].kind = "ore_gold";     // Gold Ore
+      else t[y][x].kind = "path";
+    }
+  }
+
+  // Ensure path connections near house and quarry
   for (let x = 67; x <= 72; x++) t[41][x].kind = "path";
   for (let x = 16; x <= 70; x++) t[44][x].kind = "path";
   for (let y = 29; y <= 44; y++) t[y][16].kind = "path";
   for (let y = 40; y <= 44; y++) t[y][70].kind = "path";
   for (let y = 7; y <= 44; y++) t[y][72].kind = "path";
+  for (let x = 72; x <= 78; x++) t[10][x].kind = "path";
 
   return t;
 }
@@ -1001,26 +1160,112 @@ const TILE_KINDS = new Set<TileKind>([
   "ore_uranium", "house_wall", "house_floor", "house_bed", "house_door", "placed_item",
 ]);
 
-function normalizeTile(value: unknown, fallback: Tile): Tile {
-  if (!value || typeof value !== "object") return { ...fallback };
-  const tile = value as Partial<Tile>;
-  return {
-    ...fallback,
-    ...tile,
-    kind: typeof tile.kind === "string" && TILE_KINDS.has(tile.kind as TileKind)
-      ? tile.kind as TileKind
-      : fallback.kind,
-    age: typeof tile.age === "number" ? tile.age : fallback.age,
-    watered: typeof tile.watered === "boolean" ? tile.watered : fallback.watered,
-  };
+function serializeTile(tile: Tile): Partial<Tile> {
+  const minTile: Partial<Tile> = { kind: tile.kind };
+  if (tile.age !== undefined && tile.age !== -1 && tile.age !== 0) minTile.age = tile.age;
+  else if (tile.age === 0) minTile.age = 0;
+  if (tile.watered) minTile.watered = true;
+  if (tile.cropId) minTile.cropId = tile.cropId;
+  if (tile.placedItemId) minTile.placedItemId = tile.placedItemId;
+  if (tile.chestInventory && tile.chestInventory.some((item) => item !== null)) {
+    minTile.chestInventory = tile.chestInventory;
+  }
+  if (tile.zone) minTile.zone = tile.zone;
+  if (tile.hitPoints !== undefined) minTile.hitPoints = tile.hitPoints;
+  if (tile.lastHitTime !== undefined) minTile.lastHitTime = tile.lastHitTime;
+  if (tile.lastRustleTime !== undefined) minTile.lastRustleTime = tile.lastRustleTime;
+  if (tile.smeltTimer !== undefined) minTile.smeltTimer = tile.smeltTimer;
+  if (tile.smeltMaxTime !== undefined) minTile.smeltMaxTime = tile.smeltMaxTime;
+  if (tile.smeltOutputId) minTile.smeltOutputId = tile.smeltOutputId;
+  if (tile.smeltActive) minTile.smeltActive = tile.smeltActive;
+  return minTile;
 }
 
-function normalizeGrid(value: unknown, rows: number, columns: number, fallback: Tile): Tile[][] {
-  const saved = Array.isArray(value) ? value : [];
-  return Array.from({ length: rows }, (_, y) => {
-    const row = Array.isArray(saved[y]) ? saved[y] : [];
-    return Array.from({ length: columns }, (_, x) => normalizeTile(row[x], fallback));
-  });
+export function encodeGridRLE(grid: Tile[][]): unknown {
+  if (!Array.isArray(grid) || grid.length === 0) return grid;
+  const rows = grid.length;
+  const cols = grid[0]?.length || 0;
+  if (cols === 0) return grid;
+
+  const runs: { r: number; t: Partial<Tile> }[] = [];
+  let currentRunTileKey = "";
+  let currentRunTileObj: Partial<Tile> = {};
+  let currentRunCount = 0;
+
+  for (let y = 0; y < rows; y++) {
+    const row = grid[y] || [];
+    for (let x = 0; x < cols; x++) {
+      const tile = row[x] || { kind: "grass", age: -1, watered: false };
+      const minTile = serializeTile(tile);
+      const key = JSON.stringify(minTile);
+
+      if (key === currentRunTileKey) {
+        currentRunCount++;
+      } else {
+        if (currentRunCount > 0) {
+          runs.push({ r: currentRunCount, t: currentRunTileObj });
+        }
+        currentRunTileKey = key;
+        currentRunTileObj = minTile;
+        currentRunCount = 1;
+      }
+    }
+  }
+  if (currentRunCount > 0) {
+    runs.push({ r: currentRunCount, t: currentRunTileObj });
+  }
+
+  return { _rle: true, rows, cols, runs };
+}
+
+export function decodeGridRLE(data: unknown, fallbackKind: TileKind = "grass"): Tile[][] | null {
+  if (!data || typeof data !== "object") return null;
+  const obj = data as any;
+  if (!obj._rle || !Array.isArray(obj.runs)) return null;
+
+  const rows = obj.rows;
+  const cols = obj.cols;
+  const grid: Tile[][] = Array.from({ length: rows }, () => new Array(cols));
+
+  let currentRunIdx = 0;
+  let currentRunRemaining = obj.runs[0]?.r || 0;
+  let currentTile: Partial<Tile> = obj.runs[0]?.t || { kind: fallbackKind };
+
+  for (let y = 0; y < rows; y++) {
+    for (let x = 0; x < cols; x++) {
+      if (currentRunRemaining <= 0) {
+        currentRunIdx++;
+        if (currentRunIdx < obj.runs.length) {
+          currentRunRemaining = obj.runs[currentRunIdx].r;
+          currentTile = obj.runs[currentRunIdx].t;
+        }
+      }
+      grid[y][x] = {
+        kind: currentTile.kind || fallbackKind,
+        age: currentTile.age ?? -1,
+        watered: !!currentTile.watered,
+        ...currentTile,
+      };
+      currentRunRemaining--;
+    }
+  }
+
+  return grid;
+}
+
+export function prepareStateForSave(rawState: unknown): unknown {
+  if (!rawState || typeof rawState !== "object") return rawState;
+  const s = { ...(rawState as Record<string, any>) };
+  if (Array.isArray(s.tiles)) {
+    s.tiles = encodeGridRLE(s.tiles);
+  }
+  if (Array.isArray(s.mineGrid) && s.mineGrid.length > 0) {
+    s.mineGrid = encodeGridRLE(s.mineGrid);
+  }
+  if (Array.isArray(s.houseGrid) && s.houseGrid.length > 0) {
+    s.houseGrid = encodeGridRLE(s.houseGrid);
+  }
+  return s;
 }
 
 /**
@@ -1079,10 +1324,17 @@ export function migrateState(raw: unknown): GameState {
     // Tiles: filter null rows, and within each row, replace null tiles with a safe default
     // Always restore a complete rectangular farm grid. Older saves can have
     // short rows or undefined entries, which used to crash the overnight scan.
-    tiles: normalizeGrid(s.tiles, ROWS, COLS, { kind: "grass", age: 0, watered: false }),
-    mineGrid: Array.isArray(s.mineGrid) && s.mineGrid.length > 0
-      ? normalizeGrid(s.mineGrid, s.mineGrid.length, Math.max(1, ...s.mineGrid.map((row) => Array.isArray(row) ? row.length : 0)), { kind: "mine_dirt", age: -1, watered: false })
-      : base.mineGrid,
+    tiles: decodeGridRLE(s.tiles, "grass") ?? normalizeGrid(s.tiles, ROWS, COLS, { kind: "grass", age: 0, watered: false }),
+    mineGrid: decodeGridRLE(s.mineGrid, "mine_dirt") ?? (
+      Array.isArray(s.mineGrid) && s.mineGrid.length > 0
+        ? normalizeGrid(s.mineGrid, s.mineGrid.length, Math.max(1, ...s.mineGrid.map((row: any) => Array.isArray(row) ? row.length : 0)), { kind: "mine_dirt", age: -1, watered: false })
+        : base.mineGrid
+    ),
+    houseGrid: decodeGridRLE(s.houseGrid, "house_floor") ?? (
+      Array.isArray(s.houseGrid) && s.houseGrid.length > 0
+        ? normalizeGrid(s.houseGrid, s.houseGrid.length, Math.max(1, ...s.houseGrid.map((row: any) => Array.isArray(row) ? row.length : 0)), { kind: "house_floor", age: -1, watered: false })
+        : base.houseGrid
+    ),
 
 
     player: (() => {
@@ -1127,7 +1379,6 @@ export function migrateState(raw: unknown): GameState {
     dailyEarnings: s.dailyEarnings as GameState["dailyEarnings"] ?? undefined,
     fishing: s.fishing as GameState["fishing"] ?? undefined,
     inHouse: typeof s.inHouse === "boolean" ? s.inHouse : false,
-    houseGrid: normalizeGrid(s.houseGrid, 10, 10, { kind: "house_floor", age: -1, watered: false }),
   };
 
   return merged;

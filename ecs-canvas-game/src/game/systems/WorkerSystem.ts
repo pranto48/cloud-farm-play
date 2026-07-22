@@ -172,12 +172,9 @@ export class WorkerSystem extends System {
 
               if (targetCropEntity) {
                 const sc = world.getComponent(targetCropEntity, StructureComponent)!;
-                const path = map.findPath(row, col, sc.gridY, sc.gridX);
-                if (path && path.length > 0) {
-                  wComp.path = path;
-                  wComp.pathIndex = 0;
-                  break;
-                }
+                wComp.path = [[sc.gridY, sc.gridX]];
+                wComp.pathIndex = 0;
+                break;
               }
 
               // Priority 2: Seek closest unwatered crop
@@ -200,12 +197,9 @@ export class WorkerSystem extends System {
 
               if (targetDryEntity) {
                 const sc = world.getComponent(targetDryEntity, StructureComponent)!;
-                const path = map.findPath(row, col, sc.gridY, sc.gridX);
-                if (path && path.length > 0) {
-                  wComp.path = path;
-                  wComp.pathIndex = 0;
-                  break;
-                }
+                wComp.path = [[sc.gridY, sc.gridX]];
+                wComp.pathIndex = 0;
+                break;
               }
 
               // Priority 3: Seek empty grass tile near cottage to plant seeds
@@ -245,13 +239,8 @@ export class WorkerSystem extends System {
                 }
 
                 if (plantR !== -1 && plantC !== -1) {
-                  const path = map.findPath(row, col, plantR, plantC);
-                  if (path && path.length > 0) {
-                    wComp.path = path;
-                    wComp.pathIndex = 0;
-                  } else {
-                    wComp.state = "idle";
-                  }
+                  wComp.path = [[plantR, plantC]];
+                  wComp.pathIndex = 0;
                 } else {
                   wComp.state = "idle";
                 }
@@ -267,7 +256,7 @@ export class WorkerSystem extends System {
               for (let r = 0; r < map.height; r++) {
                 for (let c = 0; c < map.width; c++) {
                   const tile = map.tiles[r][c];
-                  const isMatch = tile === "iron" || tile === "copper" || tile === "coal" || tile === "stone";
+                  const isMatch = tile === "iron" || tile === "copper" || tile === "coal" || tile === "stone" || tile === "silver" || tile === "aluminum" || tile === "gold";
 
                   if (isMatch) {
                     const isOccupied = structures.some(st => {
@@ -287,13 +276,8 @@ export class WorkerSystem extends System {
               }
 
               if (targetRow !== -1 && targetCol !== -1) {
-                const path = map.findPath(row, col, targetRow, targetCol);
-                if (path && path.length > 0) {
-                  wComp.path = path;
-                  wComp.pathIndex = 0;
-                } else {
-                  wComp.state = "idle";
-                }
+                wComp.path = [[targetRow, targetCol]];
+                wComp.pathIndex = 0;
               } else {
                 wComp.state = "idle";
               }
@@ -317,13 +301,8 @@ export class WorkerSystem extends System {
               }
 
               if (targetRow !== -1 && targetCol !== -1) {
-                const path = map.findPath(row, col, targetRow, targetCol);
-                if (path && path.length > 0) {
-                  wComp.path = path;
-                  wComp.pathIndex = 0;
-                } else {
-                  wComp.state = "idle";
-                }
+                wComp.path = [[targetRow, targetCol]];
+                wComp.pathIndex = 0;
               } else {
                 wComp.state = "idle";
               }
@@ -347,22 +326,17 @@ export class WorkerSystem extends System {
               }
 
               if (targetRow !== -1 && targetCol !== -1) {
-                const path = map.findPath(row, col, targetRow, targetCol);
-                if (path && path.length > 0) {
-                  wComp.path = path;
-                  wComp.pathIndex = 0;
-                } else {
-                  wComp.state = "idle";
-                }
+                wComp.path = [[targetRow, targetCol]];
+                wComp.pathIndex = 0;
               } else {
                 wComp.state = "idle";
               }
             }
           }
 
-          // Walk along path if path exists
+          // Fly along aerial trajectory
           if (wComp.path.length > 0) {
-            this.walkPath(pos, vel, wComp, map, ts, dt, () => {
+            this.flyPath(world, pos, vel, wComp, map, ts, dt, () => {
               vel.vx = 0;
               vel.vy = 0;
               wComp.path = [];
@@ -380,19 +354,19 @@ export class WorkerSystem extends System {
                 if (crop) {
                   const sc = world.getComponent(crop, StructureComponent)!;
                   if (sc.cropGrowth >= 1.0) {
-                    wComp.timer = 2.0; // 2s harvest
+                    wComp.timer = 1.5; // 1.5s harvest scan
                   } else if (!sc.isWatered) {
-                    wComp.timer = 1.0; // 1s watering
+                    wComp.timer = 1.0; // 1s watering laser
                   }
                 } else {
                   wComp.timer = 1.0; // 1s plant
                 }
               } else if (wComp.role === "miner") {
-                wComp.timer = 2.0; // 2s mine cycle
+                wComp.timer = 1.5; // 1.5s mining laser
               } else if (wComp.role === "fisher") {
-                wComp.timer = 2.0; // 2s fish cycle
+                wComp.timer = 1.5; // 1.5s fish beam
               } else if (wComp.role === "woodcutter") {
-                wComp.timer = 2.0;
+                wComp.timer = 1.5;
               }
               wComp.state = "working";
             });
@@ -482,6 +456,9 @@ export class WorkerSystem extends System {
                 if (tile === "iron") { minedType = "iron_ore"; resourceTile = "iron"; break; }
                 if (tile === "copper") { minedType = "copper_ore"; resourceTile = "copper"; break; }
                 if (tile === "coal") { minedType = "coal"; resourceTile = "coal"; break; }
+                if (tile === "silver") { minedType = "silver_ore"; resourceTile = "iron"; break; }
+                if (tile === "aluminum") { minedType = "aluminum_ore"; resourceTile = "iron"; break; }
+                if (tile === "gold") { minedType = "gold_ore"; resourceTile = "copper"; break; }
                 if (tile === "stone") { minedType = "stone"; resourceTile = "stone"; break; }
               }
               wComp.heldItem = minedType;
@@ -550,7 +527,7 @@ export class WorkerSystem extends System {
           }
 
           if (wComp.path.length > 0) {
-            this.walkPath(pos, vel, wComp, map, ts, dt, () => {
+            this.flyPath(world, pos, vel, wComp, map, ts, dt, () => {
               vel.vx = 0;
               vel.vy = 0;
               wComp.path = [];
@@ -585,7 +562,7 @@ export class WorkerSystem extends System {
               }
 
               const houseStruct = world.getComponent(nearestHouse, StructureComponent)!;
-              const path = map.findPath(row, col, houseStruct.gridY, houseStruct.gridX);
+              const path = [[houseStruct.gridY, houseStruct.gridX]] as [number, number][];
 
               if (path && path.length > 0) {
                 wComp.path = path;
@@ -599,7 +576,7 @@ export class WorkerSystem extends System {
           }
 
           if (wComp.path.length > 0) {
-            this.walkPath(pos, vel, wComp, map, ts, dt, () => {
+            this.flyPath(world, pos, vel, wComp, map, ts, dt, () => {
               vel.vx = 0;
               vel.vy = 0;
               wComp.path = [];
@@ -618,7 +595,7 @@ export class WorkerSystem extends System {
             const cottage = structures.find(st => st === wComp.houseEntityId);
             if (cottage) {
               const houseStruct = world.getComponent(cottage, StructureComponent)!;
-              const path = map.findPath(row, col, houseStruct.gridY, houseStruct.gridX);
+              const path = [[houseStruct.gridY, houseStruct.gridX]] as [number, number][];
 
               if (path && path.length > 0) {
                 wComp.path = path;
@@ -632,7 +609,7 @@ export class WorkerSystem extends System {
           }
 
           if (wComp.path.length > 0) {
-            this.walkPath(pos, vel, wComp, map, ts, dt, () => {
+            this.flyPath(world, pos, vel, wComp, map, ts, dt, () => {
               vel.vx = 0;
               vel.vy = 0;
               wComp.path = [];
@@ -664,75 +641,61 @@ export class WorkerSystem extends System {
     }
   }
 
-  private walkPath(
+  private flyPath(
+    world: World,
     pos: PositionComponent,
     vel: VelocityComponent,
     wComp: WorkerComponent,
-    map: MapComponent,
+    _map: MapComponent,
     ts: number,
-    _dt: number,
+    dt: number,
     onReach: () => void
   ): void {
     if (wComp.pathIndex >= wComp.path.length) {
+      vel.vx = 0;
+      vel.vy = 0;
       onReach();
       return;
     }
 
-    let targetNode = wComp.path[wComp.pathIndex];
-    let targetX = targetNode[1] * ts + ts / 2;
-    let targetY = targetNode[0] * ts + ts / 2;
+    const targetNode = wComp.path[wComp.pathIndex];
+    const targetX = targetNode[1] * ts + ts / 2;
+    const targetY = targetNode[0] * ts + ts / 2;
 
-    let isMoving = pos.moveDuration && pos.moveDuration > 0;
+    const dx = targetX - pos.x;
+    const dy = targetY - pos.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
 
-    if (!isMoving) {
-      if (pos.x === targetX && pos.y === targetY) {
-        // Already visually arrived at current target node, advance to next
-        wComp.pathIndex++;
-        if (wComp.pathIndex >= wComp.path.length) {
-          vel.vx = 0;
-          vel.vy = 0;
-          onReach();
-          return;
-        }
-        targetNode = wComp.path[wComp.pathIndex];
-        targetX = targetNode[1] * ts + ts / 2;
-        targetY = targetNode[0] * ts + ts / 2;
+    const flightSpeed = 220; // High speed aerial drone flight velocity
+
+    if (dist <= 8) {
+      pos.x = targetX;
+      pos.y = targetY;
+      pos.renderX = targetX;
+      pos.renderY = targetY;
+      vel.vx = 0;
+      vel.vy = 0;
+      wComp.pathIndex++;
+      if (wComp.pathIndex >= wComp.path.length) {
+        onReach();
       }
-
-      if (pos.x !== targetX || pos.y !== targetY) {
-        // Calculate speed based on target tile
-        const col = targetNode[1];
-        const row = targetNode[0];
-        const currentCellWeight = map.weights[row]?.[col] || 3.0;
-        const baseSpeed = 100;
-        const currentSpeed = baseSpeed / currentCellWeight;
-        const duration = ts / currentSpeed;
-
-        // Decoupled logical grid movement: update logical position immediately and start visual lerp
-        pos.startX = pos.renderX;
-        pos.startY = pos.renderY;
-        pos.x = targetX;
-        pos.y = targetY;
-        pos.moveTimer = 0;
-        pos.moveDuration = duration;
-        isMoving = true;
-      }
+      return;
     }
 
-    if (isMoving) {
-      // Set velocity based on current step vector to support walking animations and logic
-      const dx = pos.x - pos.startX;
-      const dy = pos.y - pos.startY;
-      const dist = Math.sqrt(dx * dx + dy * dy) || 1.0;
+    const dirX = dx / dist;
+    const dirY = dy / dist;
 
-      const col = Math.floor(pos.x / ts);
-      const row = Math.floor(pos.y / ts);
-      const currentCellWeight = map.weights[row]?.[col] || 3.0;
-      const baseSpeed = 100;
-      const currentSpeed = baseSpeed / currentCellWeight;
+    vel.vx = dirX * flightSpeed;
+    vel.vy = dirY * flightSpeed;
 
-      vel.vx = (dx / dist) * currentSpeed;
-      vel.vy = (dy / dist) * currentSpeed;
+    pos.x += vel.vx * dt;
+    pos.y += vel.vy * dt;
+    pos.renderX = pos.x;
+    pos.renderY = pos.y;
+
+    // Thruster spark / ion particle trail behind flying drone
+    if (Math.random() < 0.4) {
+      spawnParticle(world, pos.x - dirX * 10, pos.y - dirY * 10 - 14, wComp.ledColor || "#00f3ff", 1.2);
     }
   }
 
@@ -776,6 +739,7 @@ export class WorkerSystem extends System {
     if (targetHouse) {
       const sc = world.getComponent(targetHouse, StructureComponent)!;
       sc.inventory[depositedItem] = (sc.inventory[depositedItem] || 0) + 1;
+      toast.success(`Drone stored ${depositedItem.replace("_", " ")} in Storage Box!`);
     }
 
     if (playerEnt) {
@@ -783,7 +747,7 @@ export class WorkerSystem extends System {
       pComp.inventory[depositedItem] = (pComp.inventory[depositedItem] || 0) + 1;
       
       for (let i = 0; i < 3; i++) {
-        spawnParticle(world, pos.x, pos.y, "#2ecc71", 2.5);
+        spawnParticle(world, pos.x, pos.y, "#00f3ff", 2.5);
       }
     }
 
@@ -843,7 +807,7 @@ export class WorkerSystem extends System {
         wComp.path = [];
         wComp.pathIndex = 0;
         
-        toast.success("Worker consumed food and returned to work!");
+        toast.success("Logistics Drone recharged battery!");
 
         for (let i = 0; i < 4; i++) {
           spawnParticle(world, pos.x, pos.y, "#e74c3c", 2.5);

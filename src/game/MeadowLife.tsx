@@ -84,9 +84,15 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
 
   const recipesByCategory = useMemo(() => {
     return {
-      logistics: CRAFTING_RECIPES.filter((r) => ["chest", "sprinkler_basic", "sprinkler_quality"].includes(r.id)),
-      production: CRAFTING_RECIPES.filter((r) => ["furnace", "seed_maker", "research_center"].includes(r.id)),
-      materials: CRAFTING_RECIPES.filter((r) => ["torch", "scarecrow", "player_store"].includes(r.id)),
+      logistics: CRAFTING_RECIPES.filter((r) =>
+        ["chest", "sprinkler_basic", "sprinkler_quality", "transport_belt", "inserter", "logistics_drone", "drone_hub", "drone_recharger", "power_pole"].includes(r.id)
+      ),
+      production: CRAFTING_RECIPES.filter((r) =>
+        ["furnace", "seed_maker", "research_center", "assembling_machine", "electric_drill", "generator", "solar_panel", "battery", "wood_cutter", "stone_cutter"].includes(r.id)
+      ),
+      materials: CRAFTING_RECIPES.filter((r) =>
+        ["iron_gear", "copper_wire", "electronic_circuit", "electrical_cable", "steel_plate", "iron_bar", "copper_bar", "silver_bar", "gold_bar", "torch", "scarecrow", "player_store", "bed", "stone_path", "toolset"].includes(r.id)
+      ),
     };
   }, []);
 
@@ -1394,6 +1400,12 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
   };
 
   const handleStartCrafting = (recipe: Recipe) => {
+    if (recipe.techRequired && !(state.unlockedTechs || []).includes(recipe.techRequired)) {
+      const tech = TECHNOLOGIES.find((t) => t.id === recipe.techRequired);
+      toast.error(`🔒 Research "${tech?.name || recipe.techRequired}" at the Research Center first!`);
+      return;
+    }
+
     let hasAll = true;
     setState((prev) => {
       const next = structuredClone(prev);
@@ -1414,11 +1426,11 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
       }
 
       const itemDef = ITEM_DEFS[recipe.outputId];
-      const duration = 2.0;
+      const duration = 1.5;
       setCraftingQueue((prevQueue) => [
         ...prevQueue,
         {
-          id: `${recipe.id}_${Date.now()}`,
+          id: `${recipe.id}_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
           recipeId: recipe.id,
           name: recipe.name,
           iconSymbol: itemDef?.iconSymbol || "⚙",
@@ -3164,11 +3176,9 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                   <div className="grid grid-cols-6 gap-2 p-3 bg-zinc-950/80 rounded border border-zinc-800/80 min-h-[160px]">
                     {(recipesByCategory[craftingCategory] || []).map((recipe) => {
                       const itemDef = ITEM_DEFS[recipe.outputId];
-                      const canCraft = recipe.inputs.every((input) =>
-                        state.inventory.reduce(
-                          (sum, item) => (item && item.id === input.itemId ? sum + item.count : sum),
-                          0
-                        ) >= input.count
+                      const isTechLocked = recipe.techRequired && !(state.unlockedTechs || []).includes(recipe.techRequired);
+                      const canCraft = !isTechLocked && recipe.inputs.every((input) =>
+                        checkGlobalItems(state, input.itemId, input.count)
                       );
 
                       return (
@@ -3178,12 +3188,17 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                           onMouseLeave={() => setHoveredRecipe(null)}
                           onClick={() => handleStartCrafting(recipe)}
                           className={`relative flex flex-col items-center justify-center h-14 w-14 rounded border-2 transition-all ${
-                            canCraft
+                            isTechLocked
+                              ? "bg-purple-950/40 border-violet-900/60 opacity-60 text-purple-300 hover:border-violet-500 cursor-pointer"
+                              : canCraft
                               ? "bg-zinc-900 border-zinc-700 hover:bg-zinc-800 hover:border-orange-500 text-zinc-200"
                               : "bg-zinc-950/60 border-zinc-900 opacity-45 desaturate-50 text-zinc-500 cursor-not-allowed"
                           }`}
                         >
                           <span className="text-2xl">{itemDef?.iconSymbol || "⚙"}</span>
+                          {isTechLocked && (
+                            <span className="absolute top-0.5 right-0.5 text-xs animate-pulse">🔒</span>
+                          )}
                           {recipe.outputCount > 1 && (
                             <span className="absolute bottom-0.5 right-1 px-1 bg-black/60 rounded text-[9px] font-bold text-white">
                               {recipe.outputCount}
@@ -3199,6 +3214,8 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                 <div className="bg-[#141517] p-3 rounded border border-slate-700 flex flex-col justify-between min-h-[220px]">
                   {hoveredRecipe ? (() => {
                     const itemDef = ITEM_DEFS[hoveredRecipe.outputId];
+                    const isTechLocked = hoveredRecipe.techRequired && !(state.unlockedTechs || []).includes(hoveredRecipe.techRequired);
+                    const techDef = isTechLocked ? TECHNOLOGIES.find(t => t.id === hoveredRecipe.techRequired) : null;
                     return (
                       <div className="space-y-3 flex-1 flex flex-col justify-between font-mono">
                         <div className="space-y-2">
@@ -3207,14 +3224,33 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                               {itemDef?.iconSymbol || "⚙"}
                             </span>
                             <div>
-                              <h4 className="font-extrabold text-sm text-orange-400">
+                              <h4 className="font-extrabold text-sm text-orange-400 flex items-center gap-1">
                                 {hoveredRecipe.name}
+                                {isTechLocked && <span className="text-purple-400 text-xs">🔒</span>}
                               </h4>
                               <span className="text-[9px] text-zinc-500 font-bold uppercase">
                                 Produces x{hoveredRecipe.outputCount}
                               </span>
                             </div>
                           </div>
+
+                          {isTechLocked && (
+                            <div className="p-2 bg-purple-950/60 border border-purple-800/80 rounded text-[10px] text-purple-200 space-y-1">
+                              <div className="font-bold flex items-center gap-1 text-purple-300">
+                                <span>🔒 Locked Technology</span>
+                              </div>
+                              <div>Research <strong>{techDef?.name || hoveredRecipe.techRequired}</strong> at the Research Center to craft this item!</div>
+                              <button
+                                onClick={() => {
+                                  setInventoryOpen(false);
+                                  setResearchCenterOpen(true);
+                                }}
+                                className="mt-1 px-2 py-0.5 bg-violet-700 hover:bg-violet-600 text-white rounded text-[9px] font-bold"
+                              >
+                                🔬 Open Research Center
+                              </button>
+                            </div>
+                          )}
                           
                           <p className="text-[10px] text-zinc-400 leading-normal">
                             {hoveredRecipe.description}
@@ -3226,10 +3262,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                               Ingredients:
                             </span>
                             {hoveredRecipe.inputs.map((input) => {
-                              const playerHas = state.inventory.reduce(
-                                (sum, item) => (item && item.id === input.itemId ? sum + item.count : sum),
-                                0
-                              );
+                              const playerHas = getGlobalItemCount(state, input.itemId);
                               const hasEnough = playerHas >= input.count;
                               const inputDef = ITEM_DEFS[input.itemId];
                               return (
@@ -3252,16 +3285,25 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                           </div>
                         </div>
 
-                        <div className="pt-2 border-t border-zinc-800">
-                          <span className="text-[9px] text-zinc-500 font-bold tracking-wider block text-center mb-1">
-                            CLICK RECIPE ICON TO CRAFT
-                          </span>
+                        <div className="pt-2 border-t border-zinc-800 text-center">
+                          {isTechLocked ? (
+                            <span className="text-[10px] text-purple-400 font-bold">
+                              🔒 RESEARCH REQUIRED IN LAB
+                            </span>
+                          ) : (
+                            <button
+                              onClick={() => handleStartCrafting(hoveredRecipe)}
+                              className="w-full py-1.5 bg-orange-600 hover:bg-orange-500 text-white rounded font-bold text-xs transition-all shadow"
+                            >
+                              ⚙ CRAFT {hoveredRecipe.name.toUpperCase()}
+                            </button>
+                          )}
                         </div>
                       </div>
                     );
                   })() : (
                     <div className="flex flex-col items-center justify-center text-center text-zinc-500 text-[10px] py-8 h-full flex-1">
-                      <span>⚙ Hover over a recipe to view costs.</span>
+                      <span>⚙ Hover over a recipe to view costs & research requirements.</span>
                       <span className="mt-1">Click to queue crafting.</span>
                     </div>
                   )}

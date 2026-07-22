@@ -100,7 +100,7 @@ export class PlayerComponent extends Component {
   }
 }
 
-export type TileType = "grass" | "water" | "river" | "stone" | "forest" | "iron" | "copper" | "coal" | "road" | "fast_road";
+export type TileType = "grass" | "water" | "river" | "stone" | "forest" | "iron" | "copper" | "coal" | "silver" | "aluminum" | "gold" | "road" | "fast_road";
 
 export class MapComponent extends Component {
   public width: number;
@@ -246,6 +246,12 @@ export class MapComponent extends Component {
         const oreVal1 = this.noiseOre.noise(globalCol * 0.15, globalRow * 0.15, 10.0);
         const oreVal2 = this.noiseOre.noise(globalCol * 0.15, globalRow * 0.15, 20.0);
         const oreVal3 = this.noiseOre.noise(globalCol * 0.15, globalRow * 0.15, 30.0);
+        const oreVal4 = this.noiseOre.noise(globalCol * 0.15, globalRow * 0.15, 40.0);
+        const oreVal5 = this.noiseOre.noise(globalCol * 0.15, globalRow * 0.15, 50.0);
+        const oreVal6 = this.noiseOre.noise(globalCol * 0.15, globalRow * 0.15, 60.0);
+
+        // Dedicated Mining Area (Quarry Zone at coordinates X: 14..34, Y: 14..34)
+        const isMiningQuarry = globalCol >= 14 && globalCol <= 34 && globalRow >= 14 && globalRow <= 34;
 
         // Winding river noise overlay
         const riverVal = this.noiseBase.noise(globalCol * 0.025, globalRow * 0.025, 45.0);
@@ -253,7 +259,16 @@ export class MapComponent extends Component {
 
         let type: TileType = "grass";
 
-        if (isRiver) {
+        if (isMiningQuarry) {
+          // Quarry ground with rich ore veins
+          if (oreVal1 > 0.3) type = "iron";
+          else if (oreVal2 > 0.3) type = "copper";
+          else if (oreVal3 > 0.3) type = "coal";
+          else if (oreVal4 > 0.3) type = "silver";
+          else if (oreVal5 > 0.3) type = "aluminum";
+          else if (oreVal6 > 0.3) type = "gold";
+          else type = "stone";
+        } else if (isRiver) {
           type = "river";
         } else if (val < -0.25) {
           type = "water";
@@ -268,13 +283,19 @@ export class MapComponent extends Component {
         }
 
         // Overlay ores in grass/stone areas
-        if (type === "grass" || type === "stone") {
-          if (oreVal1 > 0.45) {
+        if (!isMiningQuarry && (type === "grass" || type === "stone")) {
+          if (oreVal1 > 0.46) {
             type = "iron";
-          } else if (oreVal2 > 0.45) {
+          } else if (oreVal2 > 0.46) {
             type = "copper";
-          } else if (oreVal3 > 0.45) {
+          } else if (oreVal3 > 0.46) {
             type = "coal";
+          } else if (oreVal4 > 0.48) {
+            type = "silver";
+          } else if (oreVal5 > 0.48) {
+            type = "aluminum";
+          } else if (oreVal6 > 0.50) {
+            type = "gold";
           }
         }
 
@@ -298,9 +319,15 @@ export type ItemType =
   | "stone"
   | "iron_ore"
   | "copper_ore"
+  | "silver_ore"
+  | "aluminum_ore"
+  | "gold_ore"
   | "coal"
   | "iron_plate"
   | "copper_plate"
+  | "silver_plate"
+  | "aluminum_plate"
+  | "gold_bar"
   | "gear"
   | "copper_wire"
   | "electronic_circuit"
@@ -468,25 +495,42 @@ export class WorkerComponent extends Component {
   public state: "idle" | "seeking" | "working" | "returning" | "eating" | "sleeping" | "starving";
   public role: "farmer" | "miner" | "fisher" | "woodcutter" | null;
   public houseEntityId: string;
-  public path: [number, number][]; // [row, col] grid path
+  public path: [number, number][]; // [row, col] grid path or flight trajectory
   public pathIndex: number;
   public timer: number;
   public heldItem: ItemType | null;
-  public hunger: number;
-  public isStarving: boolean;
-  public energy: number;
+  public energy: number; // Battery level 0-100%
   public sleepTimer: number;
   public previousState: "idle" | "seeking" | "working" | "returning" | null;
 
-  // Customization fields
-  public skinColor: string = "pale";
-  public hairStyle: string = "short";
-  public hairColor: string = "#34495e";
-  public clothingStyle: string = "shirt";
-  public clothingColor: string = "#e67e22";
-  public shirtColor: string = "#2c3e50";
-  public accessoryStyle: string = "none";
-  public accessoryColor: string = "#e74c3c";
+  // Factorio Drone properties
+  public chassisStyle: "hex_runner" | "quad_core" | "stealth_steed" | "titan_heavy" | "scout_lite" = "quad_core";
+  public ledColor: string = "#00f3ff";
+  public bodyColor: string = "#2c3e50";
+  public rotorColor: string = "#00f3ff";
+
+  // Legacy field support mapped to drone battery
+  public get hunger(): number { return this.energy; }
+  public set hunger(v: number) { this.energy = v; }
+  public get isStarving(): boolean { return this.energy <= 0; }
+  public set isStarving(v: boolean) { if (v) this.energy = 0; }
+
+  public get skinColor(): string { return this.ledColor; }
+  public set skinColor(v: string) { this.ledColor = v; }
+  public get hairStyle(): string { return this.chassisStyle; }
+  public set hairStyle(v: string) { this.chassisStyle = v as any; }
+  public get hairColor(): string { return this.rotorColor; }
+  public set hairColor(v: string) { this.rotorColor = v; }
+  public get clothingStyle(): string { return "drone"; }
+  public set clothingStyle(_v: string) {}
+  public get clothingColor(): string { return this.bodyColor; }
+  public set clothingColor(v: string) { this.bodyColor = v; }
+  public get shirtColor(): string { return "#34495e"; }
+  public set shirtColor(_v: string) {}
+  public get accessoryStyle(): string { return "scanner"; }
+  public set accessoryStyle(_v: string) {}
+  public get accessoryColor(): string { return this.ledColor; }
+  public set accessoryColor(v: string) { this.ledColor = v; }
 
   constructor(houseEntityId: string) {
     super();
@@ -497,8 +541,6 @@ export class WorkerComponent extends Component {
     this.pathIndex = 0;
     this.timer = 0;
     this.heldItem = null;
-    this.hunger = 100;
-    this.isStarving = false;
     this.energy = 100;
     this.sleepTimer = 0;
     this.previousState = null;

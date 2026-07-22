@@ -519,14 +519,23 @@ export const ITEM_DEFS: Record<string, Omit<Item, "count">> = {
     iconColor: "#ffffff",
     iconSymbol: "💎",
   },
-  prismatic_shard: {
-    id: "prismatic_shard",
-    name: "Prismatic Shard",
+  aluminum_ore: {
+    id: "aluminum_ore",
+    name: "Aluminum Ore",
     type: "resource",
-    description: "A very rare and powerful crystal.",
-    price: 2000,
-    iconColor: "#f39c12",
-    iconSymbol: "🌈",
+    description: "Lightweight bauxite aluminum ore.",
+    price: 35,
+    iconColor: "#81e6d9",
+    iconSymbol: "🛡️",
+  },
+  aluminum_bar: {
+    id: "aluminum_bar",
+    name: "Aluminum Bar",
+    type: "resource",
+    description: "Smelted lightweight durable aluminum bar.",
+    price: 90,
+    iconColor: "#b2f5ea",
+    iconSymbol: "🔩",
   },
 
   // Placeables
@@ -544,8 +553,79 @@ export const ITEM_DEFS: Record<string, Omit<Item, "count">> = {
   },
   solar_panel: {
     id: "solar_panel", name: "Solar Panel", type: "furniture",
-    description: "Generates electricity during the day.",
+    description: "Generates clean electricity during the day for the electrical grid.",
     price: 2500, iconColor: "#1e90ff", iconSymbol: "☀️"
+  },
+  generator: {
+    id: "generator", name: "Steam Power Generator", type: "furniture",
+    description: "Burns coal to produce high-voltage electricity for the power grid.",
+    price: 1800, iconColor: "#e74c3c", iconSymbol: "🔥"
+  },
+  power_pole: {
+    id: "power_pole", name: "Electric Power Pole", type: "furniture",
+    description: "High voltage electrical cable pole that transmits power to nearby machines.",
+    price: 150, iconColor: "#f1c40f", iconSymbol: "🔌"
+  },
+  electrical_cable: {
+    id: "electrical_cable", name: "Electrical Cable Connection", type: "resource",
+    description: "Insulated copper cable for connecting power poles & electrical grids.",
+    price: 20, iconColor: "#e67e22", iconSymbol: "⚡"
+  },
+  drone_recharger: {
+    id: "drone_recharger", name: "Drone Recharge Station", type: "furniture",
+    description: "High-speed wireless electrical charging pad for Factorio logistics drones.",
+    price: 2500, iconColor: "#00f3ff", iconSymbol: "⚡"
+  },
+  // Factorio Tech Components & Machines
+  iron_gear: {
+    id: "iron_gear", name: "Iron Gear Wheel", type: "resource",
+    description: "Crucial mechanical gear used in machinery and logistics.",
+    price: 30, iconColor: "#95a5a6", iconSymbol: "⚙️"
+  },
+  copper_wire: {
+    id: "copper_wire", name: "Copper Cable", type: "resource",
+    description: "Conductive copper wire used for electronic circuits.",
+    price: 15, iconColor: "#d35400", iconSymbol: "🔌"
+  },
+  electronic_circuit: {
+    id: "electronic_circuit", name: "Electronic Circuit", type: "resource",
+    description: "Basic green circuit board for automated tech and logic.",
+    price: 120, iconColor: "#2ecc71", iconSymbol: "🟩"
+  },
+  steel_plate: {
+    id: "steel_plate", name: "Steel Plate", type: "resource",
+    description: "High strength dense steel alloy plate.",
+    price: 150, iconColor: "#bdc3c7", iconSymbol: "🔩"
+  },
+  transport_belt: {
+    id: "transport_belt", name: "Transport Belt", type: "furniture",
+    description: "Automated logistics belt moving items continuously.",
+    price: 50, iconColor: "#f39c12", iconSymbol: "➡️"
+  },
+  inserter: {
+    id: "inserter", name: "Robotic Inserter", type: "furniture",
+    description: "Robotic arm that picks and places items automatically.",
+    price: 250, iconColor: "#f1c40f", iconSymbol: "🦾"
+  },
+  assembling_machine: {
+    id: "assembling_machine", name: "Assembling Machine", type: "furniture",
+    description: "Automated factory machine that crafts recipes continuously.",
+    price: 1200, iconColor: "#e67e22", iconSymbol: "🏭"
+  },
+  electric_drill: {
+    id: "electric_drill", name: "Electric Mining Drill", type: "furniture",
+    description: "Automated mining drill that excavates ores.",
+    price: 1500, iconColor: "#3498db", iconSymbol: "🚜"
+  },
+  logistics_drone: {
+    id: "logistics_drone", name: "Logistics Drone", type: "furniture",
+    description: "Factorio flying drone that harvests resources & deposits to boxes.",
+    price: 2000, iconColor: "#00f3ff", iconSymbol: "🚁"
+  },
+  drone_hub: {
+    id: "drone_hub", name: "Drone Station Hub", type: "furniture",
+    description: "Central command station for hovering logistics drones.",
+    price: 5000, iconColor: "#9b59b6", iconSymbol: "📡"
   },
   battery: {
     id: "battery", name: "Battery", type: "furniture",

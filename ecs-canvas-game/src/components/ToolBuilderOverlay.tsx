@@ -517,53 +517,43 @@ export function ToolBuilderOverlay() {
       {activeCottage && (
         <div className="dialog-overlay" style={{ display: "flex" }}>
           <div className="dialog-content">
-            <h3>🏡 Hired Worker Cottage</h3>
+            <h3>🚁 Logistics Drone Station (Factorio Automation)</h3>
             {!workerInfo ? (
               <>
-                <p>Status: No worker hired.</p>
+                <p>Status: No Logistics Drone deployed.</p>
                 <div className="dialog-desc">
-                  Hire a dedicated worker for this cottage to automate resource gathering.
-                  Each worker cottage has a capacity of exactly 1 worker.
+                  Deploy an automated Factorio Logistics Drone for this station to gather crops, minerals, wood, and fish, and store them into your Storage Boxes!
+                  Each drone station supports 1 active flying drone.
                 </div>
                 <p className="dialog-cost">Cost: 🪓 10 Wood, 🪙 10 Iron Plate</p>
                 <button className="dialog-btn success" onClick={hireWorker}>
-                  Buy/Hire Worker
+                  🚀 Deploy Logistics Drone
                 </button>
               </>
             ) : (
               <>
                 <div style={{ marginBottom: "12px", fontSize: "14px", lineHeight: "1.5" }}>
-                  <strong>Role:</strong> {workerInfo.comp.role ? workerInfo.comp.role.toUpperCase() : "NONE"}
+                  <strong>Subsystem Role:</strong> {workerInfo.comp.role ? workerInfo.comp.role.toUpperCase() : "NONE"}
                   <br />
-                  <strong>State:</strong>{" "}
-                  <span style={{ color: workerInfo.comp.state === "starving" ? "#e74c3c" : "#3498db", fontWeight: "bold" }}>
-                    {workerInfo.comp.state.toUpperCase().replace("_", " ")}
+                  <strong>Drone Status:</strong>{" "}
+                  <span style={{ color: workerInfo.comp.state === "starving" ? "#e74c3c" : "#00f3ff", fontWeight: "bold" }}>
+                    {workerInfo.comp.state === "starving" ? "LOW BATTERY ⚡" : workerInfo.comp.state.toUpperCase().replace("_", " ")}
                   </span>
                   <br />
-                  <strong>Hunger:</strong>{" "}
+                  <strong>Battery Charge:</strong>{" "}
                   <span
                     style={{
-                      color: workerInfo.comp.isStarving || workerInfo.comp.hunger < 25 ? "#e74c3c" : "#2ecc71",
+                      color: workerInfo.comp.isStarving || workerInfo.comp.hunger < 25 ? "#e74c3c" : "#00f3ff",
                       fontWeight: "bold",
                     }}
                   >
-                    {workerInfo.comp.isStarving ? "STARVING ⚠️" : `${Math.floor(workerInfo.comp.hunger)}%`}
-                  </span>
-                  <br />
-                  <strong>Energy:</strong>{" "}
-                  <span
-                    style={{
-                      color: workerInfo.comp.energy < 25 ? "#e74c3c" : "#2ecc71",
-                      fontWeight: "bold",
-                    }}
-                  >
-                    {Math.floor(workerInfo.comp.energy)}%
+                    {workerInfo.comp.isStarving ? "LOW BATT ⚡" : `${Math.floor(workerInfo.comp.energy)}%`}
                   </span>
                 </div>
 
                 <div className="form-group" style={{ marginBottom: "15px" }}>
                   <label className="form-label" style={{ display: "block", marginBottom: "6px" }}>
-                    Assign Worker Role:
+                    Assign Drone Subsystem Role:
                   </label>
                   <select
                     className="dialog-select"
@@ -571,99 +561,60 @@ export function ToolBuilderOverlay() {
                     onChange={(e) => changeWorkerRole(workerInfo.comp, e.target.value)}
                     style={{ width: "100%", padding: "6px", background: "#2c3e50", color: "#fff", border: "1px solid #34495e" }}
                   >
-                    <option value="">-- Select Role --</option>
-                    <option value="farmer">🌾 Farmer (Plants, Waters & Harvests Crops)</option>
-                    <option value="miner">⛏️ Miner (Extracts Iron/Copper/Coal/Stone)</option>
-                    <option value="fisher">🎣 Fisher (Harvests adjacent Water tiles)</option>
+                    <option value="">-- Select Drone Role --</option>
+                    <option value="farmer">🌾 Crop Harvesting Drone (Plants, Waters & Stores Crops in Box)</option>
+                    <option value="miner">⛏️ Mining & Extraction Drone (Mines Ores/Stone & Stores in Box)</option>
+                    <option value="fisher">🎣 Fisher Drone (Collects Fish & Stores in Box)</option>
                   </select>
                 </div>
 
                 <div className="customizer-section" style={{ borderTop: "1px solid #34495e", paddingTop: "10px", marginTop: "10px", marginBottom: "15px" }}>
-                  <h4 style={{ margin: "0 0 10px 0", fontSize: "14px", color: "#fff" }}>🎨 Custom Appearance</h4>
+                  <h4 style={{ margin: "0 0 10px 0", fontSize: "14px", color: "#fff" }}>⚡ Drone Tech Appearance</h4>
                   
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
                     <div className="form-group" style={{ marginBottom: "5px" }}>
-                      <label className="form-label" style={{ display: "block", marginBottom: "3px", fontSize: "11px", opacity: 0.8, color: "#fff" }}>Hair Style:</label>
+                      <label className="form-label" style={{ display: "block", marginBottom: "3px", fontSize: "11px", opacity: 0.8, color: "#fff" }}>Chassis Body Color:</label>
                       <select
                         className="dialog-select"
-                        value={workerInfo.comp.hairStyle || "short"}
+                        value={workerInfo.comp.bodyColor || "#2c3e50"}
                         onChange={(e) => {
-                          workerInfo.comp.hairStyle = e.target.value;
+                          workerInfo.comp.bodyColor = e.target.value;
                           setActiveCottage({ ...activeCottage });
                         }}
                         style={{ width: "100%", padding: "4px", background: "#2c3e50", color: "#fff", border: "1px solid #34495e", fontSize: "12px", borderRadius: "4px", cursor: "pointer" }}
                       >
-                        <option value="short">Short</option>
-                        <option value="spiky">Spiky</option>
-                        <option value="bob">Bob</option>
-                        <option value="curly">Curly</option>
-                        <option value="braids">Braids</option>
-                        <option value="none">Bald</option>
+                        <option value="#2c3e50">Dark Titanium</option>
+                        <option value="#e67e22">Factorio Orange</option>
+                        <option value="#2ecc71">Cobalt Emerald</option>
+                        <option value="#9b59b6">Obsidian Purple</option>
+                        <option value="#34495e">Gunmetal Grey</option>
                       </select>
                     </div>
 
                     <div className="form-group" style={{ marginBottom: "5px" }}>
-                      <label className="form-label" style={{ display: "block", marginBottom: "3px", fontSize: "11px", opacity: 0.8, color: "#fff" }}>Hair Color:</label>
+                      <label className="form-label" style={{ display: "block", marginBottom: "3px", fontSize: "11px", opacity: 0.8, color: "#fff" }}>Sensor LED Eye Color:</label>
                       <select
                         className="dialog-select"
-                        value={workerInfo.comp.hairColor || "#34495e"}
+                        value={workerInfo.comp.ledColor || "#00f3ff"}
                         onChange={(e) => {
-                          workerInfo.comp.hairColor = e.target.value;
+                          workerInfo.comp.ledColor = e.target.value;
+                          workerInfo.comp.rotorColor = e.target.value;
                           setActiveCottage({ ...activeCottage });
                         }}
                         style={{ width: "100%", padding: "4px", background: "#2c3e50", color: "#fff", border: "1px solid #34495e", fontSize: "12px", borderRadius: "4px", cursor: "pointer" }}
                       >
-                        <option value="#f1c40f">Blond</option>
-                        <option value="#8a5a3b">Brown</option>
-                        <option value="#2c3e50">Black</option>
-                        <option value="#c0392b">Red</option>
-                        <option value="#9b59b6">Purple</option>
-                        <option value="#7f8c8d">Grey</option>
-                      </select>
-                    </div>
-
-                    <div className="form-group" style={{ marginBottom: "5px" }}>
-                      <label className="form-label" style={{ display: "block", marginBottom: "3px", fontSize: "11px", opacity: 0.8, color: "#fff" }}>Outfit Style:</label>
-                      <select
-                        className="dialog-select"
-                        value={workerInfo.comp.clothingStyle || "shirt"}
-                        onChange={(e) => {
-                          workerInfo.comp.clothingStyle = e.target.value;
-                          setActiveCottage({ ...activeCottage });
-                        }}
-                        style={{ width: "100%", padding: "4px", background: "#2c3e50", color: "#fff", border: "1px solid #34495e", fontSize: "12px", borderRadius: "4px", cursor: "pointer" }}
-                      >
-                        <option value="shirt">Shirt</option>
-                        <option value="jacket">Jacket</option>
-                        <option value="overalls">Overalls</option>
-                        <option value="tunic">Tunic</option>
-                      </select>
-                    </div>
-
-                    <div className="form-group" style={{ marginBottom: "5px" }}>
-                      <label className="form-label" style={{ display: "block", marginBottom: "3px", fontSize: "11px", opacity: 0.8, color: "#fff" }}>Outfit Color:</label>
-                      <select
-                        className="dialog-select"
-                        value={workerInfo.comp.clothingColor || "#e67e22"}
-                        onChange={(e) => {
-                          workerInfo.comp.clothingColor = e.target.value;
-                          setActiveCottage({ ...activeCottage });
-                        }}
-                        style={{ width: "100%", padding: "4px", background: "#2c3e50", color: "#fff", border: "1px solid #34495e", fontSize: "12px", borderRadius: "4px", cursor: "pointer" }}
-                      >
-                        <option value="#e67e22">Orange</option>
-                        <option value="#3498db">Blue</option>
-                        <option value="#2ecc71">Green</option>
-                        <option value="#9b59b6">Purple</option>
-                        <option value="#c0392b">Red</option>
-                        <option value="#1abc9c">Teal</option>
+                        <option value="#00f3ff">Electric Cyan</option>
+                        <option value="#39ff14">Neon Green</option>
+                        <option value="#f1c40f">Amber Gold</option>
+                        <option value="#ff007f">Magenta Pink</option>
+                        <option value="#9b59b6">Plasma Purple</option>
                       </select>
                     </div>
                   </div>
                 </div>
 
                 <button className="dialog-btn danger" onClick={() => dismissWorker(workerInfo.id)}>
-                  Dismiss Worker
+                  Decommission Drone
                 </button>
               </>
             )}

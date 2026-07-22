@@ -1200,7 +1200,7 @@ export class RenderSystem extends System {
             for (const tree of trees) {
               this.drawOrganicTree(this.ctx, tree.x, tree.y, tree.scale);
             }
-          } else if (type === "iron" || type === "copper" || type === "coal") {
+          } else if (type === "iron" || type === "copper" || type === "coal" || type === "silver" || type === "aluminum" || type === "gold") {
             // Base background underneath the ore (stone if in mountainous terrain, grass otherwise)
             const baseVal = this.noiseBase.noise(c * 0.07, r * 0.07, 0);
             if (baseVal > 0.2) {
@@ -1229,6 +1229,15 @@ export class RenderSystem extends System {
             } else if (type === "coal") {
               oreColor = "#111111";
               highlightColor = "#34495e";
+            } else if (type === "silver") {
+              oreColor = "#e2e8f0";
+              highlightColor = "#ffffff";
+            } else if (type === "aluminum") {
+              oreColor = "#81e6d9";
+              highlightColor = "#e6fffa";
+            } else if (type === "gold") {
+              oreColor = "#f1c40f";
+              highlightColor = "#fff9db";
             }
 
             for (let i = 0; i < numChunks; i++) {
@@ -2554,81 +2563,204 @@ export class RenderSystem extends System {
     entId: string,
     pos: PositionComponent,
     vel: VelocityComponent,
-    anim?: AnimationComponent
+    _anim?: AnimationComponent
   ): void {
-    let skinColor     = w.skinColor     || "pale";
-    let clothingStyle = w.clothingStyle || "shirt";
-    let clothingColor = w.clothingColor || "#e67e22";
-    let shirtColor    = w.shirtColor    || "#2c3e50";
-    let accessoryStyle = w.accessoryStyle || "none";
-    let accessoryColor = w.accessoryColor || "#e74c3c";
-
-    // Dynamic appearance adjustments based on FSM work state
-    if (w.state === "sleeping") {
-      clothingStyle = "tunic"; // nightgown
-      accessoryStyle = "none";  // sleep without hats
-    } else if (w.state === "starving" || w.isStarving) {
-      skinColor = "green"; // look pale/sick
-    } else if (w.state === "working") {
-      clothingStyle = "apron"; // wear work apron
-    }
-
-    // Use direction from AnimationComponent if available (more accurate than velocity)
-    let direction: "down" | "up" | "left" | "right" = anim?.direction || "down";
-    if (!anim) {
-      if (vel.vx > 0) direction = "right";
-      else if (vel.vx < 0) direction = "left";
-      else if (vel.vy > 0) direction = "down";
-      else if (vel.vy < 0) direction = "up";
-      else direction = this.lastDirections.get(entId) || "down";
-    }
-    if (vel.vx !== 0 || vel.vy !== 0) {
-      this.lastDirections.set(entId, direction);
-    }
-
-    const isWalking = pos.moveDuration !== undefined && pos.moveDuration > 0;
-    const isWorking = w.state === "working";
-
-    // Hide tool when not working
-    const toolType = w.state === "working" ? w.role : null;
-
-    this.drawLayeredCharacter(
-      ctx, px, py,
-      skinColor, w.hairStyle || "short", w.hairColor || "#34495e",
-      clothingStyle, clothingColor, shirtColor,
-      accessoryStyle, accessoryColor,
-      toolType, isWalking, isWorking, direction,
-      anim
-    );
-
     ctx.save();
-    ctx.translate(px, py);
 
-    // Draw held item on their head if carrying resources
-    if (w.heldItem) {
+    // Flight Hover Altitude & Bobbing
+    const hoverBob = Math.sin(this.time * 7.0) * 3;
+    const droneY = py - 18 + hoverBob;
+
+    // 1. Ground Drop Shadow (placed at px, py on the ground)
+    ctx.save();
+    ctx.fillStyle = "rgba(0, 0, 0, 0.35)";
+    ctx.beginPath();
+    ctx.ellipse(px, py + 4, 14, 6, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+
+    // 2. Drone Flight Path Beam / Tether when moving or returning
+    if (w.heldItem || w.state === "working") {
       ctx.save();
-      ctx.translate(0, -24);
-      this.drawItemIcon(ctx, 0, 0, w.heldItem);
+      ctx.strokeStyle = "rgba(0, 243, 255, 0.4)";
+      ctx.lineWidth = 1;
+      ctx.setLineDash([2, 2]);
+      ctx.beginPath();
+      ctx.moveTo(px, py);
+      ctx.lineTo(px, droneY + 8);
+      ctx.stroke();
       ctx.restore();
     }
 
-    // Draw Hunger Status Bar / Warning Bubble
-    if (w.isStarving) {
-      const pulse = Math.abs(Math.sin(this.time * 6.0));
-      ctx.fillStyle = `rgba(231, 76, 60, ${0.45 + pulse * 0.55})`;
+    ctx.translate(px, droneY);
+
+    // Drone orientation / banking angle based on horizontal velocity
+    const tilt = Math.max(-0.25, Math.min(0.25, vel.vx * 0.003));
+    ctx.rotate(tilt);
+
+    const mainColor = w.bodyColor || "#2c3e50";
+    const ledColor = w.ledColor || "#00f3ff";
+    const rotorSpeed = this.time * 30.0;
+
+    // 3. 4 Rotor Arms & Blades (Quad-rotor layout)
+    const armCoords = [
+      { x: -14, y: -8 },
+      { x: 14, y: -8 },
+      { x: -14, y: 8 },
+      { x: 14, y: 8 },
+    ];
+
+    ctx.strokeStyle = "#4a6572";
+    ctx.lineWidth = 2.5;
+    ctx.lineCap = "round";
+
+    for (const arm of armCoords) {
+      // Carbon arm
       ctx.beginPath();
-      ctx.roundRect(-24, -22, 48, 8, 2);
+      ctx.moveTo(0, 0);
+      ctx.lineTo(arm.x, arm.y);
+      ctx.stroke();
+
+      // Rotor motor hub
+      ctx.fillStyle = "#1e272e";
+      ctx.beginPath();
+      ctx.arc(arm.x, arm.y, 3, 0, Math.PI * 2);
       ctx.fill();
-      ctx.fillStyle = "#fff";
+
+      // Spinning rotor blade disk blur
+      ctx.save();
+      ctx.translate(arm.x, arm.y);
+      ctx.rotate(rotorSpeed + (arm.x > 0 ? 1 : 0));
+
+      // Blade disc translucent glow
+      ctx.fillStyle = "rgba(0, 243, 255, 0.25)";
+      ctx.beginPath();
+      ctx.arc(0, 0, 7, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Spinning rotor blades
+      ctx.strokeStyle = ledColor;
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.moveTo(-6, 0);
+      ctx.lineTo(6, 0);
+      ctx.moveTo(0, -6);
+      ctx.lineTo(0, 6);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    // 4. Central Metallic Drone Chassis (Factorio Tech aesthetic)
+    ctx.fillStyle = mainColor;
+    ctx.strokeStyle = "#10161a";
+    ctx.lineWidth = 1.5;
+
+    // Hexagonal / Aerodynamic Hull
+    ctx.beginPath();
+    ctx.moveTo(0, -10);
+    ctx.lineTo(10, -4);
+    ctx.lineTo(8, 8);
+    ctx.lineTo(-8, 8);
+    ctx.lineTo(-10, -4);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    // Top armor plate panel
+    ctx.fillStyle = "#34495e";
+    ctx.beginPath();
+    ctx.roundRect(-5, -6, 10, 8, 2);
+    ctx.fill();
+
+    // 5. Central Glowing Camera / Sensor Eye
+    ctx.save();
+    ctx.shadowColor = ledColor;
+    ctx.shadowBlur = 10;
+    ctx.fillStyle = ledColor;
+    ctx.beginPath();
+    ctx.arc(0, 0, 3.5, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Eye pulse inner core
+    ctx.fillStyle = "#ffffff";
+    ctx.beginPath();
+    ctx.arc(0, 0, 1.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+
+    // 6. Laser Collector / Mining Scanner Beam when working
+    if (w.state === "working") {
+      ctx.save();
+      ctx.shadowColor = ledColor;
+      ctx.shadowBlur = 12;
+      ctx.strokeStyle = ledColor;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(0, 4);
+      ctx.lineTo(0, 22);
+      ctx.stroke();
+
+      // Scanner pulse ring at ground
+      ctx.fillStyle = "rgba(0, 243, 255, 0.4)";
+      ctx.beginPath();
+      ctx.ellipse(0, 22, 10 + Math.sin(this.time * 12) * 3, 4, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+
+    // 7. Suspended Cargo Box / Item underneath drone when returning / storing to box
+    if (w.heldItem) {
+      ctx.save();
+      ctx.translate(0, 12);
+
+      // Crate / Magnetic tether suspension lines
+      ctx.strokeStyle = "#7f8c8d";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(-4, -6);
+      ctx.lineTo(-4, 0);
+      ctx.moveTo(4, -6);
+      ctx.lineTo(4, 0);
+      ctx.stroke();
+
+      // Cargo Container Box
+      ctx.fillStyle = "#d35400"; // Cargo crate orange
+      ctx.strokeStyle = "#6e2c00";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.roundRect(-9, 0, 18, 14, 2);
+      ctx.fill();
+      ctx.stroke();
+
+      // Draw item icon on the storage crate
+      this.drawItemIcon(ctx, 0, 7, w.heldItem);
+      ctx.restore();
+    }
+
+    // 8. Drone Energy / Battery & Status Indicator
+    if (w.energy < 20) {
+      const pulse = Math.abs(Math.sin(this.time * 8.0));
+      ctx.fillStyle = `rgba(231, 76, 60, ${0.5 + pulse * 0.5})`;
+      ctx.beginPath();
+      ctx.roundRect(-24, -20, 48, 9, 3);
+      ctx.fill();
+
+      ctx.fillStyle = "#ffffff";
       ctx.font = "bold 6.5px sans-serif";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.fillText("STARVING", 0, -18);
-    } else if (w.hunger < 25) {
-      ctx.fillStyle = "rgba(0,0,0,0.6)";
-      ctx.fillRect(-10, -18, 20, 3);
-      ctx.fillStyle = "#e67e22";
-      ctx.fillRect(-10, -18, 20 * (w.hunger / 100), 3);
+      ctx.fillText("LOW BATT ⚡", 0, -15.5);
+    } else if (w.state === "eating" || w.state === "sleeping") {
+      ctx.fillStyle = "rgba(0, 243, 255, 0.85)";
+      ctx.beginPath();
+      ctx.roundRect(-26, -20, 52, 9, 3);
+      ctx.fill();
+
+      ctx.fillStyle = "#000000";
+      ctx.font = "bold 6.5px sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText("RECHARGING", 0, -15.5);
     }
 
     ctx.restore();

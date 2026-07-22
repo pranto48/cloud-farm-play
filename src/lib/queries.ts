@@ -11,6 +11,47 @@ import {
   addDoc
 } from "firebase/firestore";
 import { db } from "@/integrations/firebase/client";
+import { prepareStateForSave } from "@/game/meadow-life";
+
+async function compressSaveData(data: unknown): Promise<string> {
+  const prepared = prepareStateForSave(data);
+  const jsonStr = JSON.stringify(prepared);
+  if (typeof CompressionStream !== "undefined") {
+    try {
+      const stream = new Blob([jsonStr]).stream().pipeThrough(new CompressionStream("gzip"));
+      const buffer = await new Response(stream).arrayBuffer();
+      const bytes = new Uint8Array(buffer);
+      let binary = "";
+      const len = bytes.byteLength;
+      for (let i = 0; i < len; i += 8192) {
+        binary += String.fromCharCode(...bytes.subarray(i, i + 8192));
+      }
+      return "gz:" + btoa(binary);
+    } catch (e) {
+      console.warn("[Queries] Compression failed, using raw JSON:", e);
+    }
+  }
+  return jsonStr;
+}
+
+async function decompressSaveData(saveDataStr: string): Promise<unknown> {
+  let jsonStr = saveDataStr;
+  if (typeof saveDataStr === "string" && saveDataStr.startsWith("gz:") && typeof DecompressionStream !== "undefined") {
+    try {
+      const base64 = saveDataStr.slice(3);
+      const binary = atob(base64);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) {
+        bytes[i] = binary.charCodeAt(i);
+      }
+      const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("gzip"));
+      jsonStr = await new Response(stream).text();
+    } catch (e) {
+      console.error("[Queries] Decompression failed:", e);
+    }
+  }
+  return JSON.parse(jsonStr);
+}
 
 export type GameRow = {
   id: string;
@@ -142,11 +183,13 @@ export async function fetchCloudSave(userId: string, gameId: string) {
   docs.sort((a: any, b: any) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
   
   const save = docs[0];
-  if (save && typeof save.save_data === "string") {
+  if (save && save.save_data) {
     try {
-      save.save_data = JSON.parse(save.save_data);
+      if (typeof save.save_data === "string") {
+        save.save_data = await decompressSaveData(save.save_data);
+      }
     } catch (e) {
-      console.error("[Queries] Failed to parse save_data JSON:", e);
+      console.error("[Queries] Failed to parse/decompress save_data:", e);
     }
   }
   return save;
@@ -227,7 +270,7 @@ export async function upsertCloudSave(params: {
   const docId = `${params.userId}_${params.gameId}_${slot.replace(/\s+/g, "_")}`;
   const saveRef = doc(db, "cloud_saves", docId);
   
-  const serializedSaveData = JSON.stringify(params.saveData);
+  const serializedSaveData = await compressSaveData(params.saveData);
   
   await setDoc(saveRef, {
     id: docId,

@@ -180,6 +180,103 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
   const [shopSearchTerm, setShopSearchTerm] = useState("");
   const [shopCategoryFilter, setShopCategoryFilter] = useState<string>("all");
 
+  // Multiplayer Rooms & Separate Maps
+  const [multiplayerOpen, setMultiplayerOpen] = useState(false);
+  const [newRoomName, setNewRoomName] = useState("");
+  const [newRoomCode, setNewRoomCode] = useState("");
+  const [availableRooms, setAvailableRooms] = useState<MultiplayerRoom[]>([
+    {
+      id: "room_global_1",
+      name: "🌐 Global Meadow #1",
+      code: "MEADOW-1",
+      mapSeed: 101,
+      isPrivate: false,
+      maxPlayers: 4,
+      players: [
+        { id: "p1", name: "Farmer_Emma", x: 22, y: 32, subX: 22, subY: 32, dir: "down", color: "#2ecc71", avatarSymbol: "👩‍🌾" }
+      ]
+    },
+    {
+      id: "room_factorio_2",
+      name: "🏭 Factorio Co-Op #2",
+      code: "FACTORIO-2",
+      mapSeed: 202,
+      isPrivate: false,
+      maxPlayers: 4,
+      players: [
+        { id: "p2", name: "Engineer_Alex", x: 74, y: 12, subX: 74, subY: 12, dir: "right", color: "#e67e22", avatarSymbol: "👨‍🏭" },
+        { id: "p3", name: "Builder_Sam", x: 78, y: 16, subX: 78, subY: 16, dir: "down", color: "#3498db", avatarSymbol: "👷" }
+      ]
+    },
+    {
+      id: "room_quarry_3",
+      name: "⛏ Mining Quarry #3",
+      code: "MINING-3",
+      mapSeed: 303,
+      isPrivate: false,
+      maxPlayers: 4,
+      players: [
+        { id: "p4", name: "Miner_Jake", x: 85, y: 20, subX: 85, subY: 20, dir: "left", color: "#9b59b6", avatarSymbol: "⛏" }
+      ]
+    },
+    {
+      id: "room_wilderness_4",
+      name: "🌲 Wilderness Reserve #4",
+      code: "WILD-4",
+      mapSeed: 404,
+      isPrivate: false,
+      maxPlayers: 4,
+      players: []
+    }
+  ]);
+
+  const handleSwitchRoom = (targetRoom: MultiplayerRoom) => {
+    setState((prev) => {
+      const next = structuredClone(prev);
+      const currentRoomId = next.currentRoomId || "room_global_1";
+      if (!next.savedRoomMaps) next.savedRoomMaps = {};
+      next.savedRoomMaps[currentRoomId] = next.tiles;
+
+      if (next.savedRoomMaps[targetRoom.id]) {
+        next.tiles = next.savedRoomMaps[targetRoom.id];
+      } else {
+        const newMap = makeMap(targetRoom.mapSeed);
+        next.tiles = newMap;
+        next.savedRoomMaps[targetRoom.id] = newMap;
+      }
+
+      next.currentRoomId = targetRoom.id;
+      next.currentRoomCode = targetRoom.code;
+      next.remotePlayers = targetRoom.players;
+
+      toast.success(`Joined ${targetRoom.name}! Switched to separate map.`);
+      return next;
+    });
+  };
+
+  const handleCreateRoom = () => {
+    if (!newRoomName.trim()) {
+      toast.error("Please enter a room name.");
+      return;
+    }
+    const code = newRoomCode.trim().toUpperCase() || `ROOM-${Math.floor(1000 + Math.random() * 9000)}`;
+    const seed = Math.floor(Math.random() * 100000);
+    const newRoom: MultiplayerRoom = {
+      id: `room_${Date.now()}`,
+      name: newRoomName.trim(),
+      code: code,
+      mapSeed: seed,
+      isPrivate: false,
+      maxPlayers: 4,
+      players: []
+    };
+
+    setAvailableRooms((prev) => [...prev, newRoom]);
+    handleSwitchRoom(newRoom);
+    setNewRoomName("");
+    setNewRoomCode("");
+  };
+
   const recipesByCategory = useMemo(() => {
     return {
       logistics: CRAFTING_RECIPES.filter((r) =>
@@ -2220,6 +2317,10 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
     });
   };
 
+  const handleSellAllCrops = () => {
+    handleSellAllItems();
+  };
+
   const getUpgradeCost = (toolId: "hoe" | "watering" | "scythe" | "pickaxe" | "axe", currentLvl: number) => {
     if (currentLvl === 1) {
       return { coins: 2000, resourceId: "copper_bar", resourceCount: 5, label: "5x Copper Bar + 2,000g" };
@@ -2508,6 +2609,18 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
             className="w-8 h-8 flex items-center justify-center bg-[#2a2c2e] hover:bg-[#ff9200]/20 border border-slate-600 hover:border-[#ff9200] text-slate-100 transition-all cursor-pointer font-bold text-xs"
           >
             <Coins className="h-4 w-4 text-yellow-500" />
+          </button>
+
+          {/* Multiplayer Rooms & Separate Maps Button */}
+          <button
+            onClick={() => setMultiplayerOpen(true)}
+            title="Multiplayer Rooms & Separate Maps"
+            className="h-8 px-2 flex items-center justify-center gap-1.5 bg-[#2a2c2e] hover:bg-[#38b2ac]/20 border border-slate-600 hover:border-[#38b2ac] text-slate-100 transition-all cursor-pointer font-bold text-xs"
+          >
+            <Users className="h-4 w-4 text-[#38b2ac]" />
+            <span className="text-[#38b2ac]">
+              {state.currentRoomCode ? `[${state.currentRoomCode}]` : "🌐 Rooms"}
+            </span>
           </button>
 
           {/* Mailbox Button (shown if letters exist) */}
@@ -3150,12 +3263,120 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
           </div>
 
           <div className="flex gap-2 mt-4 pt-3 border-t border-slate-800">
-            <Button size="sm" variant="outline" className="flex-1 text-xs text-slate-300 border-slate-700 hover:bg-slate-800 rounded-none" onClick={handleSellAllCrops}>
-              Sell All Crops, Eggs, & Milk in Bag
+            <Button size="sm" variant="outline" className="flex-1 text-xs text-slate-300 border-slate-700 hover:bg-slate-800 rounded-none" onClick={handleSellAllItems}>
+              💰 Sell All Items in Inventory
             </Button>
             <Button size="sm" className="text-xs bg-[#ff9200] hover:bg-[#ff9200]/80 text-[#141517] font-bold rounded-none" onClick={() => setShopOpen(false)}>
               Close Shop
             </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* MULTIPLAYER ROOMS & SEPARATE MAPS DIALOG */}
+      <Dialog open={multiplayerOpen} onOpenChange={setMultiplayerOpen}>
+        <DialogContent container={mainContainerRef.current} className="max-w-2xl bg-[#121418] border-[3px] border-[#38b2ac] text-slate-100 rounded-sm font-mono shadow-[0_0_25px_rgba(56,178,172,0.4)]">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-black uppercase tracking-wider flex items-center gap-2 text-[#38b2ac] border-b border-[#2d3748] pb-3 bg-[#1a202c] -mt-6 -mx-6 px-6 pt-6">
+              <Users className="h-6 w-6 text-[#38b2ac]" />
+              <span>Multiplayer Rooms & Separate Maps</span>
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            {/* Active Room Info */}
+            <div className="p-3 bg-[#1a202c] border border-[#38b2ac]/50 flex justify-between items-center">
+              <div>
+                <div className="text-xs text-slate-400">Current Joined Room & Map:</div>
+                <div className="text-sm font-extrabold text-[#38b2ac] flex items-center gap-2">
+                  <span>{availableRooms.find((r) => r.id === (state.currentRoomId || "room_global_1"))?.name || "🌐 Global Meadow #1"}</span>
+                  <span className="px-1.5 py-0.5 bg-[#38b2ac]/20 border border-[#38b2ac] text-[10px]">
+                    Code: {state.currentRoomCode || "MEADOW-1"}
+                  </span>
+                </div>
+              </div>
+              <span className="px-2.5 py-1 bg-emerald-500/20 text-emerald-300 border border-emerald-500 text-xs font-bold animate-pulse">
+                🟢 ACTIVE MAP
+              </span>
+            </div>
+
+            {/* Room List Header */}
+            <div className="text-xs font-bold text-slate-300 uppercase tracking-wider">
+              Select a Room to Join & Load Its Separate Map:
+            </div>
+
+            <div className="grid grid-cols-1 gap-2 max-h-[220px] overflow-y-auto pr-1">
+              {availableRooms.map((room) => {
+                const isActive = (state.currentRoomId || "room_global_1") === room.id;
+                return (
+                  <div
+                    key={room.id}
+                    className={`p-3 border flex justify-between items-center transition-all ${
+                      isActive
+                        ? "bg-[#1c2e36] border-[#38b2ac] shadow-[0_0_10px_rgba(56,178,172,0.3)]"
+                        : "bg-[#16181d] border-slate-800 hover:border-slate-600"
+                    }`}
+                  >
+                    <div>
+                      <div className="font-bold text-sm text-slate-100 flex items-center gap-2">
+                        <span>{room.name}</span>
+                        <span className="px-1.5 py-0.5 bg-[#252830] text-amber-400 text-[10px] border border-slate-700">
+                          {room.code}
+                        </span>
+                      </div>
+                      <div className="text-[10px] text-slate-400 mt-0.5 flex items-center gap-3">
+                        <span>👥 Players: {room.players.length + (isActive ? 1 : 0)}/{room.maxPlayers}</span>
+                        <span>🗺 Map Seed: {room.mapSeed}</span>
+                      </div>
+                    </div>
+
+                    {isActive ? (
+                      <span className="text-xs font-bold text-emerald-400 bg-emerald-950/60 px-3 py-1 border border-emerald-600">
+                        Current Map
+                      </span>
+                    ) : (
+                      <Button
+                        size="sm"
+                        className="bg-[#38b2ac]/20 border border-[#38b2ac] text-[#38b2ac] hover:bg-[#38b2ac] hover:text-black font-bold text-xs rounded-none font-mono"
+                        onClick={() => handleSwitchRoom(room)}
+                      >
+                        Join & Load Map
+                      </Button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Create Custom Room Section */}
+            <div className="p-3 bg-[#16181d] border border-slate-800 space-y-2 mt-2">
+              <div className="text-xs font-bold text-amber-400 flex items-center gap-1">
+                <span>➕ Create Custom Multiplayer Room & Separate Map</span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <input
+                  type="text"
+                  placeholder="Room Name (e.g. Factorio Co-Op)"
+                  value={newRoomName}
+                  onChange={(e) => setNewRoomName(e.target.value)}
+                  className="bg-[#0f1115] border border-slate-700 px-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-[#38b2ac]"
+                />
+                <input
+                  type="text"
+                  placeholder="Room Code (e.g. FARM-90)"
+                  value={newRoomCode}
+                  onChange={(e) => setNewRoomCode(e.target.value)}
+                  className="bg-[#0f1115] border border-slate-700 px-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-[#38b2ac]"
+                />
+              </div>
+              <Button
+                size="sm"
+                className="w-full bg-[#ff9200] hover:bg-amber-500 text-black font-extrabold text-xs py-1.5 font-mono rounded-none shadow-md mt-1"
+                onClick={handleCreateRoom}
+              >
+                🚀 Create Room & Generate Separate Map
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>

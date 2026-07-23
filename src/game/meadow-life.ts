@@ -232,6 +232,34 @@ export interface GameState {
   researchProgress?: number;
   workerAssignments?: Record<string, string>; // workerId -> 'research_center' | 'farm'
   purchasedLands?: string[]; // IDs of purchased land parcels
+  currentRoomId?: string;
+  currentRoomCode?: string;
+  remotePlayers?: RemotePlayer[];
+  savedRoomMaps?: Record<string, Tile[][]>; // Separate map instance per room!
+}
+
+export interface RemotePlayer {
+  id: string;
+  name: string;
+  x: number;
+  y: number;
+  subX: number;
+  subY: number;
+  dir: "up" | "down" | "left" | "right";
+  color: string;
+  avatarSymbol: string;
+  statusText?: string;
+  pingMs?: number;
+}
+
+export interface MultiplayerRoom {
+  id: string;
+  name: string;
+  code: string;
+  mapSeed: number;
+  isPrivate: boolean;
+  maxPlayers: number;
+  players: RemotePlayer[];
 }
 
 export const DAY_START_MINUTES = 6 * 60;
@@ -4650,6 +4678,45 @@ export function draw(
       );
       ctx.stroke();
     }
+  }
+
+  // 8. Render Remote Players on current room map
+  if (state.remotePlayers && state.remotePlayers.length > 0) {
+    state.remotePlayers.forEach((rp) => {
+      const rpx = (rp.subX !== undefined ? rp.subX : rp.x) * TILE + TILE / 2;
+      const rpy = (rp.subY !== undefined ? rp.subY : rp.y) * TILE + TILE / 2;
+
+      // Drop Shadow
+      ctx.fillStyle = "rgba(0,0,0,0.3)";
+      ctx.beginPath();
+      ctx.ellipse(rpx, rpy + 10, 8, 3.5, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Remote player body circle
+      ctx.fillStyle = rp.color || "#00cec9";
+      ctx.beginPath();
+      ctx.arc(rpx, rpy - 2, 10, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Avatar symbol / Head
+      ctx.fillStyle = "#ffffff";
+      ctx.font = "bold 11px sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(rp.avatarSymbol || "🧑‍🌾", rpx, rpy - 2);
+
+      // Name Tag Banner
+      const nameWidth = Math.max(50, rp.name.length * 7 + 12);
+      ctx.fillStyle = "rgba(15, 23, 42, 0.85)";
+      ctx.fillRect(rpx - nameWidth / 2, rpy - 26, nameWidth, 14);
+      ctx.strokeStyle = "#38b2ac";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(rpx - nameWidth / 2, rpy - 26, nameWidth, 14);
+
+      ctx.fillStyle = "#67e8f9";
+      ctx.font = "bold 9px monospace";
+      ctx.fillText(rp.name, rpx, rpy - 19);
+    });
   }
 
   // 8. Draw Fishing bobber lines

@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Menu, X, LayoutDashboard, Library, Cloud, User, Gamepad2, Shield, LogOut, Sprout, Moon, Sun } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { useTheme } from "@/lib/theme";
+import { UserProfileDropdown } from "@/components/app/UserProfileDropdown";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -30,7 +31,7 @@ export function MobileNav() {
           CloudFarm
         </Link>
         <div className="flex items-center gap-1">
-          <Button variant="ghost" size="icon" onClick={toggle}>{theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}</Button>
+          <UserProfileDropdown />
           <Button variant="ghost" size="icon" onClick={() => setOpen((o) => !o)}>{open ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}</Button>
         </div>
       </header>

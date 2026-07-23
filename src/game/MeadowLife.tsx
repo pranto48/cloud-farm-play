@@ -50,7 +50,7 @@ import {
   Coins, Sprout, Wheat, Bed, Hammer, Droplets, Scissors, Pickaxe,
   Heart, ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Hand, Swords,
   Volume2, VolumeX, Backpack, HelpCircle, Compass, Shield, MapPin, X,
-  Mail, Calendar, Trophy, Maximize, Minimize, Flame, Zap
+  Mail, Calendar, Trophy, Maximize, Minimize, Flame, Zap, Users
 } from "lucide-react";
 import {
   Dialog,

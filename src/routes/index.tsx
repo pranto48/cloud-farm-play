@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useAuth } from "@/lib/auth";
 import { useTheme } from "@/lib/theme";
+import { UserProfileDropdown } from "@/components/app/UserProfileDropdown";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -41,23 +42,7 @@ function Landing() {
           <span>CloudFarm Arcade</span>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="ghost" size="icon" onClick={toggle} aria-label="Toggle theme">
-            {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-          </Button>
-          {!loading && user ? (
-            <Button asChild>
-              <Link to="/dashboard">Open dashboard</Link>
-            </Button>
-          ) : (
-            <>
-              <Button asChild variant="ghost">
-                <Link to="/login">Login</Link>
-              </Button>
-              <Button asChild>
-                <Link to="/signup">Get Started</Link>
-              </Button>
-            </>
-          )}
+          <UserProfileDropdown />
         </div>
       </header>
 

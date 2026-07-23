@@ -4,6 +4,7 @@ import { motion } from "framer-motion";
 import { useAuth } from "@/lib/auth";
 import { useTheme } from "@/lib/theme";
 import { Button } from "@/components/ui/button";
+import { UserProfileDropdown } from "./UserProfileDropdown";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -67,24 +68,8 @@ export function AppSidebar() {
           </motion.div>
         )}
       </nav>
-      <div className="space-y-2 border-t border-sidebar-border p-3">
-        <div className="truncate px-2 text-xs text-muted-foreground">{user?.email}</div>
-        <div className="flex gap-2">
-          <Button variant="outline" size="icon" onClick={toggle} aria-label="Toggle theme" className="shrink-0">
-            {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-          </Button>
-          <Button
-            variant="outline"
-            className="flex-1"
-            onClick={async () => {
-              await signOut();
-              toast.success("Signed out");
-              navigate({ to: "/" });
-            }}
-          >
-            <LogOut className="mr-2 h-4 w-4" /> Logout
-          </Button>
-        </div>
+      <div className="border-t border-sidebar-border p-3 flex items-center justify-between">
+        <UserProfileDropdown />
       </div>
     </aside>
   );

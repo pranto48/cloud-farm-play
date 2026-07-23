@@ -50,7 +50,7 @@ import {
   Coins, Sprout, Wheat, Bed, Hammer, Droplets, Scissors, Pickaxe,
   Heart, ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Hand, Swords,
   Volume2, VolumeX, Backpack, HelpCircle, Compass, Shield, MapPin, X,
-  Mail, Calendar, Trophy, Maximize, Minimize, Flame
+  Mail, Calendar, Trophy, Maximize, Minimize, Flame, Zap
 } from "lucide-react";
 import {
   Dialog,
@@ -67,6 +67,77 @@ type Props = {
   onStateChange: (s: GameState) => void;
 };
 
+function FactorioCraftingIcon({
+  iconSymbol,
+  name,
+  count,
+  canCraft = true,
+  isTechLocked = false,
+  isSelected = false,
+  onClick,
+  onMouseEnter,
+  onMouseLeave,
+  title,
+}: {
+  iconSymbol?: string;
+  name?: string;
+  count?: number;
+  canCraft?: boolean;
+  isTechLocked?: boolean;
+  isSelected?: boolean;
+  onClick?: (e: React.MouseEvent) => void;
+  onMouseEnter?: () => void;
+  onMouseLeave?: () => void;
+  title?: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
+      title={title || name}
+      className={`relative flex flex-col items-center justify-between p-1.5 h-[68px] w-[68px] rounded-md border-2 transition-all duration-150 select-none font-mono cursor-pointer shadow-[0_2px_6px_rgba(0,0,0,0.6),_inset_0_1px_0_rgba(255,255,255,0.15)] ${
+        isTechLocked
+          ? "bg-[#1d1428] border-[#7e22ce] text-purple-300 opacity-70 hover:opacity-100 hover:border-[#c084fc] hover:shadow-[0_0_12px_rgba(192,132,252,0.4)]"
+          : canCraft
+          ? isSelected
+            ? "bg-[#28382b] border-[#ff9200] text-amber-200 shadow-[0_0_14px_rgba(255,146,0,0.8),_inset_0_1px_0_rgba(255,255,255,0.25)] scale-105 z-10"
+            : "bg-[#1f2921] border-[#3f5745] hover:border-[#ff9200] hover:bg-[#2a382d] text-emerald-100 hover:scale-105 hover:shadow-[0_0_10px_rgba(255,146,0,0.4)]"
+          : "bg-[#181a1f] border-[#2c3442] opacity-50 desaturate-50 text-stone-500 hover:opacity-80 cursor-not-allowed"
+      }`}
+    >
+      {/* Corner Factorio Status Dot */}
+      <div className="w-full flex justify-between items-center px-0.5">
+        <span
+          className={`h-2 w-2 rounded-full ${
+            isTechLocked
+              ? "bg-purple-500 shadow-[0_0_4px_#a855f7]"
+              : canCraft
+              ? "bg-emerald-400 shadow-[0_0_5px_#2ecc71]"
+              : "bg-red-500/70"
+          }`}
+        />
+        {isTechLocked && <span className="text-[10px] animate-pulse leading-none">🔒</span>}
+      </div>
+
+      <span className="text-3xl my-auto filter drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]">{iconSymbol || "⚙"}</span>
+
+      {name && (
+        <span className="text-[8px] font-bold truncate max-w-full text-stone-300 opacity-90 leading-tight px-0.5">
+          {name}
+        </span>
+      )}
+
+      {count !== undefined && count > 1 && (
+        <span className="absolute bottom-1 right-1 px-1 bg-[#ff9200] text-black font-extrabold rounded-xs text-[9px] font-mono leading-none shadow-md border border-amber-300">
+          x{count}
+        </span>
+      )}
+    </button>
+  );
+}
+
 export function MeadowLife({ initialState, onStateChange }: Props) {
   const [state, setState] = useState<GameState>(() => migrateState(initialState ?? newGame()));
   const stateRef = useRef(state);
@@ -76,12 +147,38 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
   const minimapRef = useRef<HTMLCanvasElement | null>(null);
   const particlesRef = useRef<Particle[]>([]);
   const floatingTextsRef = useRef<FloatingText[]>([]);
+  const pressedKeysRef = useRef<Set<string>>(new Set());
+  const lastEntityTickRef = useRef<number>(0);
+  const lastParticleTickRef = useRef<number>(0);
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      const k = e.key.toLowerCase();
+      const tag = (e.target as HTMLElement | null)?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA") return;
+      pressedKeysRef.current.add(k);
+      if (e.shiftKey) pressedKeysRef.current.add("shift");
+    };
+    const onKeyUp = (e: KeyboardEvent) => {
+      const k = e.key.toLowerCase();
+      pressedKeysRef.current.delete(k);
+      if (!e.shiftKey) pressedKeysRef.current.delete("shift");
+    };
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keyup", onKeyUp);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
+    };
+  }, []);
 
   // Menu Overlays
   const [inventoryOpen, setInventoryOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<"inventory" | "crafting" | "social" | "skills" | "workers">("inventory");
   const [shopOpen, setShopOpen] = useState(false);
-  const [shopTab, setShopTab] = useState<"seeds" | "animals" | "upgrades" | "sell" | "hire">("seeds");
+  const [shopTab, setShopTab] = useState<"all_items" | "seeds" | "animals" | "upgrades" | "sell" | "hire">("all_items");
+  const [shopSearchTerm, setShopSearchTerm] = useState("");
+  const [shopCategoryFilter, setShopCategoryFilter] = useState<string>("all");
 
   const recipesByCategory = useMemo(() => {
     return {
@@ -303,164 +400,228 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
     let raf = 0;
 
     const loop = (now: number) => {
-      const dt = (now - lastTime) / 1000;
+      const dt = Math.min((now - lastTime) / 1000, 0.05);
       lastTime = now;
 
-      setState((prev) => {
-        const next = structuredClone(prev);
-        
-        // Smoothly interpolate player coordinates
-        if (next.player.subX === undefined) next.player.subX = next.player.x;
-        if (next.player.subY === undefined) next.player.subY = next.player.y;
-        next.player.subX += (next.player.x - next.player.subX) * 0.2;
-        next.player.subY += (next.player.y - next.player.subY) * 0.2;
+      const cur = stateRef.current;
 
-        updateEntities(next, dt);
+      // Factorio Continuous Vector Player Movement
+      const keys = pressedKeysRef.current;
+      if (keys.size > 0 && !inventoryOpen && !shopOpen && !chestOpenTile && !mailboxOpen && !chatOpen) {
+        let dx = 0;
+        let dy = 0;
+        if (keys.has("w") || keys.has("arrowup")) dy -= 1;
+        if (keys.has("s") || keys.has("arrowdown")) dy += 1;
+        if (keys.has("a") || keys.has("arrowleft")) dx -= 1;
+        if (keys.has("d") || keys.has("arrowright")) dx += 1;
 
-        if (!next.animals) next.animals = [];
-        next.animals.forEach((animal) => {
-          if (!animal) return;
-          animal.subX += (animal.x - animal.subX) * 0.08;
-          animal.subY += (animal.y - animal.subY) * 0.08;
-        });
+        if (dx !== 0 || dy !== 0) {
+          if (dx !== 0 && dy !== 0) {
+            dx *= 0.7071;
+            dy *= 0.7071;
+          }
 
-        if (next.pets) {
-          next.pets.forEach((pet) => {
-            if (!pet) return;
-            pet.subX += (pet.x - pet.subX) * 0.08;
-            pet.subY += (pet.y - pet.subY) * 0.08;
-          });
-        }
+          const p = cur.player;
+          const isShift = keys.has("shift");
+          const speed = (isShift ? 9.5 : 6.5) * dt;
 
-        if (next.workers) {
-          next.workers.forEach((worker) => {
-            if (!worker) return;
-            worker.subX += (worker.x - worker.subX) * 0.08;
-            worker.subY += (worker.y - worker.subY) * 0.08;
-          });
-        }
+          if (p.subX === undefined) p.subX = p.x;
+          if (p.subY === undefined) p.subY = p.y;
 
-        if (next.harvestLiftingTimer > 0) {
-          next.harvestLiftingTimer = Math.max(0, next.harvestLiftingTimer - dt);
-          if (next.harvestLiftingTimer <= 0) {
-            next.carryItem = null;
+          const grid = cur.inHouse ? cur.houseGrid! : (cur.inMine ? cur.mineGrid : cur.tiles);
+          const rows = grid.length;
+          const cols = grid[0]?.length || 0;
+
+          // X Movement with collision sliding
+          const newSubX = Math.max(0, Math.min(cols - 1, p.subX + dx * speed));
+          const targetX = Math.floor(newSubX + (dx > 0 ? 0.25 : -0.25));
+          const curY = Math.floor(p.subY);
+          if (targetX >= 0 && targetX < cols && curY >= 0 && curY < rows && isWalkable(grid[curY]?.[targetX])) {
+            p.subX = newSubX;
+            p.x = Math.floor(newSubX);
+          }
+
+          // Y Movement with collision sliding
+          const newSubY = Math.max(0, Math.min(rows - 1, p.subY + dy * speed));
+          const targetY = Math.floor(newSubY + (dy > 0 ? 0.25 : -0.25));
+          const curX = Math.floor(p.subX);
+          if (curX >= 0 && curX < cols && targetY >= 0 && targetY < rows && isWalkable(grid[targetY]?.[curX])) {
+            p.subY = newSubY;
+            p.y = Math.floor(newSubY);
+          }
+
+          // Facing direction
+          if (Math.abs(dx) > Math.abs(dy)) {
+            p.dir = dx > 0 ? "right" : "left";
+          } else if (Math.abs(dy) > 0) {
+            p.dir = dy > 0 ? "down" : "up";
           }
         }
-        return next;
-      });
+      }
 
-      // Ambient particle spawning (on visible screen only)
-      const currentGrid = stateRef.current.inMine ? stateRef.current.mineGrid : stateRef.current.tiles;
-      if (currentGrid && currentGrid.length > 0) {
-        const p = stateRef.current.player;
-        const pSubX = p.subX !== undefined ? p.subX : p.x;
-        const pSubY = p.subY !== undefined ? p.subY : p.y;
-        
-        const cameraX = Math.max(
-          0,
-          Math.min(
-            (stateRef.current.inMine ? 24 : COLS) * TILE - canvasSize.width,
-            pSubX * TILE + 16 - canvasSize.width / 2
-          )
-        );
-        const cameraY = Math.max(
-          0,
-          Math.min(
-            (stateRef.current.inMine ? 24 : ROWS) * TILE - canvasSize.height,
-            pSubY * TILE + 16 - canvasSize.height / 2
-          )
-        );
-        const startCol = Math.max(0, Math.floor(cameraX / TILE));
-        const endCol = Math.min(stateRef.current.inMine ? 24 : COLS, Math.ceil((cameraX + canvasSize.width) / TILE));
-        const startRow = Math.max(0, Math.floor(cameraY / TILE));
-        const endRow = Math.min(stateRef.current.inMine ? 24 : ROWS, Math.ceil((cameraY + canvasSize.height) / TILE));
+      // High Performance Throttled Entity & Machine Updates (10 Ticks / sec)
+      if (!lastEntityTickRef.current) lastEntityTickRef.current = now;
+      const entityDt = (now - lastEntityTickRef.current) / 1000;
+      if (entityDt >= 0.08) {
+        updateEntities(cur, entityDt);
+        lastEntityTickRef.current = now;
+      }
 
-        for (let y = startRow; y < endRow; y++) {
-          for (let x = startCol; x < endCol; x++) {
-            const t = currentGrid[y][x];
-            
-            // 1. Ambient tree leaves
-            if (t.kind === "tree" && Math.random() < 0.004) {
-              particlesRef.current.push({
-                x: x * TILE + 16 + (Math.random() * 20 - 10),
-                y: y * TILE + 4 + (Math.random() * 8 - 4),
-                vx: -15 - Math.random() * 20, // drift left (wind)
-                vy: 20 + Math.random() * 15,  // fall down
-                color: Math.random() < 0.2 ? "#e67e22" : Math.random() < 0.1 ? "#f1c40f" : "#2ecc71", // orange/yellow/green
-                age: 0,
-                maxAge: 1.8 + Math.random() * 1,
-                type: "leaf"
-              });
-            }
+      if (cur.animals) {
+        cur.animals.forEach((animal) => {
+          if (!animal) return;
+          if (animal.subX === undefined) animal.subX = animal.x;
+          if (animal.subY === undefined) animal.subY = animal.y;
+          animal.subX += (animal.x - animal.subX) * 0.15;
+          animal.subY += (animal.y - animal.subY) * 0.15;
+        });
+      }
 
-            // 2. Active sprinkler water spray
-            if (t.kind === "placed_item" && (t.placedItemId === "sprinkler_basic" || t.placedItemId === "sprinkler_quality")) {
-              const isQuality = t.placedItemId === "sprinkler_quality";
-              if (Math.random() < 0.12) {
-                const directions = isQuality ? 8 : 4;
-                const angleOffset = (Date.now() / 180) % (Math.PI * 2);
-                for (let d = 0; d < directions; d++) {
-                  const angle = angleOffset + (d * (Math.PI * 2)) / directions;
-                  const speed = 40 + Math.random() * 25;
+      if (cur.pets) {
+        cur.pets.forEach((pet) => {
+          if (!pet) return;
+          if (pet.subX === undefined) pet.subX = pet.x;
+          if (pet.subY === undefined) pet.subY = pet.y;
+          pet.subX += (pet.x - pet.subX) * 0.15;
+          pet.subY += (pet.y - pet.subY) * 0.15;
+        });
+      }
+
+      if (cur.workers) {
+        cur.workers.forEach((worker) => {
+          if (!worker) return;
+          if (worker.subX === undefined) worker.subX = worker.x;
+          if (worker.subY === undefined) worker.subY = worker.y;
+          worker.subX += (worker.x - worker.subX) * 0.15;
+          worker.subY += (worker.y - worker.subY) * 0.15;
+        });
+      }
+
+      if (cur.harvestLiftingTimer > 0) {
+        cur.harvestLiftingTimer = Math.max(0, cur.harvestLiftingTimer - dt);
+        if (cur.harvestLiftingTimer <= 0) {
+          cur.carryItem = null;
+        }
+      }
+
+      // Throttled Ambient Particle Spawning (12 Ticks / sec)
+      if (!lastParticleTickRef.current) lastParticleTickRef.current = now;
+      if (now - lastParticleTickRef.current >= 80) {
+        lastParticleTickRef.current = now;
+
+        const currentGrid = stateRef.current.inMine ? stateRef.current.mineGrid : stateRef.current.tiles;
+        if (currentGrid && currentGrid.length > 0) {
+          const p = stateRef.current.player;
+          const pSubX = p.subX !== undefined ? p.subX : p.x;
+          const pSubY = p.subY !== undefined ? p.subY : p.y;
+          
+          const cameraX = Math.max(
+            0,
+            Math.min(
+              (stateRef.current.inMine ? 24 : COLS) * TILE - canvasSize.width,
+              pSubX * TILE + 16 - canvasSize.width / 2
+            )
+          );
+          const cameraY = Math.max(
+            0,
+            Math.min(
+              (stateRef.current.inMine ? 24 : ROWS) * TILE - canvasSize.height,
+              pSubY * TILE + 16 - canvasSize.height / 2
+            )
+          );
+          const startCol = Math.max(0, Math.floor(cameraX / TILE));
+          const endCol = Math.min(stateRef.current.inMine ? 24 : COLS, Math.ceil((cameraX + canvasSize.width) / TILE));
+          const startRow = Math.max(0, Math.floor(cameraY / TILE));
+          const endRow = Math.min(stateRef.current.inMine ? 24 : ROWS, Math.ceil((cameraY + canvasSize.height) / TILE));
+
+          for (let y = startRow; y < endRow; y++) {
+            for (let x = startCol; x < endCol; x++) {
+              const t = currentGrid[y]?.[x];
+              if (!t) continue;
+              
+              // Ambient tree leaves
+              if (t.kind === "tree" && Math.random() < 0.02) {
+                particlesRef.current.push({
+                  x: x * TILE + 16 + (Math.random() * 20 - 10),
+                  y: y * TILE + 4 + (Math.random() * 8 - 4),
+                  vx: -15 - Math.random() * 20,
+                  vy: 20 + Math.random() * 15,
+                  color: Math.random() < 0.2 ? "#e67e22" : Math.random() < 0.1 ? "#f1c40f" : "#2ecc71",
+                  age: 0,
+                  maxAge: 1.8 + Math.random() * 1,
+                  type: "leaf"
+                });
+              }
+
+              // Active sprinkler water spray
+              if (t.kind === "placed_item" && (t.placedItemId === "sprinkler_basic" || t.placedItemId === "sprinkler_quality")) {
+                const isQuality = t.placedItemId === "sprinkler_quality";
+                if (Math.random() < 0.35) {
+                  const directions = isQuality ? 8 : 4;
+                  const angleOffset = (Date.now() / 180) % (Math.PI * 2);
+                  for (let d = 0; d < directions; d++) {
+                    const angle = angleOffset + (d * (Math.PI * 2)) / directions;
+                    const speed = 40 + Math.random() * 25;
+                    particlesRef.current.push({
+                      x: x * TILE + 16,
+                      y: y * TILE + 8,
+                      vx: Math.cos(angle) * speed,
+                      vy: Math.sin(angle) * speed - 15,
+                      color: "rgba(52, 152, 219, 0.75)",
+                      age: 0,
+                      maxAge: 0.35 + Math.random() * 0.15,
+                      type: "water"
+                    });
+                  }
+                }
+              }
+
+              // Chimney smoke
+              if (t.kind === "house" && Math.random() < 0.15) {
+                if ((x === 16 && y === 24) || (x === 72 && y === 32)) {
                   particlesRef.current.push({
-                    x: x * TILE + 16,
-                    y: y * TILE + 8,
-                    vx: Math.cos(angle) * speed,
-                    vy: Math.sin(angle) * speed - 15, // slight upward arc
-                    color: "rgba(52, 152, 219, 0.75)",
+                    x: x * TILE + 14,
+                    y: y * TILE - 8,
+                    vx: 5 + Math.random() * 8,
+                    vy: -25 - Math.random() * 15,
+                    color: "rgba(220, 220, 220, 0.35)",
                     age: 0,
-                    maxAge: 0.35 + Math.random() * 0.15,
-                    type: "water"
+                    maxAge: 1.5 + Math.random() * 0.5,
+                    type: "smoke"
                   });
                 }
               }
-            }
 
-            // 3. Chimney smoke particles (Farm House at (16,24) and Shop at (72,32))
-            if (t.kind === "house" && Math.random() < 0.05) {
-              if ((x === 16 && y === 24) || (x === 72 && y === 32)) {
+              // Worker cabin chimney smoke
+              if (t.kind === "placed_item" && t.placedItemId === "worker_cabin" && Math.random() < 0.15) {
                 particlesRef.current.push({
-                  x: x * TILE + 14,
-                  y: y * TILE - 8,
-                  vx: 5 + Math.random() * 8, // drift right slightly
-                  vy: -25 - Math.random() * 15, // float up
-                  color: "rgba(220, 220, 220, 0.35)",
+                  x: x * TILE + 16,
+                  y: y * TILE - 4,
+                  vx: 4 + Math.random() * 6,
+                  vy: -20 - Math.random() * 10,
+                  color: "rgba(220, 220, 220, 0.3)",
                   age: 0,
-                  maxAge: 1.5 + Math.random() * 0.5,
+                  maxAge: 1.4 + Math.random() * 0.4,
                   type: "smoke"
                 });
               }
             }
+          }
 
-            // 4. Hired worker cabins chimney smoke
-            if (t.kind === "placed_item" && t.placedItemId === "worker_cabin" && Math.random() < 0.05) {
+          // Falling Rain weather particles
+          if (stateRef.current.weather === "rainy" && Math.random() < 0.5) {
+            for (let i = 0; i < 3; i++) {
               particlesRef.current.push({
-                x: x * TILE + 16,
-                y: y * TILE - 4,
-                vx: 4 + Math.random() * 6,
-                vy: -20 - Math.random() * 10,
-                color: "rgba(220, 220, 220, 0.3)",
+                x: cameraX + Math.random() * canvasSize.width,
+                y: cameraY - 10,
+                vx: -35 - Math.random() * 15,
+                vy: 320 + Math.random() * 80,
+                color: "rgba(174, 214, 241, 0.45)",
                 age: 0,
-                maxAge: 1.4 + Math.random() * 0.4,
-                type: "smoke"
+                maxAge: 1.2,
+                type: "water"
               });
             }
-          }
-        }
-
-        // 3. Falling Rain weather particles
-        if (stateRef.current.weather === "rainy" && Math.random() < 0.45) {
-          for (let i = 0; i < 4; i++) {
-            particlesRef.current.push({
-              x: cameraX + Math.random() * canvasSize.width,
-              y: cameraY - 10,
-              vx: -35 - Math.random() * 15,
-              vy: 320 + Math.random() * 80,
-              color: "rgba(174, 214, 241, 0.45)",
-              age: 0,
-              maxAge: 1.2,
-              type: "water"
-            });
           }
         }
       }
@@ -2012,18 +2173,19 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
   };
 
   // Shop purchase
-  const handleBuy = (seedId: string, price: number) => {
-    if (state.coins < price) {
+  const handleBuy = (itemId: string, unitPrice: number, quantity: number = 1) => {
+    const totalPrice = unitPrice * quantity;
+    if (state.coins < totalPrice) {
       toast.error("Not enough coins!");
       return;
     }
-    const item = createItem(seedId, 1);
+    const item = createItem(itemId, quantity);
     setState((prev) => {
       const next = structuredClone(prev);
       const success = addItem(next.inventory, item);
       if (success) {
-        next.coins -= price;
-        toast.success(`Bought ${item.name}! (-${price}g)`);
+        next.coins -= totalPrice;
+        toast.success(`Bought ${quantity}x ${item.name}! (-${totalPrice}g)`);
       } else {
         toast.error("Inventory full!");
       }
@@ -2032,7 +2194,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
     gameAudio.playCoin();
   };
 
-  const handleSellAllCrops = () => {
+  const handleSellAllItems = () => {
     setState((prev) => {
       const next = structuredClone(prev);
       let totalSold = 0;
@@ -2040,7 +2202,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
 
       for (let i = 0; i < next.inventory.length; i++) {
         const item = next.inventory[i];
-        if (item && (item.type === "crop" || item.type === "fish" || item.id === "chicken_egg" || item.id === "milk")) {
+        if (item && item.price > 0) {
           totalSold += item.count;
           totalGained += item.price * item.count;
           next.inventory[i] = null;
@@ -2049,10 +2211,10 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
 
       if (totalSold > 0) {
         next.coins += totalGained;
-        toast.success(`Sold ${totalSold} items for +${totalGained}g!`);
+        toast.success(`Sold all ${totalSold} items for +${totalGained}g!`);
         gameAudio.playCoin();
       } else {
-        toast.error("No harvest crops, eggs, milk, or fish in inventory.");
+        toast.error("No sellable items in inventory.");
       }
       return next;
     });
@@ -2589,7 +2751,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
 
       {/* 5. COZY DIALOG INTERFACES */}
 
-      {/* A. PIERRE'S OVERHAULED SHOP MODAL */}
+{/* A. PIERRE'S OVERHAULED SHOP MODAL */}
       <Dialog open={shopOpen} onOpenChange={setShopOpen}>
         <DialogContent container={mainContainerRef.current} className="max-w-3xl bg-[#141517] border-[3px] border-[#4a5568] text-slate-100 rounded-sm font-mono shadow-[0_0_20px_rgba(0,0,0,0.8)]">
           <DialogHeader>
@@ -2600,23 +2762,110 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
           </DialogHeader>
 
           {/* Tab buttons */}
-          <div className="flex border-b border-slate-800 gap-1 my-2">
-            {(["seeds", "animals", "upgrades", "sell", "hire"] as const).map((tab) => (
+          <div className="flex border-b border-slate-800 gap-1 my-2 overflow-x-auto">
+            {(["all_items", "seeds", "animals", "upgrades", "sell", "hire"] as const).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setShopTab(tab)}
-                className={`px-4 py-1.5 text-xs font-bold uppercase transition-all rounded-none ${
+                className={`px-3 py-1.5 text-xs font-bold uppercase transition-all rounded-none whitespace-nowrap ${
                   shopTab === tab
-                    ? "bg-[#2d3748] text-white border-t-2 border-[#38b2ac] shadow-inner"
+                    ? "bg-[#2d3748] text-amber-400 border-t-2 border-[#ff9200] shadow-inner"
                     : "bg-[#2f3136] text-slate-400 hover:text-slate-200 border-t-2 border-transparent"
                 }`}
               >
-                {tab}
+                {tab === "all_items" ? "🛒 All Items Store" : tab}
               </button>
             ))}
           </div>
 
-          <div className="py-2 min-h-[220px] max-h-[320px] overflow-y-auto pr-1">
+          <div className="py-2 min-h-[260px] max-h-[360px] overflow-y-auto pr-1">
+            {/* 1. ALL ITEMS STORE CATALOG */}
+            {shopTab === "all_items" && (
+              <div className="space-y-3">
+                {/* Search & Category filter header */}
+                <div className="flex flex-col sm:flex-row gap-2 justify-between items-center bg-[#1b1e24] p-2 border border-slate-800">
+                  <input
+                    type="text"
+                    placeholder="🔍 Search all items (e.g. Iron, Seed, Drone, Circuit)..."
+                    value={shopSearchTerm}
+                    onChange={(e) => setShopSearchTerm(e.target.value)}
+                    className="w-full sm:w-72 bg-[#111317] border border-slate-700 px-3 py-1 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-[#ff9200]"
+                  />
+                  <div className="flex gap-1 overflow-x-auto max-w-full">
+                    {(["all", "tool", "seed", "crop", "resource", "logistics"] as const).map((cat) => (
+                      <button
+                        key={cat}
+                        onClick={() => setShopCategoryFilter(cat)}
+                        className={`px-2 py-0.5 text-[10px] font-bold uppercase transition-all ${
+                          shopCategoryFilter === cat
+                            ? "bg-[#ff9200] text-black"
+                            : "bg-[#282c34] text-slate-400 hover:bg-[#383e4a]"
+                        }`}
+                      >
+                        {cat}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Items Grid */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-[280px] overflow-y-auto pr-1">
+                  {Object.values(ITEM_DEFS)
+                    .filter((item) => {
+                      const matchSearch =
+                        item.name.toLowerCase().includes(shopSearchTerm.toLowerCase()) ||
+                        item.description.toLowerCase().includes(shopSearchTerm.toLowerCase()) ||
+                        item.id.toLowerCase().includes(shopSearchTerm.toLowerCase());
+                      const matchCat =
+                        shopCategoryFilter === "all"
+                          ? true
+                          : shopCategoryFilter === "logistics"
+                          ? ["chest", "iron_chest", "steel_chest", "logistics_chest", "sprinkler_basic", "sprinkler_quality", "transport_belt", "inserter", "logistics_drone", "drone_hub", "electric_drill", "furnace", "assembling_machine", "generator", "solar_panel", "battery", "wood_cutter", "stone_cutter"].includes(item.id) || item.type === "resource"
+                          : item.type === shopCategoryFilter;
+                      return matchSearch && matchCat;
+                    })
+                    .map((item) => {
+                      const buyPrice = item.price > 0 ? Math.ceil(item.price * 1.5) : 25;
+                      return (
+                        <div
+                          key={item.id}
+                          className="p-2 bg-[#181a1c] border border-slate-800 flex justify-between items-center gap-2 hover:border-slate-700"
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="w-8 h-8 flex-shrink-0 flex items-center justify-center font-bold text-base bg-[#252830] text-white border border-slate-700">
+                              {item.iconSymbol || "📦"}
+                            </span>
+                            <div className="min-w-0">
+                              <div className="font-bold text-xs truncate text-slate-200">{item.name}</div>
+                              <div className="text-[9px] text-slate-400 truncate">{item.description || item.type}</div>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-1 flex-shrink-0">
+                            <Button
+                              size="sm"
+                              className="text-[10px] px-2 py-1 bg-[#3a3f44] border border-slate-700 text-slate-200 hover:bg-[#ff9200]/25 hover:border-[#ff9200] font-mono"
+                              onClick={() => handleBuy(item.id, buyPrice, 1)}
+                            >
+                              1x ({buyPrice}g)
+                            </Button>
+                            {item.type !== "tool" && (
+                              <Button
+                                size="sm"
+                                className="text-[10px] px-2 py-1 bg-[#282c34] border border-slate-700 text-amber-300 hover:bg-amber-500/20 hover:border-amber-500 font-mono"
+                                onClick={() => handleBuy(item.id, buyPrice, 10)}
+                              >
+                                10x ({buyPrice * 10}g)
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                </div>
+              </div>
+            )}
+
             {/* Seeds catalog */}
             {shopTab === "seeds" && (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -2689,50 +2938,91 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
               </div>
             )}
 
-                        {/* Sell inventory items */}
+            {/* Sell inventory items */}
             {shopTab === "sell" && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {state.inventory.map((item, idx) => {
-                  if (!item || !item.price) return null;
-                  return (
-                    <div
-                      key={`${item.id}_${idx}`}
-                      className="p-2.5 bg-[#181a1c] border border-slate-800 flex justify-between items-center rounded-none"
-                    >
-                      <div className="flex items-center gap-2">
-                        <span className="text-xl">{item.iconSymbol || "📦"}</span>
-                        <div>
-                          <div className="font-bold text-xs">{item.name}</div>
-                          <div className="text-[9px] text-slate-400">Qty: {item.count}</div>
+              <div className="space-y-3">
+                {/* Sell All Banner */}
+                <div className="flex justify-between items-center p-2.5 bg-[#1b1e24] border border-slate-800">
+                  <span className="text-xs font-bold text-slate-300">
+                    Total Inventory Sell Value:{" "}
+                    <span className="text-amber-400 font-extrabold text-sm">
+                      {state.inventory.reduce((sum, item) => sum + (item && item.price ? item.price * item.count : 0), 0)}g
+                    </span>
+                  </span>
+                  <Button
+                    size="sm"
+                    className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs px-3 py-1 font-mono rounded-none border border-emerald-400 shadow-md"
+                    onClick={handleSellAllItems}
+                  >
+                    💰 Sell All Items
+                  </Button>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {state.inventory.map((item, idx) => {
+                    if (!item || !item.price) return null;
+                    return (
+                      <div
+                        key={`${item.id}_${idx}`}
+                        className="p-2.5 bg-[#181a1c] border border-slate-800 flex justify-between items-center rounded-none"
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className="text-xl">{item.iconSymbol || "📦"}</span>
+                          <div>
+                            <div className="font-bold text-xs">{item.name}</div>
+                            <div className="text-[9px] text-slate-400">Qty: {item.count} | Value: {item.price * item.count}g</div>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-1">
+                          <Button
+                            size="sm"
+                            className="text-[10px] px-2 py-1 bg-[#3a3f44] border border-slate-700 text-slate-200 hover:bg-emerald-500/25 hover:border-emerald-500 hover:text-emerald-400 rounded-none font-mono"
+                            onClick={() => {
+                              setState((prev) => {
+                                const next = structuredClone(prev);
+                                next.coins += item.price;
+                                if (next.inventory[idx]!.count > 1) {
+                                  next.inventory[idx]!.count--;
+                                } else {
+                                  next.inventory[idx] = null;
+                                }
+                                gameAudio.playCoin();
+                                return next;
+                              });
+                            }}
+                          >
+                            1x (+{item.price}g)
+                          </Button>
+                          {item.count > 1 && (
+                            <Button
+                              size="sm"
+                              className="text-[10px] px-2 py-1 bg-emerald-700/50 border border-emerald-500 text-emerald-200 hover:bg-emerald-600 rounded-none font-mono font-bold"
+                              onClick={() => {
+                                setState((prev) => {
+                                  const next = structuredClone(prev);
+                                  const totalVal = item.price * item.count;
+                                  next.coins += totalVal;
+                                  next.inventory[idx] = null;
+                                  gameAudio.playCoin();
+                                  toast.success(`Sold ${item.count}x ${item.name} for +${totalVal}g!`);
+                                  return next;
+                                });
+                              }}
+                            >
+                              Stack ({item.count}x)
+                            </Button>
+                          )}
                         </div>
                       </div>
-                      <Button
-                        size="sm"
-                        className="text-xs bg-[#3a3f44] border border-slate-700 text-slate-200 hover:bg-emerald-500/25 hover:border-emerald-500 hover:text-emerald-400 rounded-none font-mono"
-                        onClick={() => {
-                          setState(prev => {
-                            const next = structuredClone(prev);
-                            next.coins += item.price;
-                            if (next.inventory[idx]!.count > 1) {
-                              next.inventory[idx]!.count--;
-                            } else {
-                              next.inventory[idx] = null;
-                            }
-                            gameAudio.playCoin();
-                            return next;
-                          });
-                        }}
-                      >
-                        Sell 1x (+{item.price}g)
-                      </Button>
+                    );
+                  })}
+                  {state.inventory.every((item) => !item || !item.price) && (
+                    <div className="col-span-1 sm:col-span-2 text-center text-slate-500 text-xs py-8">
+                      You have no sellable items in your inventory.
                     </div>
-                  );
-                })}
-                {state.inventory.every(item => !item || !item.price) && (
-                  <div className="col-span-1 sm:col-span-2 text-center text-slate-500 text-xs py-8">
-                    You have no sellable items in your inventory.
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
             )}
 
@@ -3216,29 +3506,18 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                         );
 
                         return (
-                          <button
+                          <FactorioCraftingIcon
                             key={recipe.id}
+                            iconSymbol={itemDef?.iconSymbol || "⚙"}
+                            name={recipe.name}
+                            count={recipe.outputCount}
+                            canCraft={canCraft}
+                            isTechLocked={isTechLocked}
+                            isSelected={hoveredRecipe?.id === recipe.id}
                             onMouseEnter={() => setHoveredRecipe(recipe)}
                             onMouseLeave={() => setHoveredRecipe(null)}
                             onClick={() => handleStartCrafting(recipe)}
-                            className={`relative flex flex-col items-center justify-center h-14 w-14 rounded border-2 transition-all ${
-                              isTechLocked
-                                ? "bg-purple-950/40 border-violet-900/60 opacity-60 text-purple-300 hover:border-violet-500 cursor-pointer"
-                                : canCraft
-                                ? "bg-zinc-900 border-zinc-700 hover:bg-zinc-800 hover:border-orange-500 text-zinc-200"
-                                : "bg-zinc-950/60 border-zinc-900 opacity-45 desaturate-50 text-zinc-500 cursor-not-allowed"
-                            }`}
-                          >
-                            <span className="text-2xl">{itemDef?.iconSymbol || "⚙"}</span>
-                            {isTechLocked && (
-                              <span className="absolute top-0.5 right-0.5 text-xs animate-pulse">🔒</span>
-                            )}
-                            {recipe.outputCount > 1 && (
-                              <span className="absolute bottom-0.5 right-1 px-1 bg-black/60 rounded text-[9px] font-bold text-white">
-                                {recipe.outputCount}
-                              </span>
-                            )}
-                          </button>
+                          />
                         );
                       })
                     )}
@@ -3493,85 +3772,244 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
         if (!tile) return null;
 
         const isCabin = tile.placedItemId === "worker_cabin";
-        const chestInventory = tile.chestInventory || [];
+        const maxSlotCount = getChestSlotCount(tile.placedItemId);
+        if (!tile.chestInventory || tile.chestInventory.length < maxSlotCount) {
+          const current = tile.chestInventory || [];
+          tile.chestInventory = Array.from({ length: maxSlotCount }, (_, i) => current[i] || null);
+        }
+        const chestInventory = tile.chestInventory;
+        const barLimit = tile.chestBarLimit ?? maxSlotCount;
+        const containerTitle = isCabin 
+          ? "Worker Cabin Feed Box" 
+          : tile.placedItemId === "iron_chest" 
+          ? "Iron Chest (24 Slots)" 
+          : tile.placedItemId === "steel_chest"
+          ? "Steel Storage Container (48 Slots)"
+          : tile.placedItemId === "logistics_chest"
+          ? "Logistics Storage Hub (60 Slots)"
+          : "Wood Chest (12 Slots)";
 
         return (
           <Dialog open={true} onOpenChange={() => setChestOpenTile(null)}>
-            <DialogContent container={mainContainerRef.current} className="max-w-md bg-stone-900 border-stone-850 text-stone-100 rounded-lg">
+            <DialogContent container={mainContainerRef.current} className="max-w-xl bg-[#16191e] border-2 border-[#ff9200]/60 text-stone-100 rounded-sm font-mono shadow-[0_0_20px_rgba(0,0,0,0.9)]">
               <DialogHeader>
-                <DialogTitle className="text-lg font-bold flex items-center gap-2 text-amber-500 border-b border-stone-800 pb-2">
-                  <Compass className="h-5 w-5" />
-                  <span>{isCabin ? "Worker Cabin Feed Box" : "Wooden Chest Storage"}</span>
+                <DialogTitle className="text-base font-extrabold flex items-center justify-between text-[#ff9200] border-b border-[#2d3644] pb-2 uppercase tracking-wide">
+                  <div className="flex items-center gap-2">
+                    <Compass className="h-5 w-5 text-[#ff9200]" />
+                    <span>{containerTitle}</span>
+                  </div>
+                  <Badge variant="outline" className="border-[#ff9200]/40 text-[#ff9200] bg-[#ff9200]/10 text-[10px]">
+                    Bar Limit: {barLimit}/{maxSlotCount}
+                  </Badge>
                 </DialogTitle>
               </DialogHeader>
 
-              <div className="space-y-4 py-2">
+              <div className="space-y-4 py-1">
+                {/* Storage Quick Action Bar */}
+                <div className="flex flex-wrap gap-1.5 p-2 bg-[#1b2027] border border-[#2d3644] rounded-xs">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="text-[10px] h-6 px-2 bg-[#252c36] border-[#3e4856] text-amber-300 hover:bg-[#ff9200] hover:text-black font-extrabold"
+                    onClick={() => {
+                      setState((prev) => {
+                        const next = structuredClone(prev);
+                        const g = next.inHouse ? next.houseGrid! : (next.inMine ? next.mineGrid : next.tiles);
+                        const t = g[chestOpenTile.y]?.[chestOpenTile.x];
+                        if (!t || !t.chestInventory) return prev;
+                        const existingIds = new Set(t.chestInventory.filter(Boolean).map((i) => i!.id));
+                        const max = t.chestBarLimit ?? t.chestInventory.length;
+                        let moved = 0;
+                        for (let i = 0; i < next.inventory.length; i++) {
+                          const item = next.inventory[i];
+                          if (item && existingIds.has(item.id)) {
+                            for (let s = 0; s < max; s++) {
+                              if (t.chestInventory[s] === null) {
+                                t.chestInventory[s] = structuredClone(item);
+                                next.inventory[i] = null;
+                                moved += item.count;
+                                break;
+                              } else if (t.chestInventory[s]!.id === item.id && t.chestInventory[s]!.count < 99) {
+                                const add = Math.min(99 - t.chestInventory[s]!.count, item.count);
+                                t.chestInventory[s]!.count += add;
+                                item.count -= add;
+                                moved += add;
+                                if (item.count <= 0) { next.inventory[i] = null; break; }
+                              }
+                            }
+                          }
+                        }
+                        if (moved > 0) toast.success(`Deposited ${moved} matching items into storage`);
+                        return next;
+                      });
+                    }}
+                  >
+                    📥 Deposit Matching
+                  </Button>
+
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="text-[10px] h-6 px-2 bg-[#252c36] border-[#3e4856] text-emerald-300 hover:bg-emerald-600 hover:text-white font-extrabold"
+                    onClick={() => {
+                      setState((prev) => {
+                        const next = structuredClone(prev);
+                        const g = next.inHouse ? next.houseGrid! : (next.inMine ? next.mineGrid : next.tiles);
+                        const t = g[chestOpenTile.y]?.[chestOpenTile.x];
+                        if (!t || !t.chestInventory) return prev;
+                        const max = t.chestBarLimit ?? t.chestInventory.length;
+                        let moved = 0;
+                        for (let i = 0; i < next.inventory.length; i++) {
+                          const item = next.inventory[i];
+                          if (item && item.type !== "tool") {
+                            for (let s = 0; s < max; s++) {
+                              if (t.chestInventory[s] === null) {
+                                t.chestInventory[s] = structuredClone(item);
+                                next.inventory[i] = null;
+                                moved += item.count;
+                                break;
+                              } else if (t.chestInventory[s]!.id === item.id && t.chestInventory[s]!.count < 99) {
+                                const add = Math.min(99 - t.chestInventory[s]!.count, item.count);
+                                t.chestInventory[s]!.count += add;
+                                item.count -= add;
+                                moved += add;
+                                if (item.count <= 0) { next.inventory[i] = null; break; }
+                              }
+                            }
+                          }
+                        }
+                        if (moved > 0) toast.success(`Dumped ${moved} items to storage`);
+                        return next;
+                      });
+                    }}
+                  >
+                    📦 Dump Pack
+                  </Button>
+
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="text-[10px] h-6 px-2 bg-[#252c36] border-[#3e4856] text-cyan-300 hover:bg-cyan-600 hover:text-white font-extrabold"
+                    onClick={() => {
+                      setState((prev) => {
+                        const next = structuredClone(prev);
+                        const g = next.inHouse ? next.houseGrid! : (next.inMine ? next.mineGrid : next.tiles);
+                        const t = g[chestOpenTile.y]?.[chestOpenTile.x];
+                        if (!t || !t.chestInventory) return prev;
+                        let moved = 0;
+                        for (let s = 0; s < t.chestInventory.length; s++) {
+                          const item = t.chestInventory[s];
+                          if (item) {
+                            const success = addItem(next.inventory, structuredClone(item));
+                            if (success) {
+                              t.chestInventory[s] = null;
+                              moved += item.count;
+                            }
+                          }
+                        }
+                        if (moved > 0) toast.success(`Retrieved ${moved} items from storage`);
+                        return next;
+                      });
+                    }}
+                  >
+                    📤 Take All
+                  </Button>
+
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="text-[10px] h-6 px-2 bg-[#252c36] border-[#3e4856] text-stone-300 hover:bg-[#3e4856] font-mono"
+                    onClick={handleSortChest}
+                  >
+                    🔀 Sort Storage
+                  </Button>
+
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className={`text-[10px] h-6 px-2 border font-mono transition-all ${
+                      (tile.chestBarLimit ?? maxSlotCount) < maxSlotCount
+                        ? "bg-red-950 border-red-700 text-red-300 hover:bg-red-900"
+                        : "bg-[#252c36] border-[#3e4856] text-stone-300 hover:bg-red-950/60 hover:text-red-400"
+                    }`}
+                    onClick={() => {
+                      setState((prev) => {
+                        const next = structuredClone(prev);
+                        const g = next.inHouse ? next.houseGrid! : (next.inMine ? next.mineGrid : next.tiles);
+                        const t = g[chestOpenTile.y]?.[chestOpenTile.x];
+                        if (!t) return prev;
+                        const currentLimit = t.chestBarLimit ?? maxSlotCount;
+                        // Cycle bar limit: max -> 12 -> 6 -> max
+                        t.chestBarLimit = currentLimit === maxSlotCount ? Math.max(6, Math.floor(maxSlotCount / 2)) : maxSlotCount;
+                        toast.info(`Red Bar Limiter set to ${t.chestBarLimit} slots`);
+                        return next;
+                      });
+                    }}
+                  >
+                    🔴 Red Bar Limit (Lock)
+                  </Button>
+                </div>
+
+                {/* Storage Container Grid */}
                 <div>
-                  <div className="flex justify-between items-center mb-2">
-                    <h4 className="text-xs font-bold text-amber-500 font-mono">{isCabin ? "Cabin Feed Box Contents" : "Chest Contents"}</h4>
-                    <div className="flex gap-2">
-                      <Button 
-                        size="sm" 
-                        variant="outline" 
-                        className="text-[10px] h-6 px-2 bg-[#5d4037]/20 border-stone-850 text-stone-300 hover:bg-[#5d4037]/40 font-mono" 
-                        onClick={handleSortChest}
-                      >
-                        Sort Chest
-                      </Button>
-                      <Button 
-                        size="sm" 
-                        variant="outline" 
-                        className="text-[10px] h-6 px-2 bg-[#5d4037]/20 border-stone-850 text-stone-300 hover:bg-[#5d4037]/40 font-mono" 
-                        onClick={handleQuickStack}
-                      >
-                        Quick Stack
-                      </Button>
-                    </div>
+                  <div className="flex justify-between items-center mb-1.5">
+                    <h4 className="text-xs font-bold text-[#ff9200] uppercase tracking-wider font-mono">
+                      Container Slots ({chestInventory.filter(Boolean).length}/{barLimit})
+                    </h4>
                   </div>
-                  <div className="grid grid-cols-6 gap-2 bg-[#2d1e18] p-3 rounded-lg border border-stone-800">
-                    {chestInventory.map((item, idx) => (
-                      <button
-                        key={idx}
-                        onClick={(e) => handleSlotClick(idx, "chest", e)}
-                        onContextMenu={(e) => handleSlotRightClick(e, idx, "chest")}
-                        onMouseEnter={() => item && setHoveredItem(item)}
-                        onMouseLeave={() => setHoveredItem(null)}
-                        className={`relative flex items-center justify-center h-12 rounded border transition-all ${
-                          item
-                            ? "bg-[#7c5a3c]/20 hover:bg-[#7c5a3c]/40 border-stone-700"
-                            : "bg-stone-900/60 border-stone-800/80"
-                        }`}
-                      >
-                        {item ? (
-                          <>
-                            <span className="text-xl">{item.iconSymbol || "🎁"}</span>
-                            {item.count > 1 && (
-                              <span className="absolute bottom-0.5 right-1 px-1 bg-black/60 rounded text-[9px] font-bold text-white font-mono">
-                                {item.count}
-                              </span>
-                            )}
-                          </>
-                        ) : (
-                          <span className="text-xs opacity-10 text-stone-100">-</span>
-                        )}
-                      </button>
-                    ))}
+                  <div className="grid grid-cols-6 gap-2 bg-[#121417] p-3 rounded-sm border border-[#29303c] max-h-[260px] overflow-y-auto">
+                    {chestInventory.map((item, idx) => {
+                      const isLockedByBar = idx >= barLimit;
+                      return (
+                        <button
+                          key={idx}
+                          disabled={isLockedByBar}
+                          onClick={(e) => handleSlotClick(idx, "chest", e)}
+                          onContextMenu={(e) => handleSlotRightClick(e, idx, "chest")}
+                          onMouseEnter={() => item && setHoveredItem(item)}
+                          onMouseLeave={() => setHoveredItem(null)}
+                          className={`relative flex items-center justify-center h-12 rounded-xs border-2 transition-all select-none ${
+                            isLockedByBar
+                              ? "bg-red-950/40 border-red-900/80 text-red-500 opacity-60 cursor-not-allowed"
+                              : item
+                              ? "bg-[#202821] hover:bg-[#2c382e] border-[#3d5241] hover:border-[#ff9200]"
+                              : "bg-[#181a1e] border-[#29303c] hover:border-slate-500"
+                          }`}
+                        >
+                          {isLockedByBar ? (
+                            <span className="text-xs font-extrabold text-red-500">❌</span>
+                          ) : item ? (
+                            <>
+                              <span className="text-xl filter drop-shadow">{item.iconSymbol || "📦"}</span>
+                              {item.count > 1 && (
+                                <span className="absolute bottom-0.5 right-0.5 px-1 bg-[#ff9200] text-black font-extrabold rounded-xs text-[9px] font-mono leading-none">
+                                  {item.count}
+                                </span>
+                              )}
+                            </>
+                          ) : (
+                            <span className="text-xs opacity-10 text-stone-300">-</span>
+                          )}
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
 
+                {/* Player Inventory Pack */}
                 <div>
-                  <div className="flex justify-between items-center mb-2">
-                    <h4 className="text-xs font-bold text-stone-400 font-mono">Your Pack Pack</h4>
+                  <div className="flex justify-between items-center mb-1.5">
+                    <h4 className="text-xs font-bold text-stone-400 uppercase tracking-wider font-mono">Player Pack Pack</h4>
                     <Button 
                       size="sm" 
                       variant="outline" 
-                      className="text-[10px] h-6 px-2 bg-[#5d4037]/20 border-stone-850 text-stone-300 hover:bg-[#5d4037]/40 font-mono" 
+                      className="text-[10px] h-5 px-2 bg-[#252c36] border-[#3e4856] text-stone-300 hover:bg-[#3e4856] font-mono" 
                       onClick={handleSortInventory}
                     >
-                      Sort Inventory
+                      Sort Pack
                     </Button>
                   </div>
-                  <div className="grid grid-cols-6 gap-2 bg-stone-950/55 p-3 rounded-lg border border-stone-850">
+                  <div className="grid grid-cols-6 gap-2 bg-[#121417] p-3 rounded-sm border border-[#29303c]">
                     {state.inventory.map((item, idx) => (
                       <button
                         key={idx}
@@ -3579,23 +4017,23 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                         onContextMenu={(e) => handleSlotRightClick(e, idx, "inventory")}
                         onMouseEnter={() => item && setHoveredItem(item)}
                         onMouseLeave={() => setHoveredItem(null)}
-                        className={`relative flex items-center justify-center h-12 rounded border transition-all ${
+                        className={`relative flex items-center justify-center h-12 rounded-xs border-2 transition-all ${
                           item
-                            ? "bg-[#7c5a3c]/15 hover:bg-[#7c5a3c]/35 border-stone-850"
-                            : "bg-stone-900/40 border-stone-800/80"
+                            ? "bg-[#252a32] hover:bg-[#2f3642] border-[#3e4856] hover:border-[#ff9200]"
+                            : "bg-[#181a1e] border-[#29303c]"
                         }`}
                       >
                         {item ? (
                           <>
-                            <span className="text-xl">{item.iconSymbol || "🎁"}</span>
+                            <span className="text-xl filter drop-shadow">{item.iconSymbol || "📦"}</span>
                             {item.count > 1 && (
-                              <span className="absolute bottom-0.5 right-1 px-1 bg-black/60 rounded text-[9px] font-bold text-white font-mono">
+                              <span className="absolute bottom-0.5 right-0.5 px-1 bg-black/70 text-white font-extrabold rounded-xs text-[9px] font-mono leading-none border border-slate-700">
                                 {item.count}
                               </span>
                             )}
                           </>
                         ) : (
-                          <span className="text-xs opacity-10 text-stone-100">-</span>
+                          <span className="text-xs opacity-10 text-stone-400">-</span>
                         )}
                       </button>
                     ))}

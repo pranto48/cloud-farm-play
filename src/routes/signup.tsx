@@ -4,9 +4,11 @@ import { toast } from "sonner";
 import { motion } from "framer-motion";
 import { createUserWithEmailAndPassword, updateProfile } from "firebase/auth";
 import { auth } from "@/integrations/firebase/client";
+import { applyAuthPersistence, saveTrustedDeviceInfo } from "@/lib/trustedDevice";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { ShieldCheck } from "lucide-react";
 import { AuthShell } from "./login";
 
 export const Route = createFileRoute("/signup")({
@@ -20,6 +22,7 @@ function SignupPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
+  const [isTrusted, setIsTrusted] = useState(true);
   const [busy, setBusy] = useState(false);
 
   async function onSubmit(e: FormEvent) {
@@ -28,12 +31,14 @@ function SignupPage() {
     if (password !== confirm) { toast.error("Passwords do not match"); return; }
     setBusy(true);
     try {
+      await applyAuthPersistence(auth, isTrusted);
       const cred = await createUserWithEmailAndPassword(auth, email, password);
       if (cred.user) {
         await updateProfile(cred.user, {
           displayName: displayName || email.split("@")[0]
         });
       }
+      saveTrustedDeviceInfo(email, isTrusted);
       toast.success("Account created! Welcome to CloudFarm Arcade.");
       navigate({ to: "/dashboard" });
     } catch (err: any) {
@@ -61,6 +66,20 @@ function SignupPage() {
         <div className="space-y-2">
           <Label htmlFor="confirm">Confirm password</Label>
           <Input id="confirm" type="password" required minLength={8} value={confirm} onChange={(e) => setConfirm(e.target.value)} />
+        </div>
+
+        <div className="flex items-center space-x-2 pt-1">
+          <input
+            type="checkbox"
+            id="trust-device-signup"
+            checked={isTrusted}
+            onChange={(e) => setIsTrusted(e.target.checked)}
+            className="h-4 w-4 rounded border-stone-700 bg-stone-900 text-emerald-500 focus:ring-emerald-500 accent-emerald-500"
+          />
+          <Label htmlFor="trust-device-signup" className="text-xs cursor-pointer select-none text-stone-300 flex items-center gap-1.5">
+            <ShieldCheck className="h-3.5 w-3.5 text-emerald-400 inline" />
+            Trust this device & save login session
+          </Label>
         </div>
         <Button type="submit" className="w-full" disabled={busy}>
           {busy ? "Creating…" : "Create account"}

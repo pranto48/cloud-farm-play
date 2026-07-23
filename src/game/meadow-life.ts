@@ -49,6 +49,7 @@ export interface Tile {
   /** Placed item details. */
   placedItemId?: string;
   chestInventory?: (Item | null)[];
+  chestBarLimit?: number;
   /** Assigned work zone. */
   zone?: "farming" | "mining" | "woodcutting" | "water";
   hitPoints?: number;
@@ -741,6 +742,30 @@ export const CRAFTING_RECIPES: Recipe[] = [
     description: "A wooden chest that stores up to 12 items.",
     inputs: [{ itemId: "wood", count: 40 }],
     outputId: "chest",
+    outputCount: 1,
+  },
+  {
+    id: "iron_chest",
+    name: "Iron Chest",
+    description: "Medium metal container that stores up to 24 items.",
+    inputs: [{ itemId: "iron_bar", count: 8 }, { itemId: "wood", count: 20 }],
+    outputId: "iron_chest",
+    outputCount: 1,
+  },
+  {
+    id: "steel_chest",
+    name: "Steel Storage Container",
+    description: "High capacity steel container storing up to 48 items.",
+    inputs: [{ itemId: "steel_bar", count: 10 }, { itemId: "iron_bar", count: 10 }],
+    outputId: "steel_chest",
+    outputCount: 1,
+  },
+  {
+    id: "logistics_chest",
+    name: "Logistics Storage Hub",
+    description: "Central logistics warehouse container storing up to 60 items.",
+    inputs: [{ itemId: "electronic_circuit", count: 10 }, { itemId: "steel_bar", count: 15 }],
+    outputId: "logistics_chest",
     outputCount: 1,
   },
   {
@@ -1600,6 +1625,24 @@ export function tickFurnace(tile: Tile, dt: number): void {
 }
 
 
+export function isChestBuilding(placedItemId?: string): boolean {
+  return (
+    placedItemId === "chest" ||
+    placedItemId === "iron_chest" ||
+    placedItemId === "steel_chest" ||
+    placedItemId === "logistics_chest" ||
+    placedItemId === "worker_cabin"
+  );
+}
+
+export function getChestSlotCount(placedItemId?: string): number {
+  if (placedItemId === "iron_chest") return 24;
+  if (placedItemId === "steel_chest") return 48;
+  if (placedItemId === "logistics_chest") return 60;
+  if (placedItemId === "worker_cabin") return 6;
+  return 12;
+}
+
 // --- Factory Automation ---
 function getAdjacentChests(grid: Tile[][], y: number, x: number): Tile[] {
   const chests: Tile[] = [];
@@ -1608,7 +1651,7 @@ function getAdjacentChests(grid: Tile[][], y: number, x: number): Tile[] {
     const ny = y + dy, nx = x + dx;
     if (ny >= 0 && ny < ROWS && nx >= 0 && nx < COLS) {
       const t = grid[ny][nx];
-      if (t.kind === "placed_item" && t.placedItemId === "chest" && t.chestInventory) {
+      if (t.kind === "placed_item" && isChestBuilding(t.placedItemId) && t.chestInventory) {
         chests.push(t);
       }
     }
@@ -1853,7 +1896,7 @@ export function updateEntities(state: GameState, dt: number): void {
       for (let y = 0; y < ROWS; y++) {
         for (let x = 0; x < COLS; x++) {
           const t = grid[y][x];
-          if (t.kind === "placed_item" && t.placedItemId === "chest") {
+          if (t.kind === "placed_item" && isChestBuilding(t.placedItemId)) {
             const d = Math.abs(x - worker.x) + Math.abs(y - worker.y);
             if (d < minChestDist) {
               minChestDist = d;
@@ -2829,6 +2872,44 @@ export function talkToShopkeeper(state: GameState): string {
   return lines.join(" ");
 }
 
+export function regenerateMapResources(state: GameState): void {
+  const grid = state.tiles;
+  if (!grid) return;
+
+  // 1. Regenerate Mining Quarry Area (x: 78..115, y: 6..35)
+  for (let y = 6; y <= 35; y++) {
+    for (let x = 78; x <= 115; x++) {
+      const t = grid[y]?.[x];
+      if (!t || t.kind === "mine_cave" || t.kind === "placed_item" || t.kind === "path" || t.kind === "house" || t.kind === "shop") continue;
+      if ((t.kind === "grass" || t.kind === "soil") && Math.random() < 0.35) {
+        const rand = Math.random();
+        if (rand < 0.20) t.kind = "debris_stone";
+        else if (rand < 0.35) t.kind = "ore_iron";
+        else if (rand < 0.48) t.kind = "ore_silver";
+        else if (rand < 0.60) t.kind = "ore_aluminum";
+        else if (rand < 0.72) t.kind = "ore_coal";
+        else if (rand < 0.84) t.kind = "ore_copper";
+        else if (rand < 0.95) t.kind = "ore_gold";
+      }
+    }
+  }
+
+  // 2. Regenerate trees & wild flora across the world grid
+  for (let y = 0; y < ROWS; y++) {
+    for (let x = 0; x < COLS; x++) {
+      const isStartArea = x < 40 && y < 40;
+      if (isStartArea) continue;
+      const t = grid[y]?.[x];
+      if (t && t.kind === "grass" && !t.placedItemId && Math.random() < 0.04) {
+        const rand = Math.random();
+        if (rand < 0.5) t.kind = "tree";
+        else if (rand < 0.8) t.kind = "debris_weed";
+        else t.kind = "debris_branch";
+      }
+    }
+  }
+}
+
 // Sleep summary calculations
 export function sleep(state: GameState): void {
   // 1. Calculate shipping bin earnings
@@ -2867,6 +2948,9 @@ export function sleep(state: GameState): void {
 
   state.energy = state.maxEnergy;
   state.player.health = state.player.maxHealth;
+
+  // Auto-regenerate map ores, trees, and resources
+  regenerateMapResources(state);
 
   // 3. Animal growth, pet count resets, egg/milk produce ticks
   if (!state.animals) state.animals = [];
@@ -3754,57 +3838,53 @@ export function draw(
         // Fluffy leaves (3 overlapping layers)
         const leafSwayX = Math.sin(Date.now() / 400 + y) * 0.8;
         
-        let cBase = "#1e7e34", cMid = "#28a745", cHigh = "#5cb85c";
+        // Factorio Industrial Pine & Oak Canopy Rendering
+        let cBase = "#17381b", cMid = "#234d28", cHigh = "#366e3b";
         if (state.season === "fall") {
-          cBase = "#b03a2e"; cMid = "#d35400"; cHigh = "#e67e22";
+          cBase = "#942a1d"; cMid = "#b84300"; cHigh = "#d35400";
         } else if (state.season === "winter") {
-          cBase = "#175d26"; cMid = "#1e7e34"; cHigh = "#a9cce3"; // snowy tops
+          cBase = "#144820"; cMid = "#1e6930"; cHigh = "#b0d4eb";
         } else if (state.season === "summer") {
-          cBase = "#145a32"; cMid = "#1e8449"; cHigh = "#27ae60";
+          cBase = "#0f4223"; cMid = "#176e3c"; cHigh = "#27ae60";
         }
 
-        // Layer 1: Dark background leaves
+        // Layer 1: Dark forest shadow canopy
         ctx.fillStyle = cBase;
         ctx.beginPath();
-        ctx.arc(0 + leafSwayX, -30, 15, 0, Math.PI * 2);
+        ctx.arc(0 + leafSwayX, -30, 16, 0, Math.PI * 2);
         ctx.fill();
 
-        // Layer 2: Medium leaves
+        // Layer 2: Medium needle clusters
         ctx.fillStyle = cMid;
         ctx.beginPath();
-        ctx.arc(-8 + leafSwayX, -35, 12, 0, Math.PI * 2);
-        ctx.arc(8 + leafSwayX, -35, 12, 0, Math.PI * 2);
-        ctx.arc(0 + leafSwayX, -42, 13, 0, Math.PI * 2);
+        ctx.arc(-9 + leafSwayX, -36, 13, 0, Math.PI * 2);
+        ctx.arc(9 + leafSwayX, -36, 13, 0, Math.PI * 2);
+        ctx.arc(0 + leafSwayX, -44, 14, 0, Math.PI * 2);
         ctx.fill();
 
-        // Layer 3: Highlight light green leaves
+        // Layer 3: Factorio Pine Needle Highlights
         ctx.fillStyle = cHigh;
         ctx.beginPath();
-        ctx.arc(-5 + leafSwayX, -38, 8, 0, Math.PI * 2);
-        ctx.arc(5 + leafSwayX, -38, 8, 0, Math.PI * 2);
-        ctx.arc(0 + leafSwayX, -45, 9, 0, Math.PI * 2);
+        ctx.arc(-6 + leafSwayX, -40, 9, 0, Math.PI * 2);
+        ctx.arc(6 + leafSwayX, -40, 9, 0, Math.PI * 2);
+        ctx.arc(0 + leafSwayX, -48, 10, 0, Math.PI * 2);
         ctx.fill();
 
-        // Apples (5 deterministic spots)
+        // Pine cone / fruit detail
         if ((x * 7 + y * 13) % 5 === 0) {
-          ctx.fillStyle = "#d9534f"; // beautiful red apple
-          const apples = [
-            [-6, -32], [6, -34], [-2, -40], [4, -42], [-8, -42]
-          ];
-          apples.forEach(([ax, ay]) => {
+          ctx.fillStyle = "#e74c3c";
+          const fruits = [[-7, -34], [7, -36], [-3, -42], [5, -44]];
+          fruits.forEach(([fx, fy]) => {
             ctx.beginPath();
-            ctx.arc(ax + leafSwayX, ay, 2.5, 0, Math.PI * 2);
+            ctx.arc(fx + leafSwayX, fy, 2.5, 0, Math.PI * 2);
             ctx.fill();
-            // stem
-            ctx.fillStyle = "#5c3a21";
-            ctx.fillRect(ax + leafSwayX, ay - 4, 1, 2);
           });
         }
 
         ctx.restore();
       }
 
-      // Render Debris & Ores with hit/rustle shake
+      // Render Debris, Rocks, and Factorio Ore Deposits
       let debrisShake = 0;
       if (t.lastHitTime) {
         const elapsed = Date.now() - t.lastHitTime;
@@ -3822,110 +3902,123 @@ export function draw(
           }
         }
 
-        // Mossy weed clump with shadow
-        ctx.fillStyle = "rgba(0, 0, 0, 0.15)";
+        ctx.fillStyle = "rgba(0, 0, 0, 0.18)";
         ctx.beginPath();
-        ctx.ellipse(px + 16, py + 24, 10, 4, 0, 0, Math.PI * 2);
+        ctx.ellipse(px + 16, py + 25, 11, 4, 0, 0, Math.PI * 2);
         ctx.fill();
 
-        ctx.fillStyle = "#27ae60";
+        ctx.fillStyle = "#229954";
         ctx.beginPath();
         ctx.arc(px + 12 + weedShake, py + 20, 6, 0, Math.PI * 2);
         ctx.arc(px + 20 + weedShake, py + 20, 5, 0, Math.PI * 2);
         ctx.arc(px + 16 + weedShake, py + 15, 6, 0, Math.PI * 2);
         ctx.fill();
 
-        ctx.fillStyle = "#5cb85c"; // highlight moss
+        ctx.fillStyle = "#2ecc71";
         ctx.beginPath();
         ctx.arc(px + 12 + weedShake, py + 18, 3, 0, Math.PI * 2);
         ctx.arc(px + 18 + weedShake, py + 14, 4, 0, Math.PI * 2);
         ctx.fill();
 
       } else if (t.kind === "debris_branch") {
-        // Shadow
-        ctx.fillStyle = "rgba(0, 0, 0, 0.15)";
+        ctx.fillStyle = "rgba(0, 0, 0, 0.18)";
         ctx.beginPath();
-        ctx.ellipse(px + 16 + debrisShake, py + 22, 12, 3, 0, 0, Math.PI * 2);
+        ctx.ellipse(px + 16 + debrisShake, py + 23, 12, 3, 0, 0, Math.PI * 2);
         ctx.fill();
 
-        // Branch stick with node segments
-        ctx.fillStyle = "#8a5a3b";
+        ctx.fillStyle = "#795548";
         ctx.fillRect(px + 6 + debrisShake, py + 18, 20, 4);
         ctx.fillRect(px + 18 + debrisShake, py + 10, 4, 8);
         ctx.fillRect(px + 10 + debrisShake, py + 14, 3, 5);
 
-        ctx.fillStyle = "#ba8b68"; // wood core
+        ctx.fillStyle = "#a1887f";
         ctx.fillRect(px + 6 + debrisShake, py + 19, 2, 2);
         ctx.fillRect(px + 24 + debrisShake, py + 19, 2, 2);
 
       } else if (t.kind === "debris_stone") {
-        // Gray cracked rock
-        ctx.fillStyle = "rgba(0, 0, 0, 0.2)";
+        // Factorio Heavy Granite Rock Boulder
+        ctx.fillStyle = "rgba(0, 0, 0, 0.3)";
         ctx.beginPath();
-        ctx.ellipse(px + 16 + debrisShake, py + 24, 11, 4, 0, 0, Math.PI * 2);
+        ctx.ellipse(px + 16 + debrisShake, py + 25, 12, 5, 0, 0, Math.PI * 2);
         ctx.fill();
 
-        ctx.fillStyle = "#7f8c8d";
+        // Dark Basalt Rock Shadow Base
+        ctx.fillStyle = "#373e48";
         ctx.beginPath();
-        ctx.moveTo(px + 6 + debrisShake, py + 24);
-        ctx.lineTo(px + 10 + debrisShake, py + 12);
-        ctx.lineTo(px + 20 + debrisShake, py + 10);
-        ctx.lineTo(px + 26 + debrisShake, py + 24);
+        ctx.moveTo(px + 5 + debrisShake, py + 25);
+        ctx.lineTo(px + 9 + debrisShake, py + 11);
+        ctx.lineTo(px + 22 + debrisShake, py + 9);
+        ctx.lineTo(px + 27 + debrisShake, py + 25);
         ctx.closePath();
         ctx.fill();
 
-        ctx.fillStyle = "#95a5a6"; // facet highlight
+        // Chiseled Facet Highlight
+        ctx.fillStyle = "#515b69";
         ctx.beginPath();
-        ctx.moveTo(px + 10 + debrisShake, py + 12);
-        ctx.lineTo(px + 20 + debrisShake, py + 10);
-        ctx.lineTo(px + 16 + debrisShake, py + 24);
+        ctx.moveTo(px + 9 + debrisShake, py + 11);
+        ctx.lineTo(px + 22 + debrisShake, py + 9);
+        ctx.lineTo(px + 17 + debrisShake, py + 25);
         ctx.closePath();
         ctx.fill();
 
-        ctx.strokeStyle = "#566573"; // rock crack
+        // Specular Edge Highlight
+        ctx.strokeStyle = "#758496";
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.moveTo(px + 9 + debrisShake, py + 11);
+        ctx.lineTo(px + 22 + debrisShake, py + 9);
+        ctx.stroke();
+
+        // Rock fissure crack
+        ctx.strokeStyle = "#252930";
         ctx.lineWidth = 1;
         ctx.beginPath();
         ctx.moveTo(px + 15 + debrisShake, py + 11);
-        ctx.lineTo(px + 13 + debrisShake, py + 18);
+        ctx.lineTo(px + 13 + debrisShake, py + 19);
         ctx.stroke();
 
-      } else if (t.kind === "ore_copper" || t.kind === "ore_iron" || t.kind === "ore_gold" || t.kind === "ore_uranium" || t.kind === "ore_silver" || t.kind === "ore_coal") {
-        // Rich crystalline metallic ore deposit
-        ctx.fillStyle = "rgba(0, 0, 0, 0.25)";
+      } else if (t.kind === "ore_copper" || t.kind === "ore_iron" || t.kind === "ore_gold" || t.kind === "ore_uranium" || t.kind === "ore_silver" || t.kind === "ore_coal" || t.kind === "ore_aluminum") {
+        // Factorio Metallic Ore Vein Deposit
+        ctx.fillStyle = "rgba(0, 0, 0, 0.35)";
         ctx.beginPath();
-        ctx.ellipse(px + 16 + debrisShake, py + 24, 12, 5, 0, 0, Math.PI * 2);
+        ctx.ellipse(px + 16 + debrisShake, py + 25, 13, 5, 0, 0, Math.PI * 2);
         ctx.fill();
 
-        ctx.fillStyle = "#47525d"; // host stone base
+        ctx.fillStyle = "#2c323d"; // Slate host stone
         ctx.beginPath();
-        ctx.moveTo(px + 6 + debrisShake, py + 24);
-        ctx.lineTo(px + 12 + debrisShake, py + 10);
-        ctx.lineTo(px + 22 + debrisShake, py + 12);
-        ctx.lineTo(px + 26 + debrisShake, py + 24);
+        ctx.moveTo(px + 5 + debrisShake, py + 25);
+        ctx.lineTo(px + 10 + debrisShake, py + 9);
+        ctx.lineTo(px + 23 + debrisShake, py + 11);
+        ctx.lineTo(px + 27 + debrisShake, py + 25);
         ctx.closePath();
         ctx.fill();
 
-        ctx.fillStyle = "#5c6a77"; // facet
+        ctx.fillStyle = "#434b57";
         ctx.beginPath();
-        ctx.moveTo(px + 12 + debrisShake, py + 10);
-        ctx.lineTo(px + 22 + debrisShake, py + 12);
-        ctx.lineTo(px + 18 + debrisShake, py + 24);
+        ctx.moveTo(px + 10 + debrisShake, py + 9);
+        ctx.lineTo(px + 23 + debrisShake, py + 11);
+        ctx.lineTo(px + 18 + debrisShake, py + 25);
         ctx.closePath();
         ctx.fill();
 
-        const gemColors = {
-          ore_copper: ["#d35400", "#e67e22", "#f39c12"],
-          ore_iron: ["#7f8c8d", "#bdc3c7", "#ecf0f1"],
-          ore_gold: ["#d4ac0d", "#f1c40f", "#f9e79f"],
-          ore_uranium: ["#145a32", "#2ecc71", "#a3e4d7"],
+        const oreColors = {
+          ore_copper: ["#a04000", "#d35400", "#ff9f43"],
+          ore_iron: ["#2980b9", "#3498db", "#74b9ff"],
+          ore_gold: ["#b7950b", "#f1c40f", "#fff275"],
+          ore_uranium: ["#10ac84", "#2ecc71", "#00ff66"],
           ore_silver: ["#7f8c8d", "#bdc3c7", "#ffffff"],
-          ore_coal: ["#17202a", "#2c3e50", "#5d6d7e"]
-        }[t.kind as "ore_copper" | "ore_iron" | "ore_gold" | "ore_uranium" | "ore_silver" | "ore_coal"] || ["#fff", "#fff", "#fff"];
+          ore_coal: ["#121417", "#2c3e50", "#5d6d7e"],
+          ore_aluminum: ["#922b21", "#c0392b", "#ecf0f1"]
+        }[t.kind as string] || ["#888", "#aaa", "#fff"];
+
+        // Uranium radioactive pulse effect
+        const isUranium = t.kind === "ore_uranium";
+        const pulse = isUranium ? Math.sin(Date.now() / 200) * 0.3 + 0.7 : 1;
 
         const crystals = [
-          { dx: -4, dy: -6, size: 4 },
-          { dx: 4, dy: -2, size: 5 },
-          { dx: 0, dy: 4, size: 4 }
+          { dx: -5, dy: -5, size: 5 },
+          { dx: 5, dy: -2, size: 6 },
+          { dx: 0, dy: 4, size: 4.5 }
         ];
 
         crystals.forEach((c) => {
@@ -3933,26 +4026,28 @@ export function draw(
           const cy = py + 14 + c.dy;
           const s = c.size;
 
-          ctx.fillStyle = gemColors[1];
+          ctx.fillStyle = oreColors[1];
+          ctx.globalAlpha = pulse;
           ctx.beginPath();
           ctx.moveTo(cx, cy - s);
-          ctx.lineTo(cx + s / 1.5, cy);
+          ctx.lineTo(cx + s / 1.4, cy);
           ctx.lineTo(cx, cy + s);
-          ctx.lineTo(cx - s / 1.5, cy);
+          ctx.lineTo(cx - s / 1.4, cy);
           ctx.closePath();
           ctx.fill();
 
-          ctx.fillStyle = gemColors[2];
+          ctx.fillStyle = oreColors[2];
           ctx.beginPath();
           ctx.moveTo(cx, cy - s);
-          ctx.lineTo(cx + s / 1.5, cy);
+          ctx.lineTo(cx + s / 1.4, cy);
           ctx.lineTo(cx, cy);
           ctx.closePath();
           ctx.fill();
+          ctx.globalAlpha = 1.0;
 
-          // Sparkle glisten dot
-          if (Math.sin(Date.now() / 150 + c.dx) > 0.8) {
-            ctx.fillStyle = "#ffffff";
+          // Crystalline Metallic Sparkle
+          if (Math.sin(Date.now() / 120 + c.dx * 10) > 0.7) {
+            ctx.fillStyle = isUranium ? "#00ff66" : "#ffffff";
             ctx.fillRect(cx - 1, cy - s - 1, 2, 2);
           }
         });

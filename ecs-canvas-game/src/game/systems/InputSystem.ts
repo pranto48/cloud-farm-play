@@ -11,14 +11,14 @@ import {
   type TileType,
   WorkerComponent,
 } from "../components/GameComponents";
-import { 
-  spawnBelt, 
-  spawnInserter, 
-  spawnDrill, 
-  spawnFurnace, 
-  spawnAssembler, 
-  spawnChest, 
-  spawnPowerPole, 
+import {
+  spawnBelt,
+  spawnInserter,
+  spawnDrill,
+  spawnFurnace,
+  spawnAssembler,
+  spawnChest,
+  spawnPowerPole,
   spawnGenerator,
   spawnStorageHouse,
   spawnWorkerHouse,
@@ -215,7 +215,7 @@ export class InputSystem extends System {
               if (costItem) {
                 player.inventory[costItem] -= costCount;
               }
-              
+
               // Place building
               const spawnX = col * ts + ts / 2;
               const spawnY = row * ts + ts / 2;

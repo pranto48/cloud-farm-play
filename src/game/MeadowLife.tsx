@@ -97,26 +97,24 @@ function FactorioCraftingIcon({
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
       title={title || name}
-      className={`relative flex flex-col items-center justify-between p-1.5 h-[68px] w-[68px] rounded-md border-2 transition-all duration-150 select-none font-mono cursor-pointer shadow-[0_2px_6px_rgba(0,0,0,0.6),_inset_0_1px_0_rgba(255,255,255,0.15)] ${
-        isTechLocked
+      className={`relative flex flex-col items-center justify-between p-1.5 h-[68px] w-[68px] rounded-md border-2 transition-all duration-150 select-none font-mono cursor-pointer shadow-[0_2px_6px_rgba(0,0,0,0.6),_inset_0_1px_0_rgba(255,255,255,0.15)] ${isTechLocked
           ? "bg-[#1d1428] border-[#7e22ce] text-purple-300 opacity-70 hover:opacity-100 hover:border-[#c084fc] hover:shadow-[0_0_12px_rgba(192,132,252,0.4)]"
           : canCraft
-          ? isSelected
-            ? "bg-[#28382b] border-[#ff9200] text-amber-200 shadow-[0_0_14px_rgba(255,146,0,0.8),_inset_0_1px_0_rgba(255,255,255,0.25)] scale-105 z-10"
-            : "bg-[#1f2921] border-[#3f5745] hover:border-[#ff9200] hover:bg-[#2a382d] text-emerald-100 hover:scale-105 hover:shadow-[0_0_10px_rgba(255,146,0,0.4)]"
-          : "bg-[#181a1f] border-[#2c3442] opacity-50 desaturate-50 text-stone-500 hover:opacity-80 cursor-not-allowed"
-      }`}
+            ? isSelected
+              ? "bg-[#28382b] border-[#ff9200] text-amber-200 shadow-[0_0_14px_rgba(255,146,0,0.8),_inset_0_1px_0_rgba(255,255,255,0.25)] scale-105 z-10"
+              : "bg-[#1f2921] border-[#3f5745] hover:border-[#ff9200] hover:bg-[#2a382d] text-emerald-100 hover:scale-105 hover:shadow-[0_0_10px_rgba(255,146,0,0.4)]"
+            : "bg-[#181a1f] border-[#2c3442] opacity-50 desaturate-50 text-stone-500 hover:opacity-80 cursor-not-allowed"
+        }`}
     >
       {/* Corner Factorio Status Dot */}
       <div className="w-full flex justify-between items-center px-0.5">
         <span
-          className={`h-2 w-2 rounded-full ${
-            isTechLocked
+          className={`h-2 w-2 rounded-full ${isTechLocked
               ? "bg-purple-500 shadow-[0_0_4px_#a855f7]"
               : canCraft
-              ? "bg-emerald-400 shadow-[0_0_5px_#2ecc71]"
-              : "bg-red-500/70"
-          }`}
+                ? "bg-emerald-400 shadow-[0_0_5px_#2ecc71]"
+                : "bg-red-500/70"
+            }`}
         />
         {isTechLocked && <span className="text-[10px] animate-pulse leading-none">🔒</span>}
       </div>
@@ -345,7 +343,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
 
   // Hovered item for tooltips inspection
   const [hoveredItem, setHoveredItem] = useState<Item | null>(null);
-  
+
   const chargingToolRef = useRef<{ toolId: string; startTime: number; maxLevel: number } | null>(null);
 
   // Sync isFullscreen with standard document events (e.g. Esc key exits fullscreen)
@@ -461,9 +459,9 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
       const clickedWorker = state.workers.find((w) => {
         const workerX = Math.floor(w.subX);
         const workerY = Math.floor(w.subY);
-        
-        const onWorker = (Math.abs(w.x - tileX) <= 1 && Math.abs(w.y - tileY) <= 1) || 
-                         (Math.abs(workerX - tileX) <= 1 && Math.abs(workerY - tileY) <= 1);
+
+        const onWorker = (Math.abs(w.x - tileX) <= 1 && Math.abs(w.y - tileY) <= 1) ||
+          (Math.abs(workerX - tileX) <= 1 && Math.abs(workerY - tileY) <= 1);
         const onCabin = Math.abs(w.cabinX - tileX) <= 1 && Math.abs(w.cabinY - tileY) <= 1;
 
         return onWorker || onCabin;
@@ -611,7 +609,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
           const p = stateRef.current.player;
           const pSubX = p.subX !== undefined ? p.subX : p.x;
           const pSubY = p.subY !== undefined ? p.subY : p.y;
-          
+
           const cameraX = Math.max(
             0,
             Math.min(
@@ -635,7 +633,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
             for (let x = startCol; x < endCol; x++) {
               const t = currentGrid[y]?.[x];
               if (!t) continue;
-              
+
               // Ambient tree leaves
               if (t.kind === "tree" && Math.random() < 0.02) {
                 particlesRef.current.push({
@@ -1149,7 +1147,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
             next.player.subX = 5;
             next.player.subY = 8;
             toast("Entered Farm House");
-                    } else if (!next.inHouse && !next.inMine && x === 70 && y === 40) {
+          } else if (!next.inHouse && !next.inMine && x === 70 && y === 40) {
             setTimeout(() => setShopOpen(true), 0);
           } else if (x >= 0 && y >= 0 && x < gridCols && y < gridRows && isWalkable(grid[y][x])) {
             next.player.x = x;
@@ -1713,7 +1711,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
       const curState = stateRef.current;
       const grid = curState.inHouse ? curState.houseGrid! : (curState.inMine ? curState.mineGrid : curState.tiles);
       const targetZone = zoningMode === "erase" ? undefined : zoningMode;
-      
+
       if (grid[coords.y]?.[coords.x] && grid[coords.y][coords.x].zone !== targetZone) {
         setState(prev => {
           const next = structuredClone(prev);
@@ -1735,7 +1733,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
         const curState = stateRef.current;
         const grid = curState.inHouse ? curState.houseGrid! : (curState.inMine ? curState.mineGrid : curState.tiles);
         const targetZone = zoningMode === "erase" ? undefined : zoningMode;
-        
+
         if (grid[coords.y]?.[coords.x] && grid[coords.y][coords.x].zone !== targetZone) {
           setState(prev => {
             const next = structuredClone(prev);
@@ -1779,7 +1777,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
     const clickedAnimal = curState.animals.find((a) => a.x === coords.x && a.y === coords.y);
     const clickedPet = curState.pets?.find((pt) => pt.x === coords.x && pt.y === coords.y);
     const clickedWorker = curState.workers?.find((w) => w.x === coords.x && w.y === coords.y);
-    
+
     let clickedNpc: NPCDef | null = null;
     let clickedNpcId = "";
     Object.keys(NPCS).forEach((id) => {
@@ -1876,7 +1874,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
         } else if (tile.kind === "placed_item" && tile.placedItemId === "mailbox") {
           setMailboxOpen(true);
         } else if (tile.kind === "placed_item" && (tile.placedItemId === "chest" ||
-        tile.placedItemId === "water_tank" || tile.placedItemId === "worker_cabin")) {
+          tile.placedItemId === "water_tank" || tile.placedItemId === "worker_cabin")) {
           setChestOpenTile({ x: coords.x, y: coords.y });
         } else if (!curState.inMine && !curState.inHouse && coords.x === 18 && coords.y === 29) {
           setShippingBinOpen(true);
@@ -1939,7 +1937,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
         const next = structuredClone(prev);
         const grid = next.inHouse ? next.houseGrid! : (next.inMine ? next.mineGrid : next.tiles);
         const chestInv = grid[chestOpenTile.y][chestOpenTile.x].chestInventory!;
-        
+
         if (source === "inventory") {
           const itm = next.inventory[index];
           if (itm) {
@@ -2380,7 +2378,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
   };
 
   // Player Store - available items for purchase with markup prices
-  const STORE_ITEMS = Object.values(ITEM_DEFS).filter(d => 
+  const STORE_ITEMS = Object.values(ITEM_DEFS).filter(d =>
     d.type === "resource" || d.type === "seed" || d.type === "crop" || d.type === "tool" || d.type === "furniture"
   ).map(d => ({
     ...d,
@@ -2527,25 +2525,23 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
 
 
   return (
-    <div 
-      ref={mainContainerRef} 
-      className={`flex flex-col items-center justify-center w-full px-2 transition-all duration-300 ${
-        isFullscreen 
-          ? "bg-[#18110e] p-0 min-h-screen text-slate-200" 
+    <div
+      ref={mainContainerRef}
+      className={`flex flex-col items-center justify-center w-full px-2 transition-all duration-300 ${isFullscreen
+          ? "bg-[#18110e] p-0 min-h-screen text-slate-200"
           : "max-w-4xl"
-      }`}
+        }`}
     >
       {/* Game Screen Frame */}
-      <div 
-        className={`relative overflow-hidden bg-black transition-all duration-300 ${
-          isFullscreen 
-            ? "border-0 rounded-none w-screen h-screen" 
+      <div
+        className={`relative overflow-hidden bg-black transition-all duration-300 ${isFullscreen
+            ? "border-0 rounded-none w-screen h-screen"
             : "rounded-xl border-4 border-[#2d3033] bg-[#141517] shadow-2xl"
-        }`} 
-        style={{ 
+          }`}
+        style={{
           height: isFullscreen ? "100vh" : `${canvasSize.height}px`,
           width: isFullscreen ? "100vw" : "704px",
-          maxWidth: isFullscreen ? "none" : "704px" 
+          maxWidth: isFullscreen ? "none" : "704px"
         }}
       >
         <canvas
@@ -2561,7 +2557,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
           style={{ width: "100%", height: "100%", display: "block", imageRendering: "pixelated", cursor: "crosshair" }}
         />
 
-                {/* Zoning Toolbar */}
+        {/* Zoning Toolbar */}
         {zoningMode !== "none" && (
           <div className="absolute top-16 left-1/2 -translate-x-1/2 z-20 flex gap-2 bg-[#202224]/90 border-[3px] border-[#4a5568] p-2 font-mono shadow-[0_0_15px_rgba(0,0,0,0.8)] rounded-sm">
             <div className="flex items-center text-[#ff9200] font-bold text-xs uppercase px-2 border-r border-[#4a5568] mr-1">
@@ -2572,11 +2568,10 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                 key={mode}
                 size="sm"
                 onClick={() => setZoningMode(mode)}
-                className={`text-[10px] font-bold uppercase rounded-none transition-all ${
-                  zoningMode === mode 
-                    ? "bg-[#38b2ac] text-white border-2 border-white shadow-[0_0_10px_#38b2ac]" 
+                className={`text-[10px] font-bold uppercase rounded-none transition-all ${zoningMode === mode
+                    ? "bg-[#38b2ac] text-white border-2 border-white shadow-[0_0_10px_#38b2ac]"
                     : "bg-[#2f3136] text-slate-400 border-2 border-slate-600 hover:border-[#38b2ac]"
-                }`}
+                  }`}
               >
                 {mode === "erase" ? "🧹 Erase" : `${mode === 'farming' ? '💧' : mode === 'mining' ? '⛏️' : mode === 'woodcutting' ? '🪓' : '🪣'} ${mode}`}
               </Button>
@@ -2601,7 +2596,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
           >
             <Backpack className="h-4 w-4 text-[#ff9200]" />
           </button>
-          
+
           {/* Pierre's Shop Button */}
           <button
             onClick={() => setShopOpen(true)}
@@ -2628,9 +2623,8 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
             <button
               onClick={() => setMailboxOpen(true)}
               title={`Mailbox (${state.mailboxLetters.filter(l => !l.claimed).length} unread)`}
-              className={`w-8 h-8 flex items-center justify-center bg-[#2a2c2e] hover:bg-[#ff9200]/20 border border-slate-600 hover:border-[#ff9200] text-slate-100 transition-all cursor-pointer font-bold text-xs ${
-                state.hasUnreadMail ? "animate-pulse border-red-500 text-red-500 bg-red-500/10" : ""
-              }`}
+              className={`w-8 h-8 flex items-center justify-center bg-[#2a2c2e] hover:bg-[#ff9200]/20 border border-slate-600 hover:border-[#ff9200] text-slate-100 transition-all cursor-pointer font-bold text-xs ${state.hasUnreadMail ? "animate-pulse border-red-500 text-red-500 bg-red-500/10" : ""
+                }`}
             >
               <Mail className="h-4 w-4" />
             </button>
@@ -2748,17 +2742,16 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                 <button
                   key={idx}
                   onClick={() => setState((prev) => ({ ...prev, hotbarIndex: idx }))}
-                  className={`relative flex flex-col items-center justify-center w-[46px] h-[46px] transition-all cursor-pointer select-none rounded-none ${
-                    selected
+                  className={`relative flex flex-col items-center justify-center w-[46px] h-[46px] transition-all cursor-pointer select-none rounded-none ${selected
                       ? "border-2 border-[#ff9200] bg-[#ff9200]/15 scale-[1.08] shadow-[0_0_8px_rgba(255,146,0,0.5)] z-10"
                       : "border border-slate-700 bg-[#141517] hover:bg-slate-800"
-                  }`}
+                    }`}
                 >
                   {/* Slot numeric shortcut overlay */}
                   <span className="absolute top-0.5 left-1 text-[8px] font-bold text-slate-500 leading-none">
                     {slotKey}
                   </span>
-                  
+
                   {item ? (
                     <>
                       <span className="text-2xl mt-1 select-none" style={{ textShadow: "1px 1px 0px rgba(0,0,0,0.5)" }}>
@@ -2788,7 +2781,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                 {craftingQueue.length} items
               </span>
             </div>
-            
+
             <div className="flex items-center gap-2">
               <span className="text-xl bg-zinc-900 p-1 border border-zinc-800 rounded">
                 {craftingQueue[0].iconSymbol}
@@ -2798,7 +2791,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                   {craftingQueue[0].name}
                 </div>
                 <div className="w-full bg-zinc-800 h-1.5 border border-zinc-750 mt-1 rounded-none overflow-hidden relative">
-                  <div 
+                  <div
                     className="bg-orange-500 h-full transition-all duration-100"
                     style={{ width: `${craftingQueue[0].progress}%` }}
                   />
@@ -2864,7 +2857,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
 
       {/* 5. COZY DIALOG INTERFACES */}
 
-{/* A. PIERRE'S OVERHAULED SHOP MODAL */}
+      {/* A. PIERRE'S OVERHAULED SHOP MODAL */}
       <Dialog open={shopOpen} onOpenChange={setShopOpen}>
         <DialogContent container={mainContainerRef.current} className="max-w-3xl bg-[#141517] border-[3px] border-[#4a5568] text-slate-100 rounded-sm font-mono shadow-[0_0_20px_rgba(0,0,0,0.8)]">
           <DialogHeader>
@@ -2880,11 +2873,10 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
               <button
                 key={tab}
                 onClick={() => setShopTab(tab)}
-                className={`px-3 py-1.5 text-xs font-bold uppercase transition-all rounded-none whitespace-nowrap ${
-                  shopTab === tab
+                className={`px-3 py-1.5 text-xs font-bold uppercase transition-all rounded-none whitespace-nowrap ${shopTab === tab
                     ? "bg-[#2d3748] text-amber-400 border-t-2 border-[#ff9200] shadow-inner"
                     : "bg-[#2f3136] text-slate-400 hover:text-slate-200 border-t-2 border-transparent"
-                }`}
+                  }`}
               >
                 {tab === "all_items" ? "🛒 All Items Store" : tab}
               </button>
@@ -2909,11 +2901,10 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                       <button
                         key={cat}
                         onClick={() => setShopCategoryFilter(cat)}
-                        className={`px-2 py-0.5 text-[10px] font-bold uppercase transition-all ${
-                          shopCategoryFilter === cat
+                        className={`px-2 py-0.5 text-[10px] font-bold uppercase transition-all ${shopCategoryFilter === cat
                             ? "bg-[#ff9200] text-black"
                             : "bg-[#282c34] text-slate-400 hover:bg-[#383e4a]"
-                        }`}
+                          }`}
                       >
                         {cat}
                       </button>
@@ -2933,8 +2924,8 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                         shopCategoryFilter === "all"
                           ? true
                           : shopCategoryFilter === "logistics"
-                          ? ["chest", "iron_chest", "steel_chest", "logistics_chest", "sprinkler_basic", "sprinkler_quality", "transport_belt", "inserter", "logistics_drone", "drone_hub", "electric_drill", "furnace", "assembling_machine", "generator", "solar_panel", "battery", "wood_cutter", "stone_cutter"].includes(item.id) || item.type === "resource"
-                          : item.type === shopCategoryFilter;
+                            ? ["chest", "iron_chest", "steel_chest", "logistics_chest", "sprinkler_basic", "sprinkler_quality", "transport_belt", "inserter", "logistics_drone", "drone_hub", "electric_drill", "furnace", "assembling_machine", "generator", "solar_panel", "battery", "wood_cutter", "stone_cutter"].includes(item.id) || item.type === "resource"
+                            : item.type === shopCategoryFilter;
                       return matchSearch && matchCat;
                     })
                     .map((item) => {
@@ -3148,7 +3139,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                     <div>
                       <div className="font-bold text-sm text-[#ff9200]">Hire a Worker</div>
                       <div className="text-xs text-slate-400">
-                        Requires a vacant Worker Cabin to house them.<br/>
+                        Requires a vacant Worker Cabin to house them.<br />
                         Workers automate farming, mining, and woodcutting.
                       </div>
                     </div>
@@ -3179,7 +3170,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                         toast.error("You need to buy and place a Worker Cabin first!");
                         return;
                       }
-                      
+
                       if (state.coins < 1000) {
                         toast.error("Not enough gold to hire a worker (1000g).");
                         return;
@@ -3236,7 +3227,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                         </span>
                         <span className="text-slate-400 font-bold font-mono">Level {lvl}</span>
                       </div>
-                      
+
                       {cost ? (
                         <div className="text-[10px] text-slate-350 font-mono mb-2 flex flex-col gap-0.5">
                           <span className="text-slate-500">Requires:</span>
@@ -3311,11 +3302,10 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                 return (
                   <div
                     key={room.id}
-                    className={`p-3 border flex justify-between items-center transition-all ${
-                      isActive
+                    className={`p-3 border flex justify-between items-center transition-all ${isActive
                         ? "bg-[#1c2e36] border-[#38b2ac] shadow-[0_0_10px_rgba(56,178,172,0.3)]"
                         : "bg-[#16181d] border-slate-800 hover:border-slate-600"
-                    }`}
+                      }`}
                   >
                     <div>
                       <div className="font-bold text-sm text-slate-100 flex items-center gap-2">
@@ -3436,11 +3426,10 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                 <button
                   key={letter.id}
                   onClick={() => setReadingLetter(letter)}
-                  className={`w-full p-3 rounded-lg border text-left flex justify-between items-center transition-all ${
-                    letter.claimed
+                  className={`w-full p-3 rounded-lg border text-left flex justify-between items-center transition-all ${letter.claimed
                       ? "bg-[#3e2723]/20 border-[#5d4037]/30 text-stone-400"
                       : "bg-[#3e2723]/50 border-[#5d4037] text-stone-100 hover:bg-[#3e2723]/70"
-                  }`}
+                    }`}
                 >
                   <div className="flex items-center gap-2 text-xs">
                     <Mail className={`h-4 w-4 ${letter.claimed ? "opacity-40" : "text-amber-500"}`} />
@@ -3526,11 +3515,10 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab as any)}
-                className={`px-4 py-1.5 text-xs font-bold uppercase transition-all rounded-none ${
-                  activeTab === tab
+                className={`px-4 py-1.5 text-xs font-bold uppercase transition-all rounded-none ${activeTab === tab
                     ? "bg-[#2d3748] text-white border-t-2 border-[#38b2ac] shadow-inner"
                     : "bg-[#2f3136] text-slate-400 hover:text-slate-200 border-t-2 border-transparent"
-                }`}
+                  }`}
               >
                 {tab}
               </button>
@@ -3541,10 +3529,10 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
             {activeTab === "inventory" && (
               <div className="space-y-3">
                 <div className="flex justify-end">
-                  <Button 
-                    size="sm" 
-                    variant="outline" 
-                    className="text-[10px] h-6 px-2.5 bg-[#3a3f44] border-slate-700 text-slate-200 hover:bg-[#ff9200]/25 hover:border-[#ff9200] rounded-none font-mono" 
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="text-[10px] h-6 px-2.5 bg-[#3a3f44] border-slate-700 text-slate-200 hover:bg-[#ff9200]/25 hover:border-[#ff9200] rounded-none font-mono"
                     onClick={handleSortInventory}
                   >
                     Sort Inventory
@@ -3558,11 +3546,10 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                       onContextMenu={(e) => handleSlotRightClick(e, idx, "inventory")}
                       onMouseEnter={() => item && setHoveredItem(item)}
                       onMouseLeave={() => setHoveredItem(null)}
-                      className={`relative flex items-center justify-center h-[44px] transition-all rounded-none ${
-                        item
+                      className={`relative flex items-center justify-center h-[44px] transition-all rounded-none ${item
                           ? "bg-[#2d3748] hover:bg-[#4a5568] border-2 border-[#4a5568] hover:border-[#38b2ac] shadow-[inset_0_2px_4px_rgba(0,0,0,0.4)] text-slate-100"
                           : "bg-[#1a202c] border-2 border-[#2d3748] shadow-[inset_0_2px_4px_rgba(0,0,0,0.6)] text-slate-600"
-                      }`}
+                        }`}
                     >
                       {idx < 10 && (
                         <span className="absolute top-0.5 left-1 text-[8px] font-bold text-slate-500 leading-none">
@@ -3651,44 +3638,40 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                   <div className="flex gap-1.5 border-b border-zinc-700 pb-2">
                     <button
                       onClick={() => setCraftingCategory("logistics")}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 text-xs border font-bold transition-all ${
-                        craftingCategory === "logistics"
+                      className={`flex items-center gap-1.5 px-3 py-1.5 text-xs border font-bold transition-all ${craftingCategory === "logistics"
                           ? "bg-zinc-850 border-orange-500 text-orange-400 font-extrabold"
                           : "bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:bg-zinc-800"
-                      }`}
+                        }`}
                     >
                       <Backpack className="h-3.5 w-3.5" />
                       Logistics
                     </button>
                     <button
                       onClick={() => setCraftingCategory("production")}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 text-xs border font-bold transition-all ${
-                        craftingCategory === "production"
+                      className={`flex items-center gap-1.5 px-3 py-1.5 text-xs border font-bold transition-all ${craftingCategory === "production"
                           ? "bg-zinc-850 border-orange-500 text-orange-400 font-extrabold"
                           : "bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:bg-zinc-800"
-                      }`}
+                        }`}
                     >
                       <Hammer className="h-3.5 w-3.5" />
                       Production
                     </button>
                     <button
                       onClick={() => setCraftingCategory("materials")}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 text-xs border font-bold transition-all ${
-                        craftingCategory === "materials"
+                      className={`flex items-center gap-1.5 px-3 py-1.5 text-xs border font-bold transition-all ${craftingCategory === "materials"
                           ? "bg-zinc-850 border-orange-500 text-orange-400 font-extrabold"
                           : "bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:bg-zinc-800"
-                      }`}
+                        }`}
                     >
                       <Shield className="h-3.5 w-3.5" />
                       Materials
                     </button>
                     <button
                       onClick={() => setCraftingCategory("cheats" as any)}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 text-xs border font-bold transition-all ${
-                        (craftingCategory as any) === "cheats"
+                      className={`flex items-center gap-1.5 px-3 py-1.5 text-xs border font-bold transition-all ${(craftingCategory as any) === "cheats"
                           ? "bg-purple-950 border-amber-400 text-amber-300 font-extrabold animate-pulse"
                           : "bg-purple-950/40 border-purple-900 text-purple-300 hover:bg-purple-900"
-                      }`}
+                        }`}
                     >
                       <Zap className="h-3.5 w-3.5 text-amber-400" />
                       ⚡ All Items Cheat
@@ -3786,7 +3769,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                               </button>
                             </div>
                           )}
-                          
+
                           <p className="text-[10px] text-zinc-400 leading-normal">
                             {hoveredRecipe.description}
                           </p>
@@ -3803,9 +3786,8 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                               return (
                                 <div
                                   key={input.itemId}
-                                  className={`text-[10px] flex justify-between items-center p-1 bg-zinc-900/40 rounded border font-mono ${
-                                    hasEnough ? "border-green-950 text-green-400" : "border-red-950 text-red-400"
-                                  }`}
+                                  className={`text-[10px] flex justify-between items-center p-1 bg-zinc-900/40 rounded border font-mono ${hasEnough ? "border-green-950 text-green-400" : "border-red-950 text-red-400"
+                                    }`}
                                 >
                                   <span className="flex items-center gap-1.5">
                                     <span>{inputDef?.iconSymbol || "📦"}</span>
@@ -3846,11 +3828,11 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
               </div>
             )}
 
-                        {activeTab === "workers" && (
+            {activeTab === "workers" && (
               <div className="space-y-3">
-                                <div className="flex justify-between items-center border-b border-[#ff9200]/30 pb-2 mb-2">
+                <div className="flex justify-between items-center border-b border-[#ff9200]/30 pb-2 mb-2">
                   <h3 className="text-[#ff9200] font-bold">Worker Management</h3>
-                  <Button 
+                  <Button
                     size="sm"
                     className="bg-[#2a2c2e] border border-[#ff9200]/50 text-[#ff9200] hover:bg-[#ff9200] hover:text-white text-[10px] font-bold uppercase rounded-none px-3"
                     onClick={() => {
@@ -3877,7 +3859,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                         )}
                       </div>
                       <div className="flex flex-col gap-1">
-                        <select 
+                        <select
                           className="bg-[#2f3136] border border-slate-600 text-xs px-2 py-1 text-slate-200 outline-none hover:border-[#ff9200] transition-colors"
                           value={w.role}
                           onChange={(e) => {
@@ -3937,9 +3919,8 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                         {Array.from({ length: 10 }).map((_, i) => (
                           <Heart
                             key={i}
-                            className={`h-3 w-3 ${
-                              i < hearts ? "text-red-500 fill-red-500" : "text-stone-700"
-                            }`}
+                            className={`h-3 w-3 ${i < hearts ? "text-red-500 fill-red-500" : "text-stone-700"
+                              }`}
                           />
                         ))}
                       </div>
@@ -4000,15 +3981,15 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
         }
         const chestInventory = tile.chestInventory;
         const barLimit = tile.chestBarLimit ?? maxSlotCount;
-        const containerTitle = isCabin 
-          ? "Worker Cabin Feed Box" 
-          : tile.placedItemId === "iron_chest" 
-          ? "Iron Chest (24 Slots)" 
-          : tile.placedItemId === "steel_chest"
-          ? "Steel Storage Container (48 Slots)"
-          : tile.placedItemId === "logistics_chest"
-          ? "Logistics Storage Hub (60 Slots)"
-          : "Wood Chest (12 Slots)";
+        const containerTitle = isCabin
+          ? "Worker Cabin Feed Box"
+          : tile.placedItemId === "iron_chest"
+            ? "Iron Chest (24 Slots)"
+            : tile.placedItemId === "steel_chest"
+              ? "Steel Storage Container (48 Slots)"
+              : tile.placedItemId === "logistics_chest"
+                ? "Logistics Storage Hub (60 Slots)"
+                : "Wood Chest (12 Slots)";
 
         return (
           <Dialog open={true} onOpenChange={() => setChestOpenTile(null)}>
@@ -4148,11 +4129,10 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                   <Button
                     size="sm"
                     variant="outline"
-                    className={`text-[10px] h-6 px-2 border font-mono transition-all ${
-                      (tile.chestBarLimit ?? maxSlotCount) < maxSlotCount
+                    className={`text-[10px] h-6 px-2 border font-mono transition-all ${(tile.chestBarLimit ?? maxSlotCount) < maxSlotCount
                         ? "bg-red-950 border-red-700 text-red-300 hover:bg-red-900"
                         : "bg-[#252c36] border-[#3e4856] text-stone-300 hover:bg-red-950/60 hover:text-red-400"
-                    }`}
+                      }`}
                     onClick={() => {
                       setState((prev) => {
                         const next = structuredClone(prev);
@@ -4189,13 +4169,12 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                           onContextMenu={(e) => handleSlotRightClick(e, idx, "chest")}
                           onMouseEnter={() => item && setHoveredItem(item)}
                           onMouseLeave={() => setHoveredItem(null)}
-                          className={`relative flex items-center justify-center h-12 rounded-xs border-2 transition-all select-none ${
-                            isLockedByBar
+                          className={`relative flex items-center justify-center h-12 rounded-xs border-2 transition-all select-none ${isLockedByBar
                               ? "bg-red-950/40 border-red-900/80 text-red-500 opacity-60 cursor-not-allowed"
                               : item
-                              ? "bg-[#202821] hover:bg-[#2c382e] border-[#3d5241] hover:border-[#ff9200]"
-                              : "bg-[#181a1e] border-[#29303c] hover:border-slate-500"
-                          }`}
+                                ? "bg-[#202821] hover:bg-[#2c382e] border-[#3d5241] hover:border-[#ff9200]"
+                                : "bg-[#181a1e] border-[#29303c] hover:border-slate-500"
+                            }`}
                         >
                           {isLockedByBar ? (
                             <span className="text-xs font-extrabold text-red-500">❌</span>
@@ -4221,10 +4200,10 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                 <div>
                   <div className="flex justify-between items-center mb-1.5">
                     <h4 className="text-xs font-bold text-stone-400 uppercase tracking-wider font-mono">Player Pack Pack</h4>
-                    <Button 
-                      size="sm" 
-                      variant="outline" 
-                      className="text-[10px] h-5 px-2 bg-[#252c36] border-[#3e4856] text-stone-300 hover:bg-[#3e4856] font-mono" 
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="text-[10px] h-5 px-2 bg-[#252c36] border-[#3e4856] text-stone-300 hover:bg-[#3e4856] font-mono"
                       onClick={handleSortInventory}
                     >
                       Sort Pack
@@ -4238,11 +4217,10 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                         onContextMenu={(e) => handleSlotRightClick(e, idx, "inventory")}
                         onMouseEnter={() => item && setHoveredItem(item)}
                         onMouseLeave={() => setHoveredItem(null)}
-                        className={`relative flex items-center justify-center h-12 rounded-xs border-2 transition-all ${
-                          item
+                        className={`relative flex items-center justify-center h-12 rounded-xs border-2 transition-all ${item
                             ? "bg-[#252a32] hover:bg-[#2f3642] border-[#3e4856] hover:border-[#ff9200]"
                             : "bg-[#181a1e] border-[#29303c]"
-                        }`}
+                          }`}
                       >
                         {item ? (
                           <>
@@ -4352,11 +4330,10 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                       onContextMenu={(e) => handleSlotRightClick(e, idx, "shipping")}
                       onMouseEnter={() => item && setHoveredItem(item)}
                       onMouseLeave={() => setHoveredItem(null)}
-                      className={`relative flex items-center justify-center h-12 rounded border transition-all ${
-                        item
+                      className={`relative flex items-center justify-center h-12 rounded border transition-all ${item
                           ? "bg-[#5d4037]/40 hover:bg-[#5d4037]/60 border-[#5d4037]"
                           : "bg-stone-950/80 border-stone-800"
-                      }`}
+                        }`}
                     >
                       {item ? (
                         <>
@@ -4386,11 +4363,10 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                       onContextMenu={(e) => handleSlotRightClick(e, idx, "inventory")}
                       onMouseEnter={() => item && setHoveredItem(item)}
                       onMouseLeave={() => setHoveredItem(null)}
-                      className={`relative flex items-center justify-center h-12 rounded border transition-all ${
-                        item
+                      className={`relative flex items-center justify-center h-12 rounded border transition-all ${item
                           ? "bg-[#7c5a3c]/20 hover:bg-[#7c5a3c]/40 border-stone-700"
                           : "bg-stone-900/60 border-stone-800/80"
-                      }`}
+                        }`}
                     >
                       {item ? (
                         <>
@@ -4454,11 +4430,10 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                       onContextMenu={(e) => handleSlotRightClick(e, 0, "furnace")}
                       onMouseEnter={() => inputItem && setHoveredItem(inputItem)}
                       onMouseLeave={() => setHoveredItem(null)}
-                      className={`relative flex items-center justify-center w-14 h-14 rounded border-2 transition-all ${
-                        inputItem
+                      className={`relative flex items-center justify-center w-14 h-14 rounded border-2 transition-all ${inputItem
                           ? "bg-zinc-800 border-orange-500/50 hover:bg-zinc-700"
                           : "bg-zinc-900/40 border-zinc-800 border-dashed"
-                      }`}
+                        }`}
                     >
                       {inputItem ? (
                         <>
@@ -4475,7 +4450,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
 
                   <div className="flex flex-col items-center gap-2 flex-1 px-4">
                     <div className="w-full bg-zinc-850 h-3 border border-zinc-700 rounded-none relative overflow-hidden">
-                      <div 
+                      <div
                         className="bg-gradient-to-r from-orange-600 to-yellow-500 h-full transition-all duration-100"
                         style={{ width: `${pct}%` }}
                       />
@@ -4495,11 +4470,10 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                       onContextMenu={(e) => handleSlotRightClick(e, 1, "furnace")}
                       onMouseEnter={() => fuelItem && setHoveredItem(fuelItem)}
                       onMouseLeave={() => setHoveredItem(null)}
-                      className={`relative flex items-center justify-center w-14 h-14 rounded border-2 transition-all ${
-                        fuelItem
+                      className={`relative flex items-center justify-center w-14 h-14 rounded border-2 transition-all ${fuelItem
                           ? "bg-zinc-800 border-yellow-600/50 hover:bg-zinc-700"
                           : "bg-zinc-900/40 border-zinc-800 border-dashed"
-                      }`}
+                        }`}
                     >
                       {fuelItem ? (
                         <>
@@ -4523,11 +4497,10 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                       onContextMenu={(e) => handleSlotRightClick(e, 2, "furnace")}
                       onMouseEnter={() => outputItem && setHoveredItem(outputItem)}
                       onMouseLeave={() => setHoveredItem(null)}
-                      className={`relative flex items-center justify-center w-16 h-16 rounded border-2 transition-all ${
-                        outputItem
+                      className={`relative flex items-center justify-center w-16 h-16 rounded border-2 transition-all ${outputItem
                           ? "bg-zinc-850 border-green-500/70 hover:bg-zinc-700"
                           : "bg-zinc-900/40 border-zinc-850"
-                      }`}
+                        }`}
                     >
                       {outputItem ? (
                         <>
@@ -4553,11 +4526,10 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                         onContextMenu={(e) => handleSlotRightClick(e, idx, "inventory")}
                         onMouseEnter={() => item && setHoveredItem(item)}
                         onMouseLeave={() => setHoveredItem(null)}
-                        className={`relative flex items-center justify-center h-12 rounded border transition-all ${
-                          item
+                        className={`relative flex items-center justify-center h-12 rounded border transition-all ${item
                             ? "bg-[#7c5a3c]/20 hover:bg-[#7c5a3c]/40 border-stone-700"
                             : "bg-stone-900/60 border-stone-800/80"
-                        }`}
+                          }`}
                       >
                         {item ? (
                           <>
@@ -4661,9 +4633,8 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                   </div>
                   <div className="h-2 w-full bg-stone-950 rounded-full overflow-hidden border border-stone-850">
                     <div
-                      className={`h-full transition-all duration-500 ${
-                        activeWorker.energy <= 20 ? "bg-red-500 animate-pulse" : "bg-emerald-500"
-                      }`}
+                      className={`h-full transition-all duration-500 ${activeWorker.energy <= 20 ? "bg-red-500 animate-pulse" : "bg-emerald-500"
+                        }`}
                       style={{ width: `${activeWorker.energy}%` }}
                     />
                   </div>
@@ -4684,11 +4655,10 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                       return (
                         <button
                           key={opt.id}
-                          className={`p-2 rounded border text-left transition-all text-xs ${
-                            isActive
+                          className={`p-2 rounded border text-left transition-all text-xs ${isActive
                               ? "bg-amber-600 border-amber-400 text-stone-100 font-extrabold shadow-[0_0_8px_rgba(243,156,18,0.3)]"
                               : "bg-stone-950/40 border-stone-850 text-stone-300 hover:bg-[#3e2723]/30"
-                          }`}
+                            }`}
                           onClick={() => {
                             setState((prev) => {
                               const next = structuredClone(prev);
@@ -4789,14 +4759,14 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                             const next = structuredClone(prev);
                             next.coins += 500;
                             next.workers = (next.workers || []).filter((w) => w.id !== activeWorker.id);
-                            
+
                             const tile = next.tiles[activeWorker.cabinY]?.[activeWorker.cabinX];
                             if (tile) {
                               tile.kind = "grass";
                               tile.placedItemId = undefined;
                               tile.chestInventory = undefined;
                             }
-                            
+
                             toast.success(`Sold ${activeWorker.name}'s cabin. +500g refunded!`);
                             gameAudio.playCoin();
                             return next;
@@ -4907,10 +4877,10 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
             <div className="p-3 bg-[#1e293b] border border-[#334155] rounded-lg space-y-1.5">
               <h3 className="font-bold text-emerald-400 text-sm mb-2">📖 About the Game</h3>
               <p className="text-slate-300 leading-relaxed">
-                Meadow Life is a cozy top-down farming game. Grow crops, raise animals, mine for ores, 
-                craft tools, hire workers, and research advanced technology to automate your farm and 
-                conquer the mines. Press <kbd className="bg-slate-700 px-1 rounded text-white">WASD</kbd> to move, 
-                <kbd className="bg-slate-700 px-1 rounded text-white mx-1">E/Space</kbd> to interact, and 
+                Meadow Life is a cozy top-down farming game. Grow crops, raise animals, mine for ores,
+                craft tools, hire workers, and research advanced technology to automate your farm and
+                conquer the mines. Press <kbd className="bg-slate-700 px-1 rounded text-white">WASD</kbd> to move,
+                <kbd className="bg-slate-700 px-1 rounded text-white mx-1">E/Space</kbd> to interact, and
                 <kbd className="bg-slate-700 px-1 rounded text-white mx-1">/</kbd> for cheats!
               </p>
             </div>
@@ -5035,11 +5005,10 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
             <div className="flex gap-2 shrink-0 border-b border-amber-900/30 pb-2">
               {(["buy", "sell", "workers", "land"] as const).map(tab => (
                 <button key={tab} onClick={() => setPlayerStoreTab(tab)}
-                  className={`px-4 py-1.5 text-xs font-bold rounded transition-all capitalize ${
-                    playerStoreTab === tab
+                  className={`px-4 py-1.5 text-xs font-bold rounded transition-all capitalize ${playerStoreTab === tab
                       ? "bg-amber-600 text-black border border-amber-400"
                       : "bg-stone-900/60 text-stone-400 border border-stone-800 hover:bg-stone-800"
-                  }`}>
+                    }`}>
                   {tab === "buy" ? "🛒 Buy Items" : tab === "sell" ? "💰 Sell Items" : tab === "workers" ? "👷 Workers" : "📜 Land Expansions"}
                 </button>
               ))}
@@ -5071,11 +5040,10 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                               return next;
                             });
                           }}
-                          className={`flex items-center gap-2 p-2 rounded border text-left transition-all ${
-                            canAfford
+                          className={`flex items-center gap-2 p-2 rounded border text-left transition-all ${canAfford
                               ? "bg-amber-950/40 border-amber-900/50 hover:bg-amber-900/40 hover:border-amber-600"
                               : "bg-stone-950/40 border-stone-900/40 opacity-50 cursor-not-allowed"
-                          }`}>
+                            }`}>
                           <span className="text-2xl">{item.iconSymbol || "📦"}</span>
                           <div className="overflow-hidden">
                             <div className="text-xs font-bold text-stone-200 truncate">{item.name}</div>
@@ -5112,11 +5080,10 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                             return next;
                           });
                         }}
-                        className={`relative flex flex-col items-center justify-center h-14 rounded border transition-all ${
-                          item
+                        className={`relative flex flex-col items-center justify-center h-14 rounded border transition-all ${item
                             ? "bg-amber-950/30 border-amber-900/50 hover:bg-amber-900/40 hover:border-amber-600 cursor-pointer"
                             : "bg-stone-950/40 border-stone-900/40 opacity-30 cursor-not-allowed"
-                        }`}>
+                          }`}>
                         {item ? (
                           <>
                             <span className="text-xl">{item.iconSymbol || "📦"}</span>
@@ -5176,8 +5143,8 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                                 subX: cabin.x,
                                 subY: cabin.y,
                                 task: "idle",
-                  role: "farming",
-                  inventory: null,
+                                role: "farming",
+                                inventory: null,
                                 energy: 100,
                                 hasEatenToday: false,
                                 walkTimer: Math.random() * 3 + 2,
@@ -5189,11 +5156,10 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                               return next;
                             });
                           }}
-                          className={`p-2 rounded border text-center text-xs transition-all ${
-                            state.coins >= 1000
+                          className={`p-2 rounded border text-center text-xs transition-all ${state.coins >= 1000
                               ? "bg-amber-700/40 border-amber-700/60 hover:bg-amber-600/50 text-amber-200"
                               : "bg-stone-900/40 border-stone-800 text-stone-600 cursor-not-allowed"
-                          }`}>
+                            }`}>
                           <div className="text-2xl mb-1">👷</div>
                           <div className="font-bold">{name}</div>
                           <div className="text-amber-400 font-bold text-[10px]">1,000g</div>
@@ -5240,17 +5206,16 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
               {playerStoreTab === "land" && (
                 <div className="p-3 space-y-4">
                   <p className="text-xs text-amber-200/60">Expand your farm by purchasing new land parcels.</p>
-                  
+
                   <div className="grid grid-cols-2 gap-3">
                     {LAND_PARCELS.map(parcel => {
                       const owned = (state.purchasedLands || []).includes(parcel.id);
                       const canAfford = state.coins >= parcel.cost;
-                      
+
                       return (
-                        <div key={parcel.id} className={`p-3 rounded-lg border-2 flex flex-col relative transition-all ${
-                          owned ? "bg-amber-950/20 border-amber-900/40 opacity-70" :
-                          "bg-[#1e120c] border-amber-900/60 hover:border-amber-500 hover:bg-[#2a170d]"
-                        }`}>
+                        <div key={parcel.id} className={`p-3 rounded-lg border-2 flex flex-col relative transition-all ${owned ? "bg-amber-950/20 border-amber-900/40 opacity-70" :
+                            "bg-[#1e120c] border-amber-900/60 hover:border-amber-500 hover:bg-[#2a170d]"
+                          }`}>
                           <div className="flex gap-3 mb-2">
                             <div className="text-3xl shrink-0 bg-black/30 p-2 rounded-lg flex items-center justify-center">
                               {parcel.icon}
@@ -5261,7 +5226,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                               <div className="text-[9px] text-stone-500 mt-1">Area: {parcel.width}x{parcel.height} ({(parcel.width * parcel.height)} tiles)</div>
                             </div>
                           </div>
-                          
+
                           <div className="mt-auto pt-3 flex items-center justify-between border-t border-amber-900/30">
                             {owned ? (
                               <span className="text-emerald-500 text-xs font-bold ml-auto flex items-center gap-1">
@@ -5272,30 +5237,29 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                                 <span className={`text-xs font-bold flex items-center gap-1 ${canAfford ? 'text-amber-400' : 'text-red-400'}`}>
                                   {parcel.cost}g
                                 </span>
-                                <button 
+                                <button
                                   disabled={!canAfford}
                                   onClick={() => {
                                     setState(prev => {
                                       const next = structuredClone(prev);
                                       if (next.coins < parcel.cost) return next;
-                                      
+
                                       next.coins -= parcel.cost;
                                       if (!next.purchasedLands) next.purchasedLands = [];
                                       next.purchasedLands.push(parcel.id);
-                                      
+
                                       // Apply terrain changes for this parcel
                                       applyLandPurchase(next.tiles, parcel);
-                                      
+
                                       toast.success(`Purchased ${parcel.name}! The land has been cleared and prepared.`);
                                       gameAudio.playCoin();
                                       return next;
                                     });
                                   }}
-                                  className={`px-3 py-1.5 text-[10px] font-bold rounded ${
-                                    canAfford 
-                                      ? "bg-amber-600 text-black hover:bg-amber-500" 
+                                  className={`px-3 py-1.5 text-[10px] font-bold rounded ${canAfford
+                                      ? "bg-amber-600 text-black hover:bg-amber-500"
                                       : "bg-stone-800 text-stone-500 cursor-not-allowed"
-                                  }`}
+                                    }`}
                                 >
                                   PURCHASE DEED
                                 </button>
@@ -5377,9 +5341,8 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                         if (!next.workerAssignments) next.workerAssignments = {};
                         next.workerAssignments[w.id] = assigned ? "farm" : "research_center";
                         return next;
-                      })} className={`px-3 py-1.5 rounded border text-xs font-bold transition-all flex items-center gap-1 ${
-                        assigned ? "bg-violet-700/50 border-violet-500 text-violet-200" : "bg-stone-900/60 border-stone-700 text-stone-400 hover:bg-stone-800"
-                      }`}>
+                      })} className={`px-3 py-1.5 rounded border text-xs font-bold transition-all flex items-center gap-1 ${assigned ? "bg-violet-700/50 border-violet-500 text-violet-200" : "bg-stone-900/60 border-stone-700 text-stone-400 hover:bg-stone-800"
+                        }`}>
                         <span>👷</span> {w.name} {assigned ? "🔬" : "🌾"}
                       </button>
                     );
@@ -5411,15 +5374,14 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                           return next;
                         });
                       }}
-                      className={`p-3 rounded-lg border-2 cursor-pointer transition-all relative ${
-                        unlocked
+                      className={`p-3 rounded-lg border-2 cursor-pointer transition-all relative ${unlocked
                           ? "bg-violet-950/50 border-violet-500/60 opacity-80"
                           : isActive
-                          ? "bg-fuchsia-950/60 border-fuchsia-400 shadow-[0_0_15px_rgba(192,38,211,0.3)] animate-pulse"
-                          : canResearch
-                          ? "bg-[#1e1535] border-violet-800/60 hover:border-violet-500 hover:bg-[#261c45]"
-                          : "bg-stone-950/40 border-stone-800/40 opacity-40 cursor-not-allowed"
-                      }`}>
+                            ? "bg-fuchsia-950/60 border-fuchsia-400 shadow-[0_0_15px_rgba(192,38,211,0.3)] animate-pulse"
+                            : canResearch
+                              ? "bg-[#1e1535] border-violet-800/60 hover:border-violet-500 hover:bg-[#261c45]"
+                              : "bg-stone-950/40 border-stone-800/40 opacity-40 cursor-not-allowed"
+                        }`}>
                       <div className="flex items-start gap-2">
                         <span className="text-3xl shrink-0">{tech.icon}</span>
                         <div className="flex-1 overflow-hidden">

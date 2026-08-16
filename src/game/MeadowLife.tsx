@@ -343,26 +343,36 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
 
   // Fullscreen state and canvas size
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+  const [showTouchControls, setShowTouchControls] = useState(false);
   const [canvasSize, setCanvasSize] = useState({ width: 704, height: 480 });
   const mainContainerRef = useRef<HTMLDivElement | null>(null);
   // Zoning Mode
   const [zoningMode, setZoningMode] = useState<"none" | "farming" | "mining" | "woodcutting" | "water" | "erase">("none");
   const isDraggingZone = useRef(false);
 
-
   // Hovered item for tooltips inspection
   const [hoveredItem, setHoveredItem] = useState<Item | null>(null);
 
   const chargingToolRef = useRef<{ toolId: string; startTime: number; maxLevel: number } | null>(null);
+
+  // Detect mobile device on mount
+  useEffect(() => {
+    const checkMobile = () => {
+      const isTouch = typeof window !== "undefined" && ("ontouchstart" in window || navigator.maxTouchPoints > 0 || window.innerWidth < 768);
+      setIsMobile(isTouch);
+      setShowTouchControls(isTouch);
+    };
+    checkMobile();
+    window.addEventListener("resize", checkMobile);
+    return () => window.removeEventListener("resize", checkMobile);
+  }, []);
 
   // Sync isFullscreen with standard document events (e.g. Esc key exits fullscreen)
   useEffect(() => {
     const handleFullscreenChange = () => {
       const isCurrentlyFullscreen = !!document.fullscreenElement;
       setIsFullscreen(isCurrentlyFullscreen);
-      if (!isCurrentlyFullscreen) {
-        setCanvasSize({ width: 704, height: 480 });
-      }
     };
     document.addEventListener("fullscreenchange", handleFullscreenChange);
     return () => {
@@ -370,13 +380,20 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
     };
   }, []);
 
-  // Update canvas size dynamically when fullscreen is active
+  // Update canvas size dynamically when fullscreen or mobile viewport is active
   useEffect(() => {
     const updateSize = () => {
       if (isFullscreen) {
         setCanvasSize({ width: window.innerWidth, height: window.innerHeight });
       } else {
-        setCanvasSize({ width: 704, height: 480 });
+        const availWidth = Math.min(window.innerWidth - 16, 704);
+        const availHeight = isMobile
+          ? Math.min(window.innerHeight - (showTouchControls ? 230 : 160), 480)
+          : 480;
+        setCanvasSize({
+          width: Math.max(320, availWidth),
+          height: Math.max(280, availHeight)
+        });
       }
     };
 
@@ -385,7 +402,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
     return () => {
       window.removeEventListener("resize", updateSize);
     };
-  }, [isFullscreen]);
+  }, [isFullscreen, isMobile, showTouchControls]);
 
   const toggleFullscreen = async () => {
     if (!mainContainerRef.current) return;
@@ -1779,11 +1796,8 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
     hoveredTileRef.current = null;
   };
 
-  const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
+  const handleTileInteraction = (coords: { x: number; y: number }) => {
     if (zoningMode !== "none") return;
-    const coords = getMouseTileCoords(e.clientX, e.clientY);
-    if (!coords) return;
-
     const curState = stateRef.current;
     const p = curState.player;
     const dist = Math.abs(coords.x - p.x) + Math.abs(coords.y - p.y);
@@ -1815,7 +1829,23 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
       tile.kind === "house_bed" ||
       (tile.kind === "placed_item" && (
         tile.placedItemId === "furnace" ||
+        tile.placedItemId === "stone_furnace" ||
+        tile.placedItemId === "steel_furnace" ||
+        tile.placedItemId === "electric_furnace" ||
+        tile.placedItemId?.startsWith("assembling_machine") ||
+        tile.placedItemId === "chemical_plant" ||
+        tile.placedItemId === "burner_drill" ||
+        tile.placedItemId === "electric_drill" ||
+        tile.placedItemId === "science_lab" ||
+        tile.placedItemId === "generator" ||
+        tile.placedItemId === "boiler" ||
+        tile.placedItemId === "solar_panel" ||
+        tile.placedItemId === "battery" ||
+        tile.placedItemId === "power_pole" ||
         tile.placedItemId === "chest" ||
+        tile.placedItemId === "iron_chest" ||
+        tile.placedItemId === "steel_chest" ||
+        tile.placedItemId === "logistics_chest" ||
         tile.placedItemId === "water_tank" ||
         tile.placedItemId === "mailbox" ||
         tile.placedItemId === "worker_cabin" ||
@@ -1940,6 +1970,20 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
         }
         return next;
       });
+    }
+  };
+
+  const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (zoningMode !== "none") return;
+    const coords = getMouseTileCoords(e.clientX, e.clientY);
+    if (coords) handleTileInteraction(coords);
+  };
+
+  const handleCanvasTouchStart = (e: React.TouchEvent<HTMLCanvasElement>) => {
+    if (e.touches.length === 1) {
+      const touch = e.touches[0];
+      const coords = getMouseTileCoords(touch.clientX, touch.clientY);
+      if (coords) handleTileInteraction(coords);
     }
   };
 
@@ -2576,9 +2620,10 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
           onMouseMove={handleCanvasMouseMove}
           onMouseDown={handleCanvasMouseDown}
           onMouseUp={handleCanvasMouseUp}
+          onTouchStart={handleCanvasTouchStart}
           onMouseLeave={() => { handleCanvasMouseLeave(); isDraggingZone.current = false; }}
           onClick={handleCanvasClick}
-          style={{ width: "100%", height: "100%", display: "block", imageRendering: "pixelated", cursor: "crosshair" }}
+          style={{ width: "100%", height: "100%", display: "block", imageRendering: "pixelated", cursor: "crosshair", touchAction: "none" }}
         />
 
         {/* Zoning Toolbar */}
@@ -2611,7 +2656,16 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
         )}
 
         {/* Floating Top-Left Action Bar */}
-        <div className="absolute top-3 left-3 z-20 flex items-center gap-1.5 bg-[#202224]/80 border border-slate-700 p-1 font-mono shadow-md">
+        <div className="absolute top-3 left-3 z-20 flex items-center gap-1.5 bg-[#202224]/80 border border-slate-700 p-1 font-mono shadow-md flex-wrap max-w-[85%] sm:max-w-none">
+          {/* Mobile Controls Toggle Button */}
+          <button
+            onClick={() => setShowTouchControls((prev) => !prev)}
+            title="Toggle Mobile Touch Controls"
+            className={`w-8 h-8 flex items-center justify-center bg-[#2a2c2e] hover:bg-[#ff9200]/20 border transition-all cursor-pointer font-bold text-xs ${showTouchControls ? "border-emerald-500 text-emerald-400 bg-emerald-500/10" : "border-slate-600 text-slate-300"}`}
+          >
+            📱
+          </button>
+
           {/* Backpack Journal Button */}
           <button
             onClick={() => { setInventoryOpen(true); setActiveTab("inventory"); }}
@@ -2637,7 +2691,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
             className="h-8 px-2 flex items-center justify-center gap-1.5 bg-[#2a2c2e] hover:bg-[#38b2ac]/20 border border-slate-600 hover:border-[#38b2ac] text-slate-100 transition-all cursor-pointer font-bold text-xs"
           >
             <Users className="h-4 w-4 text-[#38b2ac]" />
-            <span className="text-[#38b2ac]">
+            <span className="text-[#38b2ac] hidden sm:inline">
               {state.currentRoomCode ? `[${state.currentRoomCode}]` : "🌐 Rooms"}
             </span>
           </button>
@@ -2670,7 +2724,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
             className="h-8 px-2 flex items-center justify-center gap-1 bg-[#2a2c2e] hover:bg-[#22d3ee]/20 border border-slate-600 hover:border-[#22d3ee] text-slate-100 transition-all cursor-pointer font-bold text-xs"
           >
             <HelpCircle className="h-4 w-4 text-[#22d3ee]" />
-            <span className="text-[#22d3ee]">About & Cheats (H)</span>
+            <span className="text-[#22d3ee] hidden sm:inline">About & Cheats (H)</span>
           </button>
 
           {/* Cheat Console Button (/) */}
@@ -2831,12 +2885,141 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
           </div>
         )}
 
+        {/* Mobile Virtual D-Pad & Action Controls Overlay */}
+        {showTouchControls && (
+          <>
+            {/* Virtual D-Pad (Bottom-Left) */}
+            <div className="absolute bottom-16 left-2 sm:left-4 z-30 flex flex-col items-center select-none pointer-events-auto touch-none opacity-90 hover:opacity-100 transition-opacity">
+              {/* Up Button */}
+              <button
+                onTouchStart={(e) => { e.preventDefault(); pressedKeysRef.current.add("w"); }}
+                onTouchEnd={(e) => { e.preventDefault(); pressedKeysRef.current.delete("w"); }}
+                onMouseDown={() => pressedKeysRef.current.add("w")}
+                onMouseUp={() => pressedKeysRef.current.delete("w")}
+                className="w-11 h-11 bg-[#1a222d]/90 active:bg-[#ff9200]/70 border-2 border-[#3b4c63] active:border-[#ff9200] rounded-t-lg flex items-center justify-center text-white text-base shadow-xl active:scale-95 transition-transform"
+              >
+                ▲
+              </button>
+              <div className="flex gap-2 -my-0.5">
+                {/* Left Button */}
+                <button
+                  onTouchStart={(e) => { e.preventDefault(); pressedKeysRef.current.add("a"); }}
+                  onTouchEnd={(e) => { e.preventDefault(); pressedKeysRef.current.delete("a"); }}
+                  onMouseDown={() => pressedKeysRef.current.add("a")}
+                  onMouseUp={() => pressedKeysRef.current.delete("a")}
+                  className="w-11 h-11 bg-[#1a222d]/90 active:bg-[#ff9200]/70 border-2 border-[#3b4c63] active:border-[#ff9200] rounded-l-lg flex items-center justify-center text-white text-base shadow-xl active:scale-95 transition-transform"
+                >
+                  ◀
+                </button>
+                {/* Center Core */}
+                <div className="w-9 h-9 bg-[#11161d]/90 rounded-full border border-slate-700/60 flex items-center justify-center text-[11px] text-stone-500 font-bold">
+                  🕹️
+                </div>
+                {/* Right Button */}
+                <button
+                  onTouchStart={(e) => { e.preventDefault(); pressedKeysRef.current.add("d"); }}
+                  onTouchEnd={(e) => { e.preventDefault(); pressedKeysRef.current.delete("d"); }}
+                  onMouseDown={() => pressedKeysRef.current.add("d")}
+                  onMouseUp={() => pressedKeysRef.current.delete("d")}
+                  className="w-11 h-11 bg-[#1a222d]/90 active:bg-[#ff9200]/70 border-2 border-[#3b4c63] active:border-[#ff9200] rounded-r-lg flex items-center justify-center text-white text-base shadow-xl active:scale-95 transition-transform"
+                >
+                  ▶
+                </button>
+              </div>
+              {/* Down Button */}
+              <button
+                onTouchStart={(e) => { e.preventDefault(); pressedKeysRef.current.add("s"); }}
+                onTouchEnd={(e) => { e.preventDefault(); pressedKeysRef.current.delete("s"); }}
+                onMouseDown={() => pressedKeysRef.current.add("s")}
+                onMouseUp={() => pressedKeysRef.current.delete("s")}
+                className="w-11 h-11 bg-[#1a222d]/90 active:bg-[#ff9200]/70 border-2 border-[#3b4c63] active:border-[#ff9200] rounded-b-lg flex items-center justify-center text-white text-base shadow-xl active:scale-95 transition-transform"
+              >
+                ▼
+              </button>
+            </div>
+
+            {/* Mobile Action Controls (Bottom-Right) */}
+            <div className="absolute bottom-16 right-2 sm:right-4 z-30 flex flex-col items-end gap-2 select-none pointer-events-auto touch-none opacity-90 hover:opacity-100 transition-opacity">
+              <div className="flex gap-1.5">
+                {/* Rotate Button (R) */}
+                <button
+                  onClick={() => {
+                    setState((prev) => {
+                      const dirs: ("right" | "down" | "left" | "up")[] = ["right", "down", "left", "up"];
+                      const currentIdx = dirs.indexOf(prev.placementDirection || "right");
+                      const nextDir = dirs[(currentIdx + 1) % dirs.length];
+                      toast(`Placement Direction: ${nextDir.toUpperCase()} 🔄`);
+                      return { ...prev, placementDirection: nextDir };
+                    });
+                  }}
+                  className="w-11 h-11 bg-amber-950/90 active:bg-amber-600 border-2 border-amber-500/70 text-amber-300 rounded-full flex flex-col items-center justify-center shadow-lg active:scale-90 transition-transform font-bold text-[10px]"
+                >
+                  <span className="text-sm">🔄</span>
+                  <span className="text-[7px] leading-none font-mono">ROT</span>
+                </button>
+
+                {/* Inspect / Talk Button (F) */}
+                <button
+                  onClick={() => {
+                    const f = frontTile(state);
+                    if (f) handleTileInteraction(f);
+                  }}
+                  className="w-11 h-11 bg-blue-950/90 active:bg-blue-600 border-2 border-blue-500/70 text-blue-300 rounded-full flex flex-col items-center justify-center shadow-lg active:scale-90 transition-transform font-bold text-[10px]"
+                >
+                  <span className="text-sm">💬</span>
+                  <span className="text-[7px] leading-none font-mono">INSP</span>
+                </button>
+
+                {/* Bag / Crafting Button (I) */}
+                <button
+                  onClick={() => { setInventoryOpen(true); setActiveTab("inventory"); }}
+                  className="w-11 h-11 bg-purple-950/90 active:bg-purple-600 border-2 border-purple-500/70 text-purple-300 rounded-full flex flex-col items-center justify-center shadow-lg active:scale-90 transition-transform font-bold text-[10px]"
+                >
+                  <span className="text-sm">🎒</span>
+                  <span className="text-[7px] leading-none font-mono">BAG</span>
+                </button>
+              </div>
+
+              {/* Primary Action Button (USE / ACTION / PLACE) */}
+              <button
+                onClick={() => {
+                  setState((prev) => {
+                    const next = structuredClone(prev);
+                    const act = interact(next, 1);
+                    if (act.particles.length > 0) particlesRef.current.push(...act.particles);
+                    if (act.message) toast(act.message);
+                    return next;
+                  });
+                }}
+                className="w-14 h-14 bg-gradient-to-br from-emerald-600 to-teal-700 active:from-emerald-500 active:to-teal-600 border-2 border-emerald-300 text-white rounded-full flex flex-col items-center justify-center shadow-2xl active:scale-95 transition-transform font-extrabold"
+              >
+                <span className="text-xl">⚡</span>
+                <span className="text-[8px] uppercase tracking-wider font-mono">ACTION</span>
+              </button>
+            </div>
+
+            {/* Quick Hotbar Slot Switchers for Mobile */}
+            <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-30 flex items-center justify-between w-[95%] max-w-[340px] pointer-events-none">
+              <button
+                onClick={() => setState((prev) => ({ ...prev, hotbarIndex: (prev.hotbarIndex - 1 + 10) % 10 }))}
+                className="pointer-events-auto w-8 h-8 bg-slate-900/90 border border-slate-600 active:bg-[#ff9200] text-white rounded-full flex items-center justify-center font-bold text-xs shadow-lg"
+              >
+                ◀
+              </button>
+              <button
+                onClick={() => setState((prev) => ({ ...prev, hotbarIndex: (prev.hotbarIndex + 1) % 10 }))}
+                className="pointer-events-auto w-8 h-8 bg-slate-900/90 border border-slate-600 active:bg-[#ff9200] text-white rounded-full flex items-center justify-center font-bold text-xs shadow-lg"
+              >
+                ▶
+              </button>
+            </div>
+          </>
+        )}
+
         {/* Floating monospaced guide helper in bottom left */}
-        <div className="absolute bottom-3 left-3 z-20 flex flex-col text-[8px] font-mono text-slate-500 leading-normal bg-black/30 p-1 pointer-events-none select-none">
+        <div className="absolute bottom-1 left-3 z-10 hidden sm:flex flex-col text-[8px] font-mono text-slate-500 leading-normal bg-black/30 p-1 pointer-events-none select-none">
           <span>KEYS 1-0: SELECT SLOT</span>
-          <span>SPACE / E: USE ITEM</span>
-          <span>F: TALK / SHOP / MAIL</span>
-          <span>I: BACKPACK JOURNAL</span>
+          <span>SHIFT: SPRINT</span>
         </div>
 
         {/* Floating HP & Energy Bars in Bottom Right */}

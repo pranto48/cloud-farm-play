@@ -1926,69 +1926,18 @@ export function isWorkerWalkable(t: Tile, workerRole?: string, workerX?: number,
   return isBaseWalkable;
 }
 
-export function tickFurnace(tile: Tile, dt: number): void {
-  if (!tile.chestInventory) {
-    tile.chestInventory = Array.from({ length: 3 }, () => null);
-  }
+// --- Factorio Industrial Automation Engine ---
 
-  const input = tile.chestInventory[0];
-  const fuel = tile.chestInventory[1];
-
-  const smeltRecipes: Record<string, string> = {
-    copper_ore: "copper_bar",
-    iron_ore: "iron_bar",
-    silver_ore: "silver_bar",
-    gold_ore: "gold_bar",
-    uranium_ore: "uranium_bar",
-  };
-
-  const currentInputId = input?.id;
-  const targetOutputId = currentInputId ? smeltRecipes[currentInputId] : null;
-
-  if (tile.smeltActive) {
-    if (tile.smeltTimer !== undefined) {
-      tile.smeltTimer -= dt;
-      if (tile.smeltTimer <= 0) {
-        tile.smeltActive = false;
-        tile.smeltTimer = 0;
-
-        if (tile.smeltOutputId) {
-          const outId = tile.smeltOutputId;
-          const outItem = createItem(outId, 1);
-          if (tile.chestInventory[2] === null) {
-            tile.chestInventory[2] = outItem;
-          } else if (tile.chestInventory[2].id === outId) {
-            tile.chestInventory[2].count += 1;
-          }
-        }
-        tile.smeltOutputId = undefined;
-      }
-    }
-  } else {
-    if (input && targetOutputId && input.count >= 3 && fuel && fuel.count >= 1 && (fuel.id === "coal" || fuel.id === "wood")) {
-      const outputSlot = tile.chestInventory[2];
-      if (outputSlot === null || (outputSlot.id === targetOutputId && outputSlot.count < 99)) {
-        if (input.count <= 3) {
-          tile.chestInventory[0] = null;
-        } else {
-          input.count -= 3;
-        }
-
-        if (fuel.count <= 1) {
-          tile.chestInventory[1] = null;
-        } else {
-          fuel.count -= 1;
-        }
-
-        tile.smeltActive = true;
-        tile.smeltTimer = 8;
-        tile.smeltMaxTime = 8;
-        tile.smeltOutputId = targetOutputId;
-      }
-    }
+export function getDirectionVector(dir?: "up" | "down" | "left" | "right"): { dx: number; dy: number } {
+  switch (dir) {
+    case "up": return { dx: 0, dy: -1 };
+    case "down": return { dx: 0, dy: 1 };
+    case "left": return { dx: -1, dy: 0 };
+    case "right":
+    default:
+      return { dx: 1, dy: 0 };
   }
 }
-
 
 export function isChestBuilding(placedItemId?: string): boolean {
   return (
@@ -2006,19 +1955,6 @@ export function getChestSlotCount(placedItemId?: string): number {
   if (placedItemId === "logistics_chest") return 60;
   if (placedItemId === "worker_cabin") return 6;
   return 12;
-}
-
-// --- Factorio Industrial Automation Engine ---
-
-export function getDirectionVector(dir?: "up" | "down" | "left" | "right"): { dx: number; dy: number } {
-  switch (dir) {
-    case "up": return { dx: 0, dy: -1 };
-    case "down": return { dx: 0, dy: 1 };
-    case "left": return { dx: -1, dy: 0 };
-    case "right":
-    default:
-      return { dx: 1, dy: 0 };
-  }
 }
 
 export function tickFurnace(tile: Tile, dt: number, powerSatisfaction = 1.0): void {
@@ -2093,24 +2029,6 @@ export function tickFurnace(tile: Tile, dt: number, powerSatisfaction = 1.0): vo
       }
     }
   }
-}
-
-export function isChestBuilding(placedItemId?: string): boolean {
-  return (
-    placedItemId === "chest" ||
-    placedItemId === "iron_chest" ||
-    placedItemId === "steel_chest" ||
-    placedItemId === "logistics_chest" ||
-    placedItemId === "worker_cabin"
-  );
-}
-
-export function getChestSlotCount(placedItemId?: string): number {
-  if (placedItemId === "iron_chest") return 24;
-  if (placedItemId === "steel_chest") return 48;
-  if (placedItemId === "logistics_chest") return 60;
-  if (placedItemId === "worker_cabin") return 6;
-  return 12;
 }
 
 // Factorio Transport Belt Simulation

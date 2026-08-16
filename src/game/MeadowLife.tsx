@@ -25,6 +25,8 @@ import {
   addItem,
   removeItem,
   deductItems,
+  getChestSlotCount,
+  isChestBuilding,
   TECHNOLOGIES,
   LAND_PARCELS,
   applyLandPurchase,

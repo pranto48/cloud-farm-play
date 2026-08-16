@@ -278,18 +278,25 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
   const recipesByCategory = useMemo(() => {
     return {
       logistics: CRAFTING_RECIPES.filter((r) =>
-        ["chest", "sprinkler_basic", "sprinkler_quality", "transport_belt", "inserter", "logistics_drone", "drone_hub", "drone_recharger", "power_pole"].includes(r.id)
+        ["transport_belt", "fast_transport_belt", "underground_belt", "splitter", "inserter", "fast_inserter", "long_inserter", "filter_inserter", "chest", "iron_chest", "steel_chest", "logistics_chest", "sprinkler_basic", "sprinkler_quality", "logistics_drone", "drone_hub"].includes(r.id)
       ),
       production: CRAFTING_RECIPES.filter((r) =>
-        ["furnace", "seed_maker", "research_center", "assembling_machine", "electric_drill", "generator", "solar_panel", "battery", "wood_cutter", "stone_cutter", "rocket_silo"].includes(r.id)
+        ["burner_drill", "electric_drill", "stone_furnace", "steel_furnace", "electric_furnace", "assembling_machine_1", "assembling_machine_2", "assembling_machine_3", "chemical_plant", "science_lab", "wood_cutter", "stone_cutter", "research_center", "player_store", "rocket_silo"].includes(r.id)
+      ),
+      intermediates: CRAFTING_RECIPES.filter((r) =>
+        ["iron_gear", "copper_wire", "steel_plate", "electronic_circuit", "plastic_bar", "sulfur", "advanced_circuit", "processing_unit", "engine_unit", "electric_engine", "flying_robot_frame", "automation_science_pack", "logistic_science_pack", "chemical_science_pack", "rocket_fuel", "rocket_part", "satellite"].includes(r.id)
+      ),
+      power: CRAFTING_RECIPES.filter((r) =>
+        ["power_pole", "medium_power_pole", "substation", "boiler", "generator", "solar_panel", "battery"].includes(r.id)
       ),
       materials: CRAFTING_RECIPES.filter((r) =>
-        ["iron_gear", "copper_wire", "electronic_circuit", "electrical_cable", "steel_plate", "iron_bar", "copper_bar", "silver_bar", "gold_bar", "rocket_fuel", "rocket_part", "satellite", "torch", "scarecrow", "player_store", "bed", "stone_path", "toolset"].includes(r.id)
+        ["iron_bar", "copper_bar", "gold_bar", "silver_bar", "uranium_bar", "torch", "scarecrow", "bed", "stone_path"].includes(r.id)
       ),
     };
   }, []);
 
   const [chestOpenTile, setChestOpenTile] = useState<{ x: number; y: number } | null>(null);
+  const [factorioInspectorTile, setFactorioInspectorTile] = useState<{ x: number; y: number } | null>(null);
   const [npcDialogue, setNpcDialogue] = useState<{ npcId: string; dialogue: string } | null>(null);
   const [sleepSummary, setSleepSummary] = useState<GameState["dailyEarnings"] | null>(null);
 
@@ -297,7 +304,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
   const [sleepConfirmOpen, setSleepConfirmOpen] = useState(false);
   const [shippingBinOpen, setShippingBinOpen] = useState(false);
   const [furnaceOpenTile, setFurnaceOpenTile] = useState<{ x: number; y: number } | null>(null);
-  const [craftingCategory, setCraftingCategory] = useState<"logistics" | "production" | "materials">("logistics");
+  const [craftingCategory, setCraftingCategory] = useState<"logistics" | "production" | "intermediates" | "power" | "materials">("logistics");
   const [craftingQueue, setCraftingQueue] = useState<{ id: string; recipeId: string; name: string; iconSymbol: string; iconColor: string; progress: number; duration: number; remainingTime: number }[]>([]);
   const [hoveredRecipe, setHoveredRecipe] = useState<Recipe | null>(null);
   const hoveredTileRef = useRef<{ x: number; y: number } | null>(null);
@@ -1287,8 +1294,19 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
         const idx = k === "0" ? 9 : parseInt(k) - 1;
         setState((prev) => ({ ...prev, hotbarIndex: idx }));
       }
-      // Dialogue talk
-      else if (k === "f") {
+      // 'R' Key: Rotate Placeable Object (Factorio Logistics)
+      else if (k === "r") {
+        e.preventDefault();
+        setState((prev) => {
+          const dirs: ("right" | "down" | "left" | "up")[] = ["right", "down", "left", "up"];
+          const currentIdx = dirs.indexOf(prev.placementDirection || "right");
+          const nextDir = dirs[(currentIdx + 1) % dirs.length];
+          toast(`Placement Direction: ${nextDir.toUpperCase()} 🔄`);
+          return { ...prev, placementDirection: nextDir };
+        });
+      }
+      // Dialogue talk / Machine Interact
+      else if (k === "f" || k === "e") {
         e.preventDefault();
         const f = frontTile(curState);
         if (!f) return;
@@ -1388,8 +1406,10 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
             setShopOpen(true);
           } else if (facingTile.kind === "house_bed") {
             setSleepConfirmOpen(true);
-          } else if (facingTile.kind === "placed_item" && facingTile.placedItemId === "furnace") {
+          } else if (facingTile.kind === "placed_item" && (facingTile.placedItemId === "furnace" || facingTile.placedItemId === "stone_furnace" || facingTile.placedItemId === "steel_furnace" || facingTile.placedItemId === "electric_furnace")) {
             setFurnaceOpenTile({ x: f.x, y: f.y });
+          } else if (facingTile.kind === "placed_item" && (facingTile.placedItemId?.startsWith("assembling_machine") || facingTile.placedItemId === "chemical_plant" || facingTile.placedItemId === "burner_drill" || facingTile.placedItemId === "electric_drill" || facingTile.placedItemId === "science_lab" || facingTile.placedItemId === "generator" || facingTile.placedItemId === "boiler" || facingTile.placedItemId === "solar_panel" || facingTile.placedItemId === "battery" || facingTile.placedItemId === "power_pole")) {
+            setFactorioInspectorTile({ x: f.x, y: f.y });
           } else if (facingTile.kind === "placed_item" && facingTile.placedItemId === "player_store") {
             setPlayerStoreTile({ x: f.x, y: f.y });
             setPlayerStoreTab("buy");
@@ -1398,7 +1418,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
             setResearchCenterOpen(true);
           } else if (facingTile.kind === "placed_item" && facingTile.placedItemId === "mailbox") {
             setMailboxOpen(true);
-          } else if (facingTile.kind === "placed_item" && (facingTile.placedItemId === "chest" || facingTile.placedItemId === "worker_cabin")) {
+          } else if (facingTile.kind === "placed_item" && (facingTile.placedItemId === "chest" || facingTile.placedItemId === "iron_chest" || facingTile.placedItemId === "steel_chest" || facingTile.placedItemId === "logistics_chest" || facingTile.placedItemId === "worker_cabin")) {
             setChestOpenTile({ x: f.x, y: f.y });
           } else if (!curState.inMine && !curState.inHouse && f.x === 18 && f.y === 29) {
             setShippingBinOpen(true);
@@ -1869,11 +1889,13 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
           setShopOpen(true);
         } else if (tile.kind === "house_bed") {
           setSleepConfirmOpen(true);
-        } else if (tile.kind === "placed_item" && tile.placedItemId === "furnace") {
+        } else if (tile.kind === "placed_item" && (tile.placedItemId === "furnace" || tile.placedItemId === "stone_furnace" || tile.placedItemId === "steel_furnace" || tile.placedItemId === "electric_furnace")) {
           setFurnaceOpenTile({ x: coords.x, y: coords.y });
+        } else if (tile.kind === "placed_item" && (tile.placedItemId?.startsWith("assembling_machine") || tile.placedItemId === "chemical_plant" || tile.placedItemId === "burner_drill" || tile.placedItemId === "electric_drill" || tile.placedItemId === "science_lab" || tile.placedItemId === "generator" || tile.placedItemId === "boiler" || tile.placedItemId === "solar_panel" || tile.placedItemId === "battery" || tile.placedItemId === "power_pole")) {
+          setFactorioInspectorTile({ x: coords.x, y: coords.y });
         } else if (tile.kind === "placed_item" && tile.placedItemId === "mailbox") {
           setMailboxOpen(true);
-        } else if (tile.kind === "placed_item" && (tile.placedItemId === "chest" ||
+        } else if (tile.kind === "placed_item" && (tile.placedItemId === "chest" || tile.placedItemId === "iron_chest" || tile.placedItemId === "steel_chest" || tile.placedItemId === "logistics_chest" ||
           tile.placedItemId === "water_tank" || tile.placedItemId === "worker_cabin")) {
           setChestOpenTile({ x: coords.x, y: coords.y });
         } else if (!curState.inMine && !curState.inHouse && coords.x === 18 && coords.y === 29) {
@@ -3635,46 +3657,66 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                 {/* Left side: Category Selectors & Recipe Grid */}
                 <div className="md:col-span-2 space-y-4">
                   {/* Factorio-style Tab buttons */}
-                  <div className="flex gap-1.5 border-b border-zinc-700 pb-2">
+                  <div className="flex flex-wrap gap-1.5 border-b border-zinc-700 pb-2">
                     <button
                       onClick={() => setCraftingCategory("logistics")}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 text-xs border font-bold transition-all ${craftingCategory === "logistics"
+                      className={`flex items-center gap-1 px-2.5 py-1 text-xs border font-bold transition-all ${craftingCategory === "logistics"
                           ? "bg-zinc-850 border-orange-500 text-orange-400 font-extrabold"
                           : "bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:bg-zinc-800"
                         }`}
                     >
-                      <Backpack className="h-3.5 w-3.5" />
+                      <span>⏩</span>
                       Logistics
                     </button>
                     <button
                       onClick={() => setCraftingCategory("production")}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 text-xs border font-bold transition-all ${craftingCategory === "production"
+                      className={`flex items-center gap-1 px-2.5 py-1 text-xs border font-bold transition-all ${craftingCategory === "production"
                           ? "bg-zinc-850 border-orange-500 text-orange-400 font-extrabold"
                           : "bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:bg-zinc-800"
                         }`}
                     >
-                      <Hammer className="h-3.5 w-3.5" />
+                      <span>🏭</span>
                       Production
                     </button>
                     <button
-                      onClick={() => setCraftingCategory("materials")}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 text-xs border font-bold transition-all ${craftingCategory === "materials"
+                      onClick={() => setCraftingCategory("intermediates")}
+                      className={`flex items-center gap-1 px-2.5 py-1 text-xs border font-bold transition-all ${craftingCategory === "intermediates"
                           ? "bg-zinc-850 border-orange-500 text-orange-400 font-extrabold"
                           : "bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:bg-zinc-800"
                         }`}
                     >
-                      <Shield className="h-3.5 w-3.5" />
+                      <span>⚙️</span>
+                      Intermediates
+                    </button>
+                    <button
+                      onClick={() => setCraftingCategory("power")}
+                      className={`flex items-center gap-1 px-2.5 py-1 text-xs border font-bold transition-all ${craftingCategory === "power"
+                          ? "bg-zinc-850 border-orange-500 text-orange-400 font-extrabold"
+                          : "bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:bg-zinc-800"
+                        }`}
+                    >
+                      <span>⚡</span>
+                      Power Grid
+                    </button>
+                    <button
+                      onClick={() => setCraftingCategory("materials")}
+                      className={`flex items-center gap-1 px-2.5 py-1 text-xs border font-bold transition-all ${craftingCategory === "materials"
+                          ? "bg-zinc-850 border-orange-500 text-orange-400 font-extrabold"
+                          : "bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:bg-zinc-800"
+                        }`}
+                    >
+                      <span>🧱</span>
                       Materials
                     </button>
                     <button
                       onClick={() => setCraftingCategory("cheats" as any)}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 text-xs border font-bold transition-all ${(craftingCategory as any) === "cheats"
+                      className={`flex items-center gap-1 px-2.5 py-1 text-xs border font-bold transition-all ${(craftingCategory as any) === "cheats"
                           ? "bg-purple-950 border-amber-400 text-amber-300 font-extrabold animate-pulse"
                           : "bg-purple-950/40 border-purple-900 text-purple-300 hover:bg-purple-900"
                         }`}
                     >
-                      <Zap className="h-3.5 w-3.5 text-amber-400" />
-                      ⚡ All Items Cheat
+                      <span>⚡</span>
+                      Cheats
                     </button>
                   </div>
 
@@ -4271,6 +4313,280 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
               <DialogFooter>
                 <Button variant="outline" className="text-xs" onClick={() => setChestOpenTile(null)}>
                   Close Chest
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        );
+      })()}
+
+      {/* FACTORIO MACHINE & AUTOMATION INSPECTOR DIALOG */}
+      {factorioInspectorTile && (() => {
+        const grid = state.inHouse ? state.houseGrid! : (state.inMine ? state.mineGrid : state.tiles);
+        const tile = grid[factorioInspectorTile.y]?.[factorioInspectorTile.x];
+        if (!tile || !tile.placedItemId) return null;
+
+        const id = tile.placedItemId;
+        const isAssembler = id.startsWith("assembling_machine") || id === "chemical_plant";
+        const isDrill = id === "burner_drill" || id === "electric_drill";
+        const isLab = id === "science_lab";
+        const isPower = id === "generator" || id === "boiler" || id === "solar_panel" || id === "battery" || id === "power_pole" || id === "medium_power_pole" || id === "substation";
+
+        const machineTitle = isAssembler
+          ? (id === "assembling_machine_3" ? "Assembling Machine 3 (Yellow)" : id === "assembling_machine_2" ? "Assembling Machine 2 (Blue)" : id === "chemical_plant" ? "Chemical Processing Plant" : "Assembling Machine 1 (Gray)")
+          : isDrill
+            ? (id === "electric_drill" ? "Electric Mining Drill" : "Burner Mining Drill")
+            : isLab
+              ? "Science Research Lab"
+              : isPower
+                ? (id === "generator" ? "Steam Power Generator (500kW)" : id === "solar_panel" ? "Solar Panel (60kW)" : id === "battery" ? "Accumulator Battery (5MJ)" : "Electric Power Pole")
+                : "Industrial Machine";
+
+        const powerStats = state.powerGridStats || { capacityKw: 0, demandKw: 0, satisfaction: 1.0 };
+        const powerPct = Math.round((powerStats.satisfaction || 1.0) * 100);
+
+        return (
+          <Dialog open={true} onOpenChange={() => setFactorioInspectorTile(null)}>
+            <DialogContent container={mainContainerRef.current} className="max-w-xl bg-[#14181f] border-2 border-[#ff9200]/70 text-stone-100 rounded-sm font-mono shadow-[0_0_25px_rgba(0,0,0,0.9)]">
+              <DialogHeader>
+                <DialogTitle className="text-base font-extrabold flex items-center justify-between text-[#ff9200] border-b border-[#2d3644] pb-2 uppercase tracking-wider">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xl">⚙️</span>
+                    <span>{machineTitle}</span>
+                  </div>
+                  <Badge variant="outline" className={`text-[10px] font-bold ${powerPct > 80 ? "border-emerald-500/50 text-emerald-400 bg-emerald-950/40" : "border-amber-500/50 text-amber-400 bg-amber-950/40"}`}>
+                    ⚡ Power: {powerPct}%
+                  </Badge>
+                </DialogTitle>
+              </DialogHeader>
+
+              <div className="space-y-4 py-1">
+                {/* Power Grid Status Meter */}
+                <div className="p-2.5 bg-[#1b222c] border border-[#2d3a4d] rounded-xs flex items-center justify-between text-xs">
+                  <div className="flex items-center gap-3">
+                    <span className="text-emerald-400 font-bold">Grid Capacity: {powerStats.capacityKw} kW</span>
+                    <span className="text-amber-400 font-bold">Demand: {powerStats.demandKw} kW</span>
+                  </div>
+                  <div className="w-28 bg-[#10141a] h-2.5 border border-[#3e4c61] rounded-xs overflow-hidden">
+                    <div
+                      className="bg-emerald-500 h-full transition-all duration-200"
+                      style={{ width: `${Math.min(100, powerPct)}%` }}
+                    />
+                  </div>
+                </div>
+
+                {/* 1. ASSEMBLING MACHINE RECIPE & INVENTORY */}
+                {isAssembler && (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-stone-300 uppercase">Assigned Recipe:</span>
+                      <select
+                        value={tile.assemblerRecipeId || "iron_gear"}
+                        onChange={(e) => {
+                          const newRecipeId = e.target.value;
+                          setState((prev) => {
+                            const next = structuredClone(prev);
+                            const g = next.inHouse ? next.houseGrid! : (next.inMine ? next.mineGrid : next.tiles);
+                            const t = g[factorioInspectorTile.y]?.[factorioInspectorTile.x];
+                            if (t) {
+                              t.assemblerRecipeId = newRecipeId;
+                              t.assemblerProgress = 0;
+                            }
+                            return next;
+                          });
+                        }}
+                        className="bg-[#242d3b] border border-[#3e4f68] text-amber-300 text-xs px-2.5 py-1 rounded-xs font-bold font-mono focus:outline-none focus:border-[#ff9200]"
+                      >
+                        {CRAFTING_RECIPES.map((r) => (
+                          <option key={r.id} value={r.id}>
+                            {r.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Progress Bar */}
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-[10px] text-stone-400">
+                        <span>Crafting Progress</span>
+                        <span>{Math.round((tile.assemblerProgress || 0) * 100)}%</span>
+                      </div>
+                      <div className="w-full bg-[#10141a] h-3 border border-[#3e4c61] rounded-xs overflow-hidden">
+                        <div
+                          className="bg-gradient-to-r from-amber-500 to-emerald-400 h-full transition-all duration-100"
+                          style={{ width: `${Math.round((tile.assemblerProgress || 0) * 100)}%` }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Machine Input & Output Inventory Slots */}
+                    <div className="grid grid-cols-2 gap-3 bg-[#111419] p-3 rounded-xs border border-[#263140]">
+                      <div>
+                        <span className="text-[10px] text-stone-400 font-bold block mb-1">INPUT SLOTS (0-3)</span>
+                        <div className="grid grid-cols-2 gap-1.5">
+                          {[0, 1, 2, 3].map((slotIdx) => {
+                            const item = tile.chestInventory?.[slotIdx];
+                            return (
+                              <button
+                                key={slotIdx}
+                                onClick={() => handleSlotClick(slotIdx, "chest")}
+                                onContextMenu={(e) => handleSlotRightClick(e, slotIdx, "chest")}
+                                onMouseEnter={() => item && setHoveredItem(item)}
+                                onMouseLeave={() => setHoveredItem(null)}
+                                className="relative flex items-center justify-center h-12 bg-[#1e2530] hover:bg-[#283242] border border-[#3c4a5e] rounded-xs transition-all"
+                              >
+                                {item ? (
+                                  <>
+                                    <span className="text-xl">{item.iconSymbol || "📦"}</span>
+                                    <span className="absolute bottom-0.5 right-1 px-1 bg-black/70 rounded text-[9px] font-bold text-white">
+                                      {item.count}
+                                    </span>
+                                  </>
+                                ) : (
+                                  <span className="text-[10px] text-stone-600">Empty</span>
+                                )}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      <div>
+                        <span className="text-[10px] text-emerald-400 font-bold block mb-1">OUTPUT SLOT (4)</span>
+                        <div className="flex items-center justify-center h-[100px] bg-[#1a212b] border-2 border-emerald-500/40 rounded-xs">
+                          {tile.chestInventory?.[4] ? (
+                            <button
+                              onClick={() => handleSlotClick(4, "chest")}
+                              onContextMenu={(e) => handleSlotRightClick(e, 4, "chest")}
+                              onMouseEnter={() => tile.chestInventory?.[4] && setHoveredItem(tile.chestInventory[4])}
+                              onMouseLeave={() => setHoveredItem(null)}
+                              className="relative flex flex-col items-center justify-center w-full h-full"
+                            >
+                              <span className="text-3xl">{tile.chestInventory[4]!.iconSymbol || "⚙️"}</span>
+                              <span className="text-xs font-bold text-amber-300 mt-1">{tile.chestInventory[4]!.name}</span>
+                              <span className="absolute bottom-1 right-2 px-1.5 bg-emerald-950 border border-emerald-500 rounded text-[10px] font-bold text-emerald-300">
+                                x{tile.chestInventory[4]!.count}
+                              </span>
+                            </button>
+                          ) : (
+                            <span className="text-xs text-stone-500 font-bold">Producing...</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* 2. MINING DRILL INSPECTOR */}
+                {isDrill && (
+                  <div className="space-y-3 bg-[#111419] p-3 rounded-xs border border-[#263140]">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-stone-300 font-bold">Target Ore Deposit:</span>
+                      <span className="text-amber-400 font-extrabold uppercase">{tile.drillTargetOre || "stone"}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-stone-300 font-bold">Ejection Direction:</span>
+                      <span className="text-emerald-400 font-extrabold uppercase">{tile.direction || "right"}</span>
+                    </div>
+
+                    {id === "burner_drill" && (
+                      <div>
+                        <span className="text-[10px] text-stone-400 font-bold block mb-1">COAL FUEL SLOT</span>
+                        <button
+                          onClick={() => handleSlotClick(0, "chest")}
+                          onContextMenu={(e) => handleSlotRightClick(e, 0, "chest")}
+                          className="relative flex items-center justify-center h-12 w-16 bg-[#1e2530] border border-amber-500/40 rounded-xs"
+                        >
+                          {tile.chestInventory?.[0] ? (
+                            <>
+                              <span className="text-xl">🪵</span>
+                              <span className="absolute bottom-0.5 right-1 px-1 bg-black/70 rounded text-[9px] font-bold text-white">
+                                {tile.chestInventory[0]!.count}
+                              </span>
+                            </>
+                          ) : (
+                            <span className="text-[10px] text-stone-600">Coal</span>
+                          )}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* 3. SCIENCE LAB INSPECTOR */}
+                {isLab && (
+                  <div className="space-y-3 bg-[#111419] p-3 rounded-xs border border-[#263140]">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-stone-300 font-bold">Active Research:</span>
+                      <span className="text-purple-400 font-extrabold">{state.activeResearchId ? TECHNOLOGIES.find(t => t.id === state.activeResearchId)?.name : "No Research Selected"}</span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-stone-400 font-bold block mb-1">SCIENCE PACK INPUT SLOTS (Red, Green, Blue)</span>
+                      <div className="grid grid-cols-6 gap-1.5">
+                        {[0, 1, 2, 3, 4, 5].map((slotIdx) => {
+                          const item = tile.chestInventory?.[slotIdx];
+                          return (
+                            <button
+                              key={slotIdx}
+                              onClick={() => handleSlotClick(slotIdx, "chest")}
+                              onContextMenu={(e) => handleSlotRightClick(e, slotIdx, "chest")}
+                              className="relative flex items-center justify-center h-12 bg-[#1e2530] hover:bg-[#283242] border border-[#3c4a5e] rounded-xs transition-all"
+                            >
+                              {item ? (
+                                <>
+                                  <span className="text-xl">{item.iconSymbol || "🧪"}</span>
+                                  <span className="absolute bottom-0.5 right-1 px-1 bg-black/70 rounded text-[9px] font-bold text-white">
+                                    {item.count}
+                                  </span>
+                                </>
+                              ) : (
+                                <span className="text-[10px] text-stone-600">🧪</span>
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Player Inventory Pack (for transferring items) */}
+                <div>
+                  <h4 className="text-xs font-bold text-stone-400 uppercase tracking-wider mb-1.5">Player Inventory</h4>
+                  <div className="grid grid-cols-6 gap-2 bg-[#121417] p-3 rounded-sm border border-[#29303c]">
+                    {state.inventory.map((item, idx) => (
+                      <button
+                        key={idx}
+                        onClick={(e) => handleSlotClick(idx, "inventory", e)}
+                        onContextMenu={(e) => handleSlotRightClick(e, idx, "inventory")}
+                        onMouseEnter={() => item && setHoveredItem(item)}
+                        onMouseLeave={() => setHoveredItem(null)}
+                        className={`relative flex items-center justify-center h-12 rounded-xs border-2 transition-all ${item
+                            ? "bg-[#252a32] hover:bg-[#2f3642] border-[#3e4856] hover:border-[#ff9200]"
+                            : "bg-[#181a1e] border-[#29303c]"
+                          }`}
+                      >
+                        {item ? (
+                          <>
+                            <span className="text-xl filter drop-shadow">{item.iconSymbol || "📦"}</span>
+                            {item.count > 1 && (
+                              <span className="absolute bottom-0.5 right-0.5 px-1 bg-black/70 text-white font-extrabold rounded-xs text-[9px] font-mono leading-none border border-slate-700">
+                                {item.count}
+                              </span>
+                            )}
+                          </>
+                        ) : (
+                          <span className="text-xs opacity-10 text-stone-400">-</span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <DialogFooter>
+                <Button variant="outline" className="text-xs" onClick={() => setFactorioInspectorTile(null)}>
+                  Close Inspector
                 </Button>
               </DialogFooter>
             </DialogContent>
@@ -5421,14 +5737,17 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
 
       {/* 6. INFO CARD */}
       <div className="w-full max-w-[704px] p-4 bg-[#0d1117] border-2 border-[#1e293b] text-xs text-slate-300 leading-relaxed rounded-lg shadow-md font-mono">
-        <p className="font-bold text-emerald-400 mb-1">🎮 Meadow Life — Keyboard Shortcuts</p>
-        <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 text-slate-400">
+        <p className="font-bold text-[#ff9200] mb-1 flex items-center justify-between">
+          <span>🏭 Factorio & Farming Controls</span>
+          <span className="text-[10px] text-emerald-400 font-bold">Direction: {(state.placementDirection || "right").toUpperCase()}</span>
+        </p>
+        <div className="grid grid-cols-3 gap-x-4 gap-y-0.5 text-slate-400 text-[11px]">
           <span><kbd className="bg-slate-800 px-1 rounded text-white text-[9px]">WASD</kbd> Move</span>
-          <span><kbd className="bg-slate-800 px-1 rounded text-white text-[9px]">E/Space</kbd> Interact</span>
-          <span><kbd className="bg-slate-800 px-1 rounded text-white text-[9px]">I/Esc</kbd> Inventory</span>
-          <span><kbd className="bg-slate-800 px-1 rounded text-white text-[9px]">F</kbd> Talk / Pet</span>
+          <span><kbd className="bg-slate-800 px-1 rounded text-white text-[9px]">E/Space</kbd> Interact / Place</span>
+          <span><kbd className="bg-[#ff9200] text-black font-extrabold px-1 rounded text-[9px]">R</kbd> Rotate Belts / Drills</span>
+          <span><kbd className="bg-slate-800 px-1 rounded text-white text-[9px]">I/Esc</kbd> Crafting & Bag</span>
+          <span><kbd className="bg-slate-800 px-1 rounded text-white text-[9px]">F</kbd> Inspect Machine</span>
           <span><kbd className="bg-slate-800 px-1 rounded text-white text-[9px]">/</kbd> Cheat Console</span>
-          <span><kbd className="bg-slate-800 px-1 rounded text-white text-[9px]">H</kbd> Game Guide</span>
         </div>
       </div>
     </div>

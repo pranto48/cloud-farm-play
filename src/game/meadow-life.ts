@@ -48,8 +48,26 @@ export interface Tile {
   cropId?: string;
   /** Placed item details. */
   placedItemId?: string;
+  direction?: "up" | "down" | "left" | "right";
   chestInventory?: (Item | null)[];
   chestBarLimit?: number;
+  /** Factorio Transport Belt item queue */
+  beltItems?: { id: string; offset: number; lane: 0 | 1 }[];
+  /** Factorio Robotic Inserter state */
+  inserterArmAngle?: number;
+  inserterHolding?: Item | null;
+  /** Factorio Assembling Machine state */
+  assemblerRecipeId?: string;
+  assemblerProgress?: number;
+  assemblerMaxProgress?: number;
+  /** Factorio Mining Drill state */
+  drillTimer?: number;
+  drillMaxTime?: number;
+  drillTargetOre?: string;
+  /** Power grid attributes */
+  powerDemandKw?: number;
+  powerProductionKw?: number;
+  powerSupplyRadius?: number;
   /** Assigned work zone. */
   zone?: "farming" | "mining" | "woodcutting" | "water";
   hitPoints?: number;
@@ -236,6 +254,16 @@ export interface GameState {
   currentRoomCode?: string;
   remotePlayers?: RemotePlayer[];
   savedRoomMaps?: Record<string, Tile[][]>; // Separate map instance per room!
+  /** Factorio Power Grid state */
+  powerGridStats?: {
+    capacityKw: number;
+    demandKw: number;
+    satisfaction: number;
+    accumulatorStorageMj: number;
+    maxStorageMj: number;
+  };
+  placementDirection?: "up" | "down" | "left" | "right";
+  activeInspectorTile?: { x: number; y: number } | null;
 }
 
 export interface RemotePlayer {
@@ -462,87 +490,87 @@ export const TECHNOLOGIES: TechDef[] = [
     unlocks: "Dual crafting queue",
   },
 
-  {
-    id: "tech_electricity",
-    name: "Electricity",
-    description: "Unlocks Solar Panels and Batteries to power machines.",
-    icon: "⚡",
-    cost: 500,
-    prerequisites: ["tech_mass_production"],
-    unlocks: "Solar Panel, Battery",
-  },
-  {
-    id: "tech_automation",
-    name: "Automation",
-    description: "Unlocks the Furnace, Wood Cutter, and Stone Cutter.",
-    icon: "⚙️",
-    cost: 600,
-    prerequisites: ["tech_electricity"],
-    unlocks: "Furnace, Wood Cutter, Stone Cutter",
-  },
-  {
-    id: "tech_worker_boost",
-    name: "Worker Training Program",
-    description: "Worker efficiency +100% and energy consumption -50%.",
-    icon: "👷",
-    cost: 400,
-    prerequisites: ["tech_combat_training", "tech_animal_husbandry"],
-    unlocks: "Worker speed x2, energy cost -50%",
-  },
   // Factorio Research Tech Tree
   {
     id: "tech_factorio_logistics",
-    name: "Factorio Logistics & Components",
-    description: "Unlocks Iron Gear Wheels, Copper Cables, and Transport Belts for automation.",
-    icon: "⚙️",
+    name: "Factorio Logistics 1",
+    description: "Unlocks Iron Gear Wheels, Copper Cables, Transport Belts, and Burner Mining Drills.",
+    icon: "⏩",
     cost: 150,
     prerequisites: ["tech_advanced_tools"],
-    unlocks: "Iron Gear, Copper Cable, Transport Belt recipes",
+    unlocks: "Iron Gear, Copper Cable, Transport Belt, Burner Drill recipes",
   },
   {
     id: "tech_electronics",
-    name: "Electronics & Advanced Circuits",
-    description: "Unlocks Green Electronic Circuits, Steel Plates, and Robotic Inserters.",
+    name: "Electronics & Automation",
+    description: "Unlocks Green Electronic Circuits, Steel Plates, Inserters, and Assembling Machine 1.",
     icon: "🟩",
     cost: 250,
     prerequisites: ["tech_factorio_logistics"],
-    unlocks: "Electronic Circuit, Steel Plate, Inserter recipes",
-  },
-  {
-    id: "tech_assembling",
-    name: "Automated Assembly Factories",
-    description: "Unlocks Assembling Machines and Electric Mining Drills.",
-    icon: "🏭",
-    cost: 400,
-    prerequisites: ["tech_electronics"],
-    unlocks: "Assembling Machine, Electric Mining Drill recipes",
+    unlocks: "Electronic Circuit, Steel Plate, Inserter, Assembling Machine 1 recipes",
   },
   {
     id: "tech_electricity",
-    name: "Electrical Grid & Generators",
-    description: "Unlocks Steam Generators, Solar Panels, Power Poles, and Cable connections.",
+    name: "Electrical Grid & Power",
+    description: "Unlocks Steam Generators, Industrial Boilers, Solar Panels, Power Poles, and Electric Mining Drills.",
     icon: "⚡",
     cost: 300,
     prerequisites: ["tech_electronics"],
-    unlocks: "Generator, Solar Panel, Power Pole, Cable recipes",
+    unlocks: "Boiler, Generator, Solar Panel, Power Pole, Electric Drill recipes",
+  },
+  {
+    id: "tech_logistics_2",
+    name: "Advanced Logistics 2",
+    description: "Unlocks Fast Transport Belts, Underground Belts, Conveyor Splitters, and Fast Inserters.",
+    icon: "🔀",
+    cost: 400,
+    prerequisites: ["tech_electronics"],
+    unlocks: "Fast Belt, Underground Belt, Splitter, Fast Inserter recipes",
+  },
+  {
+    id: "tech_advanced_material_processing",
+    name: "Advanced Material Processing",
+    description: "Unlocks Steel Furnaces, Electric Smelting Furnaces, and Assembling Machine 2.",
+    icon: "🏭",
+    cost: 450,
+    prerequisites: ["tech_electricity"],
+    unlocks: "Steel Furnace, Electric Furnace, Assembling Machine 2 recipes",
+  },
+  {
+    id: "tech_oil_processing",
+    name: "Oil Processing & Chemicals",
+    description: "Unlocks Chemical Plants, Plastic Bars, Sulfur, and Advanced Circuits (Red).",
+    icon: "🧪",
+    cost: 600,
+    prerequisites: ["tech_advanced_material_processing"],
+    unlocks: "Chemical Plant, Plastic Bar, Sulfur, Advanced Circuit recipes",
+  },
+  {
+    id: "tech_advanced_electronics",
+    name: "High-Tech Processing Units",
+    description: "Unlocks Engine Units, Electric Engine Units, Processing Units (Blue), and Accumulator Batteries.",
+    icon: "🟦",
+    cost: 800,
+    prerequisites: ["tech_oil_processing"],
+    unlocks: "Engine Unit, Electric Engine, Processing Unit, Accumulator recipes",
   },
   {
     id: "tech_drone_logistics",
-    name: "Logistics Drones & Robotics",
-    description: "Unlocks Factorio Flying Logistics Drones and Drone Station Hubs.",
+    name: "Robotics & Logistics Drones",
+    description: "Unlocks Flying Robot Frames, Logistics Drones, Drone Station Hubs, and Warehouse Logistics Chests.",
     icon: "🚁",
-    cost: 600,
-    prerequisites: ["tech_assembling", "tech_electricity"],
-    unlocks: "Logistics Drone & Drone Hub recipes",
+    cost: 1000,
+    prerequisites: ["tech_advanced_electronics"],
+    unlocks: "Logistics Drone, Drone Hub, Logistics Chest recipes",
   },
   {
     id: "tech_space_rocket",
     name: "Rocket Silo & Space Exploration",
-    description: "Unlocks Rocket Fuel, Rocket Components, Satellites, and Rocket Silo.",
+    description: "Unlocks Solid Rocket Fuel, Rocket Components, Satellites, and Rocket Launch Silo for planetary victory!",
     icon: "🚀",
-    cost: 1200,
+    cost: 1500,
     prerequisites: ["tech_drone_logistics"],
-    unlocks: "Rocket Silo, Rocket Fuel, Satellite recipes",
+    unlocks: "Rocket Silo, Rocket Fuel, Rocket Part, Satellite recipes",
   },
 ];
 
@@ -555,190 +583,570 @@ export interface Recipe {
   outputId: string;
   outputCount: number;
   techRequired?: string;
+  craftTimeSeconds?: number;
 }
 
 export const CRAFTING_RECIPES: Recipe[] = [
-  // Factorio Tech Components
+  // --- Factorio Logistics ---
   {
-    id: "iron_gear", name: "Iron Gear Wheel",
+    id: "transport_belt",
+    name: "Transport Belt",
+    description: "Automated conveyor belt moving items continuously. Rotate with 'R'.",
+    inputs: [{ itemId: "iron_gear", count: 1 }, { itemId: "iron_bar", count: 1 }],
+    outputId: "transport_belt",
+    outputCount: 2,
+    techRequired: "tech_factorio_logistics",
+    craftTimeSeconds: 0.5,
+  },
+  {
+    id: "fast_transport_belt",
+    name: "Fast Transport Belt",
+    description: "High-speed red conveyor belt moving items at 2x velocity.",
+    inputs: [{ itemId: "transport_belt", count: 1 }, { itemId: "iron_gear", count: 5 }],
+    outputId: "fast_transport_belt",
+    outputCount: 1,
+    techRequired: "tech_logistics_2",
+    craftTimeSeconds: 0.5,
+  },
+  {
+    id: "underground_belt",
+    name: "Underground Belt",
+    description: "Conveyor tunnel that routes items under obstacles up to 6 tiles.",
+    inputs: [{ itemId: "transport_belt", count: 5 }, { itemId: "iron_bar", count: 10 }],
+    outputId: "underground_belt",
+    outputCount: 2,
+    techRequired: "tech_logistics_2",
+    craftTimeSeconds: 1.0,
+  },
+  {
+    id: "splitter",
+    name: "Conveyor Splitter",
+    description: "Splits incoming belt items 50/50 evenly across two output lines.",
+    inputs: [{ itemId: "transport_belt", count: 4 }, { itemId: "iron_gear", count: 5 }, { itemId: "electronic_circuit", count: 5 }],
+    outputId: "splitter",
+    outputCount: 1,
+    techRequired: "tech_logistics_2",
+    craftTimeSeconds: 1.0,
+  },
+  {
+    id: "inserter",
+    name: "Robotic Inserter",
+    description: "Robotic arm that picks items from behind and inserts them in front.",
+    inputs: [{ itemId: "electronic_circuit", count: 1 }, { itemId: "iron_gear", count: 1 }, { itemId: "iron_bar", count: 1 }],
+    outputId: "inserter",
+    outputCount: 1,
+    techRequired: "tech_electronics",
+    craftTimeSeconds: 0.5,
+  },
+  {
+    id: "fast_inserter",
+    name: "Fast Inserter",
+    description: "High-speed electric robotic arm with 2x swing speed.",
+    inputs: [{ itemId: "inserter", count: 1 }, { itemId: "electronic_circuit", count: 2 }, { itemId: "iron_bar", count: 2 }],
+    outputId: "fast_inserter",
+    outputCount: 1,
+    techRequired: "tech_logistics_2",
+    craftTimeSeconds: 0.5,
+  },
+  {
+    id: "long_inserter",
+    name: "Long-Handed Inserter",
+    description: "Red inserter that reaches 2 tiles over adjacent belt lines.",
+    inputs: [{ itemId: "inserter", count: 1 }, { itemId: "iron_gear", count: 1 }, { itemId: "iron_bar", count: 1 }],
+    outputId: "long_inserter",
+    outputCount: 1,
+    techRequired: "tech_logistics_2",
+    craftTimeSeconds: 0.5,
+  },
+  {
+    id: "filter_inserter",
+    name: "Filter Inserter",
+    description: "Smart robotic inserter that filters and picks only selected item types.",
+    inputs: [{ itemId: "fast_inserter", count: 1 }, { itemId: "electronic_circuit", count: 4 }],
+    outputId: "filter_inserter",
+    outputCount: 1,
+    techRequired: "tech_logistics_2",
+    craftTimeSeconds: 0.5,
+  },
+  {
+    id: "chest",
+    name: "Wood Chest",
+    description: "A wooden storage box that holds 12 items.",
+    inputs: [{ itemId: "wood", count: 20 }],
+    outputId: "chest",
+    outputCount: 1,
+    craftTimeSeconds: 0.5,
+  },
+  {
+    id: "iron_chest",
+    name: "Iron Storage Chest",
+    description: "Metal container storing up to 24 item stacks.",
+    inputs: [{ itemId: "iron_bar", count: 8 }],
+    outputId: "iron_chest",
+    outputCount: 1,
+    craftTimeSeconds: 0.5,
+  },
+  {
+    id: "steel_chest",
+    name: "Steel Storage Container",
+    description: "Heavy-duty industrial steel container storing up to 48 item stacks.",
+    inputs: [{ itemId: "steel_plate", count: 8 }],
+    outputId: "steel_chest",
+    outputCount: 1,
+    techRequired: "tech_advanced_material_processing",
+    craftTimeSeconds: 0.5,
+  },
+  {
+    id: "logistics_chest",
+    name: "Logistics Warehouse Chest",
+    description: "High capacity 60-slot logistics container for automated drone delivery.",
+    inputs: [{ itemId: "steel_chest", count: 1 }, { itemId: "electronic_circuit", count: 10 }, { itemId: "advanced_circuit", count: 5 }],
+    outputId: "logistics_chest",
+    outputCount: 1,
+    techRequired: "tech_drone_logistics",
+    craftTimeSeconds: 1.0,
+  },
+
+  // --- Factorio Production Machinery ---
+  {
+    id: "burner_drill",
+    name: "Burner Mining Drill",
+    description: "Coal-powered mining drill that extracts ores from ground deposits and ejects them in front.",
+    inputs: [{ itemId: "furnace", count: 1 }, { itemId: "iron_gear", count: 3 }, { itemId: "iron_bar", count: 3 }],
+    outputId: "burner_drill",
+    outputCount: 1,
+    techRequired: "tech_factorio_logistics",
+    craftTimeSeconds: 2.0,
+  },
+  {
+    id: "electric_drill",
+    name: "Electric Mining Drill",
+    description: "Electric drill that automatically excavates ground ores directly onto belts.",
+    inputs: [{ itemId: "electronic_circuit", count: 3 }, { itemId: "iron_gear", count: 5 }, { itemId: "iron_bar", count: 10 }],
+    outputId: "electric_drill",
+    outputCount: 1,
+    techRequired: "tech_electricity",
+    craftTimeSeconds: 2.0,
+  },
+  {
+    id: "stone_furnace",
+    name: "Stone Furnace",
+    description: "Smelts ores into iron, copper, and gold bars using coal fuel.",
+    inputs: [{ itemId: "stone", count: 20 }],
+    outputId: "stone_furnace",
+    outputCount: 1,
+    craftTimeSeconds: 1.0,
+  },
+  {
+    id: "steel_furnace",
+    name: "Steel Furnace",
+    description: "Reinforced steel smelting furnace with 2x smelting speed.",
+    inputs: [{ itemId: "stone_furnace", count: 1 }, { itemId: "steel_plate", count: 6 }, { itemId: "stone", count: 10 }],
+    outputId: "steel_furnace",
+    outputCount: 1,
+    techRequired: "tech_advanced_material_processing",
+    craftTimeSeconds: 3.0,
+  },
+  {
+    id: "electric_furnace",
+    name: "Electric Smelting Furnace",
+    description: "Clean high-capacity electric furnace powered directly by the power grid.",
+    inputs: [{ itemId: "steel_furnace", count: 1 }, { itemId: "steel_plate", count: 10 }, { itemId: "advanced_circuit", count: 5 }],
+    outputId: "electric_furnace",
+    outputCount: 1,
+    techRequired: "tech_advanced_material_processing",
+    craftTimeSeconds: 4.0,
+  },
+  {
+    id: "assembling_machine_1",
+    name: "Assembling Machine 1",
+    description: "Automated factory machine that crafts parts, belts, circuits, and machinery continuously.",
+    inputs: [{ itemId: "electronic_circuit", count: 3 }, { itemId: "iron_gear", count: 5 }, { itemId: "iron_bar", count: 9 }],
+    outputId: "assembling_machine_1",
+    outputCount: 1,
+    techRequired: "tech_electronics",
+    craftTimeSeconds: 2.0,
+  },
+  {
+    id: "assembling_machine_2",
+    name: "Assembling Machine 2",
+    description: "Advanced blue factory assembler with 1.5x crafting speed.",
+    inputs: [{ itemId: "assembling_machine_1", count: 1 }, { itemId: "electronic_circuit", count: 3 }, { itemId: "iron_gear", count: 5 }, { itemId: "steel_plate", count: 2 }],
+    outputId: "assembling_machine_2",
+    outputCount: 1,
+    techRequired: "tech_advanced_material_processing",
+    craftTimeSeconds: 2.0,
+  },
+  {
+    id: "assembling_machine_3",
+    name: "Assembling Machine 3",
+    description: "High-tier yellow assembling machine with maximum speed.",
+    inputs: [{ itemId: "assembling_machine_2", count: 1 }, { itemId: "advanced_circuit", count: 4 }, { itemId: "engine_unit", count: 2 }],
+    outputId: "assembling_machine_3",
+    outputCount: 1,
+    techRequired: "tech_advanced_electronics",
+    craftTimeSeconds: 3.0,
+  },
+  {
+    id: "chemical_plant",
+    name: "Chemical Plant",
+    description: "Processes petroleum and fluids into plastics, sulfur, and rocket fuel.",
+    inputs: [{ itemId: "steel_plate", count: 5 }, { itemId: "iron_gear", count: 5 }, { itemId: "electronic_circuit", count: 5 }, { itemId: "stone", count: 5 }],
+    outputId: "chemical_plant",
+    outputCount: 1,
+    techRequired: "tech_oil_processing",
+    craftTimeSeconds: 3.0,
+  },
+  {
+    id: "science_lab",
+    name: "Science Research Lab",
+    description: "Factorio research lab that consumes Science Packs to unlock advanced industrial technologies.",
+    inputs: [{ itemId: "electronic_circuit", count: 10 }, { itemId: "iron_gear", count: 10 }, { itemId: "transport_belt", count: 4 }],
+    outputId: "science_lab",
+    outputCount: 1,
+    techRequired: "tech_electronics",
+    craftTimeSeconds: 3.0,
+  },
+
+  // --- Factorio Power Grid ---
+  {
+    id: "power_pole",
+    name: "Small Power Pole",
+    description: "Wooden electric pole providing power coverage to nearby machines.",
+    inputs: [{ itemId: "wood", count: 2 }, { itemId: "copper_wire", count: 2 }, { itemId: "iron_bar", count: 1 }],
+    outputId: "power_pole",
+    outputCount: 2,
+    techRequired: "tech_electricity",
+    craftTimeSeconds: 0.5,
+  },
+  {
+    id: "medium_power_pole",
+    name: "Medium Power Pole",
+    description: "Steel electric pole with an expanded power supply area and longer wire reach.",
+    inputs: [{ itemId: "steel_plate", count: 1 }, { itemId: "copper_wire", count: 2 }],
+    outputId: "medium_power_pole",
+    outputCount: 1,
+    techRequired: "tech_electricity",
+    craftTimeSeconds: 0.5,
+  },
+  {
+    id: "substation",
+    name: "Electric Substation",
+    description: "High-voltage distribution substation covering a massive 18x18 factory area.",
+    inputs: [{ itemId: "steel_plate", count: 10 }, { itemId: "advanced_circuit", count: 5 }, { itemId: "copper_wire", count: 5 }],
+    outputId: "substation",
+    outputCount: 1,
+    techRequired: "tech_advanced_electronics",
+    craftTimeSeconds: 2.0,
+  },
+  {
+    id: "boiler",
+    name: "Industrial Steam Boiler",
+    description: "Burns coal or wood to boil water into high-pressure steam for generators.",
+    inputs: [{ itemId: "stone_furnace", count: 1 }, { itemId: "iron_bar", count: 4 }],
+    outputId: "boiler",
+    outputCount: 1,
+    techRequired: "tech_electricity",
+    craftTimeSeconds: 1.0,
+  },
+  {
+    id: "generator",
+    name: "Steam Power Generator",
+    description: "High-output turbine generator converting steam into 500kW electricity for the power grid.",
+    inputs: [{ itemId: "boiler", count: 1 }, { itemId: "iron_gear", count: 5 }, { itemId: "iron_bar", count: 5 }],
+    outputId: "generator",
+    outputCount: 1,
+    techRequired: "tech_electricity",
+    craftTimeSeconds: 2.0,
+  },
+  {
+    id: "solar_panel",
+    name: "Solar Panel",
+    description: "Generates 60kW clean electricity during daylight hours.",
+    inputs: [{ itemId: "electronic_circuit", count: 5 }, { itemId: "copper_bar", count: 5 }, { itemId: "steel_plate", count: 5 }],
+    outputId: "solar_panel",
+    outputCount: 1,
+    techRequired: "tech_electricity",
+    craftTimeSeconds: 2.0,
+  },
+  {
+    id: "battery",
+    name: "Accumulator Battery",
+    description: "Stores 5MJ excess electrical energy for nighttime factory operation.",
+    inputs: [{ itemId: "iron_bar", count: 5 }, { itemId: "coal", count: 10 }, { itemId: "gold_bar", count: 1 }],
+    outputId: "battery",
+    outputCount: 1,
+    techRequired: "tech_advanced_electronics",
+    craftTimeSeconds: 2.0,
+  },
+
+  // --- Intermediate Machine Parts ---
+  {
+    id: "iron_gear",
+    name: "Iron Gear Wheel",
     description: "Crucial mechanical gear used in machinery and logistics.",
     inputs: [{ itemId: "iron_bar", count: 2 }],
-    outputId: "iron_gear", outputCount: 1,
+    outputId: "iron_gear",
+    outputCount: 1,
     techRequired: "tech_factorio_logistics",
+    craftTimeSeconds: 0.5,
   },
   {
-    id: "copper_wire", name: "Copper Cable",
-    description: "Conductive copper wire used for electronic circuits.",
+    id: "copper_wire",
+    name: "Copper Cable",
+    description: "Conductive copper wire used for electronic circuits and coils.",
     inputs: [{ itemId: "copper_bar", count: 1 }],
-    outputId: "copper_wire", outputCount: 2,
+    outputId: "copper_wire",
+    outputCount: 2,
     techRequired: "tech_factorio_logistics",
+    craftTimeSeconds: 0.5,
   },
   {
-    id: "steel_plate", name: "Steel Plate",
-    description: "High strength dense steel alloy plate.",
+    id: "steel_plate",
+    name: "Steel Plate",
+    description: "High strength dense steel alloy plate smelted from iron plates.",
     inputs: [{ itemId: "iron_bar", count: 5 }],
-    outputId: "steel_plate", outputCount: 1,
+    outputId: "steel_plate",
+    outputCount: 1,
     techRequired: "tech_electronics",
+    craftTimeSeconds: 2.0,
   },
   {
-    id: "electronic_circuit", name: "Electronic Circuit",
-    description: "Basic green circuit board for automated tech and logic.",
+    id: "electronic_circuit",
+    name: "Electronic Circuit (Green)",
+    description: "Basic green logic circuit board for automated tech and logic.",
     inputs: [{ itemId: "iron_bar", count: 1 }, { itemId: "copper_wire", count: 3 }],
-    outputId: "electronic_circuit", outputCount: 1,
+    outputId: "electronic_circuit",
+    outputCount: 1,
     techRequired: "tech_electronics",
-  },
-
-  // Factorio Factory Machinery & Logistics
-  {
-    id: "transport_belt", name: "Transport Belt",
-    description: "Automated logistics belt moving items continuously.",
-    inputs: [{ itemId: "iron_gear", count: 1 }, { itemId: "iron_bar", count: 1 }],
-    outputId: "transport_belt", outputCount: 2,
-    techRequired: "tech_factorio_logistics",
+    craftTimeSeconds: 0.5,
   },
   {
-    id: "inserter", name: "Robotic Inserter",
-    description: "Robotic arm that picks and places items automatically.",
-    inputs: [{ itemId: "electronic_circuit", count: 1 }, { itemId: "iron_gear", count: 1 }, { itemId: "iron_bar", count: 1 }],
-    outputId: "inserter", outputCount: 1,
-    techRequired: "tech_electronics",
+    id: "plastic_bar",
+    name: "Plastic Bar",
+    description: "Synthetic polymer synthesized in chemical plants.",
+    inputs: [{ itemId: "coal", count: 2 }],
+    outputId: "plastic_bar",
+    outputCount: 2,
+    techRequired: "tech_oil_processing",
+    craftTimeSeconds: 1.0,
   },
   {
-    id: "assembling_machine", name: "Assembling Machine",
-    description: "Automated factory machine that crafts recipes continuously.",
-    inputs: [{ itemId: "electronic_circuit", count: 3 }, { itemId: "iron_gear", count: 5 }, { itemId: "iron_bar", count: 9 }],
-    outputId: "assembling_machine", outputCount: 1,
-    techRequired: "tech_assembling",
+    id: "sulfur",
+    name: "Sulfur",
+    description: "Chemical element for batteries, acids, and chemical science.",
+    inputs: [{ itemId: "coal", count: 1 }, { itemId: "stone", count: 1 }],
+    outputId: "sulfur",
+    outputCount: 2,
+    techRequired: "tech_oil_processing",
+    craftTimeSeconds: 1.0,
   },
   {
-    id: "electric_drill", name: "Electric Mining Drill",
-    description: "Automated mining drill that excavates ores.",
-    inputs: [{ itemId: "electronic_circuit", count: 3 }, { itemId: "iron_gear", count: 5 }, { itemId: "iron_bar", count: 10 }],
-    outputId: "electric_drill", outputCount: 1,
-    techRequired: "tech_assembling",
+    id: "advanced_circuit",
+    name: "Advanced Circuit (Red)",
+    description: "High-density microchip manufactured from plastics, copper wires, and green circuits.",
+    inputs: [{ itemId: "electronic_circuit", count: 2 }, { itemId: "plastic_bar", count: 2 }, { itemId: "copper_wire", count: 4 }],
+    outputId: "advanced_circuit",
+    outputCount: 1,
+    techRequired: "tech_oil_processing",
+    craftTimeSeconds: 1.5,
   },
   {
-    id: "logistics_drone", name: "Logistics Drone",
-    description: "Factorio flying drone that harvests resources & deposits to boxes.",
-    inputs: [{ itemId: "electronic_circuit", count: 2 }, { itemId: "steel_plate", count: 2 }, { itemId: "battery", count: 1 }],
-    outputId: "logistics_drone", outputCount: 1,
+    id: "processing_unit",
+    name: "Processing Unit (Blue)",
+    description: "High-tier computing microprocessor for robotics, space satellites, and rocket guidance.",
+    inputs: [{ itemId: "electronic_circuit", count: 20 }, { itemId: "advanced_circuit", count: 2 }, { itemId: "sulfur", count: 5 }],
+    outputId: "processing_unit",
+    outputCount: 1,
+    techRequired: "tech_advanced_electronics",
+    craftTimeSeconds: 3.0,
+  },
+  {
+    id: "engine_unit",
+    name: "Engine Unit",
+    description: "Internal combustion motor built from steel plates, gears, and pipes.",
+    inputs: [{ itemId: "steel_plate", count: 1 }, { itemId: "iron_gear", count: 1 }, { itemId: "iron_bar", count: 2 }],
+    outputId: "engine_unit",
+    outputCount: 1,
+    techRequired: "tech_advanced_electronics",
+    craftTimeSeconds: 2.0,
+  },
+  {
+    id: "electric_engine",
+    name: "Electric Engine Unit",
+    description: "High-torque electric motor powered by copper coils and electronic circuits.",
+    inputs: [{ itemId: "engine_unit", count: 1 }, { itemId: "electronic_circuit", count: 2 }, { itemId: "copper_wire", count: 2 }],
+    outputId: "electric_engine",
+    outputCount: 1,
+    techRequired: "tech_advanced_electronics",
+    craftTimeSeconds: 2.5,
+  },
+  {
+    id: "flying_robot_frame",
+    name: "Flying Robot Frame",
+    description: "Lightweight aerospace chassis for logistics drones.",
+    inputs: [{ itemId: "electric_engine", count: 1 }, { itemId: "battery", count: 2 }, { itemId: "steel_plate", count: 1 }, { itemId: "electronic_circuit", count: 3 }],
+    outputId: "flying_robot_frame",
+    outputCount: 1,
     techRequired: "tech_drone_logistics",
+    craftTimeSeconds: 4.0,
   },
   {
-    id: "drone_hub", name: "Drone Station Hub",
+    id: "logistics_drone",
+    name: "Logistics Drone",
+    description: "Factorio flying drone that transports items between logistics chests.",
+    inputs: [{ itemId: "flying_robot_frame", count: 1 }, { itemId: "advanced_circuit", count: 2 }],
+    outputId: "logistics_drone",
+    outputCount: 1,
+    techRequired: "tech_drone_logistics",
+    craftTimeSeconds: 2.0,
+  },
+  {
+    id: "drone_hub",
+    name: "Drone Station Hub",
     description: "Central command station for hovering logistics drones.",
     inputs: [{ itemId: "electronic_circuit", count: 10 }, { itemId: "steel_plate", count: 15 }, { itemId: "battery", count: 5 }],
-    outputId: "drone_hub", outputCount: 1,
+    outputId: "drone_hub",
+    outputCount: 1,
     techRequired: "tech_drone_logistics",
-  },
-  {
-    id: "drone_recharger", name: "Drone Recharge Station",
-    description: "High-speed wireless electrical charging pad for Factorio logistics drones.",
-    inputs: [{ itemId: "electronic_circuit", count: 5 }, { itemId: "copper_wire", count: 10 }, { itemId: "battery", count: 2 }],
-    outputId: "drone_recharger", outputCount: 1,
-    techRequired: "tech_drone_logistics",
+    craftTimeSeconds: 5.0,
   },
 
-  // Electrical Grid & Power Generators
+  // --- Factorio Science Packs ---
   {
-    id: "electrical_cable", name: "Electrical Cable Connection",
-    description: "Insulated copper cable for connecting power poles & electrical grids.",
-    inputs: [{ itemId: "copper_wire", count: 2 }, { itemId: "iron_bar", count: 1 }],
-    outputId: "electrical_cable", outputCount: 5,
-    techRequired: "tech_electricity",
+    id: "automation_science_pack",
+    name: "Automation Science Pack (Red)",
+    description: "Tier 1 research science beaker made from Copper Plates and Iron Gears.",
+    inputs: [{ itemId: "copper_bar", count: 1 }, { itemId: "iron_gear", count: 1 }],
+    outputId: "automation_science_pack",
+    outputCount: 1,
+    techRequired: "tech_electronics",
+    craftTimeSeconds: 1.0,
   },
   {
-    id: "power_pole", name: "Electric Power Pole",
-    description: "High voltage electrical cable pole that transmits power to nearby machines.",
-    inputs: [{ itemId: "electrical_cable", count: 2 }, { itemId: "wood", count: 5 }, { itemId: "iron_bar", count: 2 }],
-    outputId: "power_pole", outputCount: 1,
-    techRequired: "tech_electricity",
+    id: "logistic_science_pack",
+    name: "Logistic Science Pack (Green)",
+    description: "Tier 2 research science beaker made from Inserters and Transport Belts.",
+    inputs: [{ itemId: "inserter", count: 1 }, { itemId: "transport_belt", count: 1 }],
+    outputId: "logistic_science_pack",
+    outputCount: 1,
+    techRequired: "tech_logistics_2",
+    craftTimeSeconds: 1.5,
   },
   {
-    id: "generator", name: "Steam Power Generator",
-    description: "Burns coal to produce high-voltage electricity for the power grid.",
-    inputs: [{ itemId: "electronic_circuit", count: 5 }, { itemId: "iron_gear", count: 5 }, { itemId: "steel_plate", count: 10 }],
-    outputId: "generator", outputCount: 1,
-    techRequired: "tech_electricity",
-  },
-  {
-    id: "solar_panel", name: "Solar Panel",
-    description: "Generates clean electricity during the day for the electrical grid.",
-    inputs: [{ itemId: "electronic_circuit", count: 5 }, { itemId: "copper_bar", count: 5 }, { itemId: "steel_plate", count: 10 }],
-    outputId: "solar_panel", outputCount: 1,
-    techRequired: "tech_electricity",
-  },
-  {
-    id: "battery", name: "Battery",
-    description: "Stores excess electricity for night-time.",
-    inputs: [{ itemId: "iron_bar", count: 5 }, { itemId: "coal", count: 10 }, { itemId: "gold_bar", count: 1 }],
-    outputId: "battery", outputCount: 1,
+    id: "chemical_science_pack",
+    name: "Chemical Science Pack (Blue)",
+    description: "Tier 3 research science beaker made from Advanced Circuits, Engine Units, and Sulfur.",
+    inputs: [{ itemId: "advanced_circuit", count: 1 }, { itemId: "engine_unit", count: 1 }, { itemId: "sulfur", count: 1 }],
+    outputId: "chemical_science_pack",
+    outputCount: 2,
+    techRequired: "tech_oil_processing",
+    craftTimeSeconds: 2.5,
   },
 
-  // Space Exploration & Rocket Escape
+  // --- Space Rocket & Victory ---
   {
-    id: "rocket_fuel", name: "Rocket Fuel",
+    id: "rocket_fuel",
+    name: "Solid Rocket Fuel",
     description: "Concentrated high-energy solid rocket fuel.",
     inputs: [{ itemId: "coal", count: 10 }, { itemId: "electronic_circuit", count: 2 }],
-    outputId: "rocket_fuel", outputCount: 1,
+    outputId: "rocket_fuel",
+    outputCount: 1,
     techRequired: "tech_space_rocket",
+    craftTimeSeconds: 3.0,
   },
   {
-    id: "rocket_part", name: "Rocket Component Part",
+    id: "rocket_part",
+    name: "Rocket Component Part",
     description: "Precision aerospace rocket component used in silo assembly.",
     inputs: [{ itemId: "steel_plate", count: 5 }, { itemId: "electronic_circuit", count: 5 }, { itemId: "rocket_fuel", count: 1 }],
-    outputId: "rocket_part", outputCount: 1,
+    outputId: "rocket_part",
+    outputCount: 1,
     techRequired: "tech_space_rocket",
+    craftTimeSeconds: 5.0,
   },
   {
-    id: "satellite", name: "Orbital Satellite",
+    id: "satellite",
+    name: "Orbital Satellite",
     description: "High tech communications satellite payload.",
-    inputs: [{ itemId: "electronic_circuit", count: 20 }, { itemId: "steel_plate", count: 10 }, { itemId: "solar_panel", count: 2 }],
-    outputId: "satellite", outputCount: 1,
+    inputs: [{ itemId: "processing_unit", count: 10 }, { itemId: "steel_plate", count: 10 }, { itemId: "solar_panel", count: 2 }],
+    outputId: "satellite",
+    outputCount: 1,
     techRequired: "tech_space_rocket",
+    craftTimeSeconds: 5.0,
   },
   {
-    id: "rocket_silo", name: "Rocket Launch Silo",
-    description: "Massive Factorio launch pad for planetary escape and victory!",
-    inputs: [{ itemId: "steel_plate", count: 50 }, { itemId: "electronic_circuit", count: 50 }, { itemId: "rocket_part", count: 10 }],
-    outputId: "rocket_silo", outputCount: 1,
+    id: "rocket_silo",
+    name: "Rocket Launch Silo",
+    description: "Massive Factorio launch pad for planetary victory!",
+    inputs: [{ itemId: "steel_plate", count: 50 }, { itemId: "processing_unit", count: 20 }, { itemId: "rocket_part", count: 10 }],
+    outputId: "rocket_silo",
+    outputCount: 1,
     techRequired: "tech_space_rocket",
+    craftTimeSeconds: 10.0,
+  },
+
+  // --- Smelting Basic Recipes ---
+  {
+    id: "iron_bar",
+    name: "Iron Plate / Bar",
+    description: "Smelt Iron Ore.",
+    inputs: [{ itemId: "iron_ore", count: 1 }],
+    outputId: "iron_bar",
+    outputCount: 1,
+    craftTimeSeconds: 1.0,
   },
   {
-    id: "wood_cutter", name: "Sawmill",
+    id: "copper_bar",
+    name: "Copper Plate / Bar",
+    description: "Smelt Copper Ore.",
+    inputs: [{ itemId: "copper_ore", count: 1 }],
+    outputId: "copper_bar",
+    outputCount: 1,
+    craftTimeSeconds: 1.0,
+  },
+  {
+    id: "gold_bar",
+    name: "Gold Bar",
+    description: "Smelt Gold Ore.",
+    inputs: [{ itemId: "gold_ore", count: 1 }],
+    outputId: "gold_bar",
+    outputCount: 1,
+    craftTimeSeconds: 1.5,
+  },
+  {
+    id: "silver_bar",
+    name: "Silver Bar",
+    description: "Smelt Silver Ore.",
+    inputs: [{ itemId: "silver_ore", count: 1 }],
+    outputId: "silver_bar",
+    outputCount: 1,
+    craftTimeSeconds: 1.0,
+  },
+  {
+    id: "uranium_bar",
+    name: "Uranium Bar",
+    description: "Smelt raw Uranium Ore.",
+    inputs: [{ itemId: "uranium_ore", count: 1 }],
+    outputId: "uranium_bar",
+    outputCount: 1,
+    craftTimeSeconds: 2.0,
+  },
+  {
+    id: "wood_cutter",
+    name: "Sawmill",
     description: "Automatically cuts wood into planks.",
     inputs: [{ itemId: "iron_bar", count: 5 }, { itemId: "wood", count: 50 }],
-    outputId: "wood_cutter", outputCount: 1,
+    outputId: "wood_cutter",
+    outputCount: 1,
   },
   {
-    id: "stone_cutter", name: "Stone Cutter",
+    id: "stone_cutter",
+    name: "Stone Cutter",
     description: "Refines stone into usable blocks.",
     inputs: [{ itemId: "iron_bar", count: 5 }, { itemId: "stone", count: 50 }],
-    outputId: "stone_cutter", outputCount: 1,
-  },
-  {
-    id: "furnace", name: "Furnace",
-    description: "Smelts ores into bars using coal or electricity.",
-    inputs: [{ itemId: "stone", count: 100 }, { itemId: "coal", count: 20 }],
-    outputId: "furnace", outputCount: 1,
-  },
-  {
-    id: "iron_bar", name: "Iron Bar",
-    description: "Smelt Iron Ore.",
-    inputs: [{ itemId: "iron_ore", count: 5 }, { itemId: "coal", count: 1 }],
-    outputId: "iron_bar", outputCount: 1,
-  },
-  {
-    id: "silver_bar", name: "Silver Bar",
-    description: "Smelt Silver Ore.",
-    inputs: [{ itemId: "silver_ore", count: 5 }, { itemId: "coal", count: 1 }],
-    outputId: "silver_bar", outputCount: 1,
-  },
-  {
-    id: "gold_bar", name: "Gold Bar",
-    description: "Smelt Gold Ore.",
-    inputs: [{ itemId: "gold_ore", count: 5 }, { itemId: "coal", count: 1 }],
-    outputId: "gold_bar", outputCount: 1,
+    outputId: "stone_cutter",
+    outputCount: 1,
   },
   {
     id: "bed",
@@ -757,111 +1165,35 @@ export const CRAFTING_RECIPES: Recipe[] = [
     outputCount: 5,
   },
   {
-    id: "toolset",
-    name: "Advanced Toolset",
-    description: "Placeable workstation to upgrade your tools automatically.",
-    inputs: [{ itemId: "iron_bar", count: 5 }, { itemId: "wood", count: 40 }],
-    outputId: "toolset",
-    outputCount: 1,
-  },
-  {
-    id: "chest",
-    name: "Wood Chest",
-    description: "A wooden chest that stores up to 12 items.",
-    inputs: [{ itemId: "wood", count: 40 }],
-    outputId: "chest",
-    outputCount: 1,
-  },
-  {
-    id: "iron_chest",
-    name: "Iron Chest",
-    description: "Medium metal container that stores up to 24 items.",
-    inputs: [{ itemId: "iron_bar", count: 8 }, { itemId: "wood", count: 20 }],
-    outputId: "iron_chest",
-    outputCount: 1,
-  },
-  {
-    id: "steel_chest",
-    name: "Steel Storage Container",
-    description: "High capacity steel container storing up to 48 items.",
-    inputs: [{ itemId: "steel_bar", count: 10 }, { itemId: "iron_bar", count: 10 }],
-    outputId: "steel_chest",
-    outputCount: 1,
-  },
-  {
-    id: "logistics_chest",
-    name: "Logistics Storage Hub",
-    description: "Central logistics warehouse container storing up to 60 items.",
-    inputs: [{ itemId: "electronic_circuit", count: 10 }, { itemId: "steel_bar", count: 15 }],
-    outputId: "logistics_chest",
-    outputCount: 1,
-  },
-  {
     id: "torch",
     name: "Torch",
-    description: "Emits a warm light at night.",
-    inputs: [
-      { itemId: "wood", count: 2 },
-      { itemId: "coal", count: 1 },
-    ],
+    description: "Provides light around your farm during night.",
+    inputs: [{ itemId: "wood", count: 1 }, { itemId: "coal", count: 1 }],
     outputId: "torch",
-    outputCount: 3,
+    outputCount: 2,
   },
   {
     id: "scarecrow",
     name: "Scarecrow",
-    description: "Protects your crops from crows.",
-    inputs: [
-      { itemId: "wood", count: 15 },
-      { itemId: "fiber", count: 30 },
-    ],
+    description: "Prevents crows from eating your crops.",
+    inputs: [{ itemId: "wood", count: 50 }, { itemId: "coal", count: 1 }, { itemId: "fiber", count: 20 }],
     outputId: "scarecrow",
-    outputCount: 1,
-  },
-  {
-    id: "seed_maker",
-    name: "Seed Maker",
-    description: "Extracts seeds from crops.",
-    inputs: [
-      { itemId: "wood", count: 30 },
-      { itemId: "copper_ore", count: 5 },
-    ],
-    outputId: "seed_maker",
     outputCount: 1,
   },
   {
     id: "sprinkler_basic",
     name: "Basic Sprinkler",
-    description: "Water 4 adjacent tiles each morning.",
-    inputs: [
-      { itemId: "copper_bar", count: 1 },
-      { itemId: "iron_bar", count: 1 },
-      { itemId: "coal", count: 2 },
-    ],
+    description: "Waters 4 adjacent tiles every morning.",
+    inputs: [{ itemId: "copper_bar", count: 1 }, { itemId: "iron_bar", count: 1 }],
     outputId: "sprinkler_basic",
     outputCount: 1,
   },
   {
     id: "sprinkler_quality",
     name: "Quality Sprinkler",
-    description: "Water all 8 surrounding tiles each morning.",
-    inputs: [
-      { itemId: "gold_bar", count: 1 },
-      { itemId: "iron_bar", count: 1 },
-      { itemId: "coal", count: 1 },
-    ],
+    description: "Waters 8 surrounding tiles every morning.",
+    inputs: [{ itemId: "iron_bar", count: 1 }, { itemId: "gold_bar", count: 1 }],
     outputId: "sprinkler_quality",
-    outputCount: 1,
-  },
-  {
-    id: "furnace",
-    name: "Stone Furnace",
-    description: "Smelts raw copper, iron, gold, and uranium ores into bars.",
-    inputs: [
-      { itemId: "stone", count: 20 },
-      { itemId: "coal", count: 5 },
-    ],
-    outputId: "furnace",
     outputCount: 1,
   },
   {
@@ -971,43 +1303,48 @@ function makeMap(): Tile[][] {
   }
   t[40][70].kind = "shop";
 
-  // Procedural Map Generation
-  for (let y = 0; y < ROWS; y++) {
-    for (let x = 0; x < COLS; x++) {
-      if (t[y][x].kind !== "grass") continue; // skip already placed structures
-      
-      const isStartArea = x < 80 && y < 60;
-      
-      const waterVal = noise.noise(x * 0.05, y * 0.05, 0);
-      if (waterVal > 0.4 && !isStartArea) {
-        t[y][x].kind = "water";
-        continue;
+  // Dedicated Factorio Starting Ore Fields
+  // 1. Iron Ore Deposit (North-East of house)
+  for (let y = 16; y <= 24; y++) {
+    for (let x = 28; x <= 38; x++) {
+      if (Math.hypot(x - 33, y - 20) <= 4.8 && Math.random() < 0.85) {
+        t[y][x] = { kind: "ore_iron", age: 0, watered: false };
       }
+    }
+  }
 
-      const forestVal = noise.noise(x * 0.08, y * 0.08, 100);
-      const oreVal = noise.noise(x * 0.1, y * 0.1, 200);
+  // 2. Copper Ore Deposit (East of Iron)
+  for (let y = 16; y <= 24; y++) {
+    for (let x = 44; x <= 54; x++) {
+      if (Math.hypot(x - 49, y - 20) <= 4.6 && Math.random() < 0.85) {
+        t[y][x] = { kind: "ore_copper", age: 0, watered: false };
+      }
+    }
+  }
 
-      // Random scattering
-      if (forestVal > 0.3) {
-        if (Math.random() < 0.6) t[y][x].kind = "tree";
-      } else if (oreVal > 0.35 && !isStartArea) {
-        // High density ore patch
-        const rand = Math.random();
-        if (rand < 0.1) t[y][x].kind = "ore_iron";
-        else if (rand < 0.15) t[y][x].kind = "ore_coal";
-        else if (rand < 0.20) t[y][x].kind = "ore_silver";
-        else if (rand < 0.22) t[y][x].kind = "ore_gold";
-        else t[y][x].kind = "debris_stone";
-      } else {
-        // Normal debris scattered
-        const spawnRate = isStartArea ? 0.05 : 0.15;
-        if (Math.random() < spawnRate) {
-          const rand = Math.random();
-          if (rand < 0.45) t[y][x].kind = "debris_weed";
-          else if (rand < 0.72) t[y][x].kind = "debris_branch";
-          else if (rand < 0.90) t[y][x].kind = "debris_stone";
-          else t[y][x].kind = "tree";
-        }
+  // 3. Coal Ore Deposit (South of farm)
+  for (let y = 46; y <= 54; y++) {
+    for (let x = 18; x <= 28; x++) {
+      if (Math.hypot(x - 23, y - 50) <= 4.5 && Math.random() < 0.85) {
+        t[y][x] = { kind: "ore_coal", age: 0, watered: false };
+      }
+    }
+  }
+
+  // 4. Stone Quarry Deposit (South-East of farm)
+  for (let y = 46; y <= 54; y++) {
+    for (let x = 44; x <= 54; x++) {
+      if (Math.hypot(x - 49, y - 50) <= 4.5 && Math.random() < 0.85) {
+        t[y][x] = { kind: "debris_stone", age: 0, watered: false };
+      }
+    }
+  }
+
+  // 5. Uranium Ore Field (North-East industrial sector)
+  for (let y = 14; y <= 22; y++) {
+    for (let x = 60; x <= 70; x++) {
+      if (Math.hypot(x - 65, y - 18) <= 4.2 && Math.random() < 0.80) {
+        t[y][x] = { kind: "ore_uranium", age: 0, watered: false };
       }
     }
   }
@@ -1671,99 +2008,583 @@ export function getChestSlotCount(placedItemId?: string): number {
   return 12;
 }
 
-// --- Factory Automation ---
-function getAdjacentChests(grid: Tile[][], y: number, x: number): Tile[] {
-  const chests: Tile[] = [];
-  const dirs = [[-1, 0], [1, 0], [0, -1], [0, 1]];
-  dirs.forEach(([dy, dx]) => {
-    const ny = y + dy, nx = x + dx;
-    if (ny >= 0 && ny < ROWS && nx >= 0 && nx < COLS) {
-      const t = grid[ny][nx];
-      if (t.kind === "placed_item" && isChestBuilding(t.placedItemId) && t.chestInventory) {
-        chests.push(t);
-      }
-    }
-  });
-  return chests;
+// --- Factorio Industrial Automation Engine ---
+
+export function getDirectionVector(dir?: "up" | "down" | "left" | "right"): { dx: number; dy: number } {
+  switch (dir) {
+    case "up": return { dx: 0, dy: -1 };
+    case "down": return { dx: 0, dy: 1 };
+    case "left": return { dx: -1, dy: 0 };
+    case "right":
+    default:
+      return { dx: 1, dy: 0 };
+  }
 }
 
-function processFactory(tile: Tile, grid: Tile[][], y: number, x: number, dt: number, inputId: string, outputId: string, cost: number, time: number) {
+export function tickFurnace(tile: Tile, dt: number, powerSatisfaction = 1.0): void {
+  if (!tile.chestInventory) {
+    tile.chestInventory = Array.from({ length: 3 }, () => null);
+  }
+
+  const input = tile.chestInventory[0];
+  const fuel = tile.chestInventory[1];
+
+  const smeltRecipes: Record<string, { output: string; time: number }> = {
+    iron_ore: { output: "iron_bar", time: 3.2 },
+    copper_ore: { output: "copper_bar", time: 3.2 },
+    silver_ore: { output: "silver_bar", time: 3.5 },
+    gold_ore: { output: "gold_bar", time: 4.0 },
+    uranium_ore: { output: "uranium_bar", time: 6.0 },
+    iron_bar: { output: "steel_plate", time: 5.0 },
+  };
+
+  const isElectric = tile.placedItemId === "electric_furnace";
+  const speedMultiplier = tile.placedItemId === "steel_furnace" ? 2.0 : tile.placedItemId === "electric_furnace" ? 2.5 : 1.0;
+  const currentInputId = input?.id;
+  const recipe = currentInputId ? smeltRecipes[currentInputId] : null;
+
   if (tile.smeltActive) {
     if (tile.smeltTimer !== undefined) {
-      tile.smeltTimer -= dt;
+      tile.smeltTimer -= dt * speedMultiplier * (isElectric ? powerSatisfaction : 1.0);
       if (tile.smeltTimer <= 0) {
         tile.smeltActive = false;
         tile.smeltTimer = 0;
-        
-        // Try to push to adjacent chest
-        const chests = getAdjacentChests(grid, y, x);
-        let pushed = false;
-        for (const chest of chests) {
-          // Find slot with same item or empty
-          for (let i = 0; i < chest.chestInventory!.length; i++) {
-            if (chest.chestInventory![i] === null) {
-              chest.chestInventory![i] = createItem(outputId, 1);
-              pushed = true; break;
-            } else if (chest.chestInventory![i]!.id === outputId && chest.chestInventory![i]!.count < 99) {
-              chest.chestInventory![i]!.count++;
-              pushed = true; break;
-            }
+
+        if (tile.smeltOutputId) {
+          const outId = tile.smeltOutputId;
+          const outItem = createItem(outId, 1);
+          if (tile.chestInventory[2] === null) {
+            tile.chestInventory[2] = outItem;
+          } else if (tile.chestInventory[2].id === outId && tile.chestInventory[2].count < 99) {
+            tile.chestInventory[2].count += 1;
           }
-          if (pushed) break;
         }
+        tile.smeltOutputId = undefined;
       }
     }
   } else {
-    // Try to pull from adjacent chest
-    const chests = getAdjacentChests(grid, y, x);
-    let pulled = false;
-    for (const chest of chests) {
-      for (let i = 0; i < chest.chestInventory!.length; i++) {
-        const item = chest.chestInventory![i];
-        if (item && item.id === inputId && item.count >= cost) {
-          item.count -= cost;
-          if (item.count <= 0) chest.chestInventory![i] = null;
-          pulled = true;
-          break;
+    if (input && recipe && input.count >= (input.id === "iron_bar" ? 5 : 1)) {
+      const fuelCost = isElectric ? 0 : 1;
+      const hasFuel = isElectric ? (powerSatisfaction > 0.2) : (fuel && fuel.count >= 1 && (fuel.id === "coal" || fuel.id === "wood"));
+
+      if (hasFuel) {
+        const outputSlot = tile.chestInventory[2];
+        if (outputSlot === null || (outputSlot.id === recipe.output && outputSlot.count < 99)) {
+          const cost = input.id === "iron_bar" ? 5 : 1;
+          if (input.count <= cost) {
+            tile.chestInventory[0] = null;
+          } else {
+            input.count -= cost;
+          }
+
+          if (!isElectric && fuel) {
+            if (fuel.count <= 1) {
+              tile.chestInventory[1] = null;
+            } else {
+              fuel.count -= 1;
+            }
+          }
+
+          tile.smeltActive = true;
+          tile.smeltTimer = recipe.time;
+          tile.smeltMaxTime = recipe.time;
+          tile.smeltOutputId = recipe.output;
         }
       }
-      if (pulled) break;
     }
-    
-    if (pulled) {
-      tile.smeltActive = true;
-      tile.smeltTimer = time;
-      tile.smeltMaxTime = time;
+  }
+}
+
+export function isChestBuilding(placedItemId?: string): boolean {
+  return (
+    placedItemId === "chest" ||
+    placedItemId === "iron_chest" ||
+    placedItemId === "steel_chest" ||
+    placedItemId === "logistics_chest" ||
+    placedItemId === "worker_cabin"
+  );
+}
+
+export function getChestSlotCount(placedItemId?: string): number {
+  if (placedItemId === "iron_chest") return 24;
+  if (placedItemId === "steel_chest") return 48;
+  if (placedItemId === "logistics_chest") return 60;
+  if (placedItemId === "worker_cabin") return 6;
+  return 12;
+}
+
+// Factorio Transport Belt Simulation
+function updateTransportBelt(tile: Tile, grid: Tile[][], x: number, y: number, dt: number) {
+  if (!tile.beltItems) tile.beltItems = [];
+  if (tile.beltItems.length === 0) return;
+
+  const isFast = tile.placedItemId === "fast_transport_belt";
+  const speed = (isFast ? 3.6 : 1.8); // tiles per sec
+  const { dx, dy } = getDirectionVector(tile.direction);
+
+  for (let i = 0; i < tile.beltItems.length; i++) {
+    const item = tile.beltItems[i];
+    item.offset += speed * dt;
+
+    if (item.offset >= 1.0) {
+      const targetX = x + dx;
+      const targetY = y + dy;
+
+      if (targetX >= 0 && targetX < COLS && targetY >= 0 && targetY < ROWS) {
+        const nextTile = grid[targetY]?.[targetX];
+        if (nextTile) {
+          // Next tile is another belt
+          if (nextTile.kind === "placed_item" && (nextTile.placedItemId === "transport_belt" || nextTile.placedItemId === "fast_transport_belt")) {
+            if (!nextTile.beltItems) nextTile.beltItems = [];
+            if (nextTile.beltItems.length < 6) {
+              nextTile.beltItems.push({
+                id: item.id,
+                offset: item.offset - 1.0,
+                lane: item.lane,
+              });
+              tile.beltItems.splice(i, 1);
+              i--;
+              continue;
+            }
+          }
+          // Next tile is a chest
+          else if (nextTile.kind === "placed_item" && isChestBuilding(nextTile.placedItemId) && nextTile.chestInventory) {
+            const added = addItem(nextTile.chestInventory, createItem(item.id, 1));
+            if (added) {
+              tile.beltItems.splice(i, 1);
+              i--;
+              continue;
+            }
+          }
+          // Next tile is a furnace
+          else if (nextTile.kind === "placed_item" && (nextTile.placedItemId === "furnace" || nextTile.placedItemId === "stone_furnace" || nextTile.placedItemId === "steel_furnace" || nextTile.placedItemId === "electric_furnace") && nextTile.chestInventory) {
+            const itemObj = createItem(item.id, 1);
+            if (item.id === "coal" || item.id === "wood") {
+              if (nextTile.chestInventory[1] === null) {
+                nextTile.chestInventory[1] = itemObj;
+                tile.beltItems.splice(i, 1); i--; continue;
+              } else if (nextTile.chestInventory[1].id === item.id && nextTile.chestInventory[1].count < 99) {
+                nextTile.chestInventory[1].count++;
+                tile.beltItems.splice(i, 1); i--; continue;
+              }
+            } else {
+              if (nextTile.chestInventory[0] === null) {
+                nextTile.chestInventory[0] = itemObj;
+                tile.beltItems.splice(i, 1); i--; continue;
+              } else if (nextTile.chestInventory[0].id === item.id && nextTile.chestInventory[0].count < 99) {
+                nextTile.chestInventory[0].count++;
+                tile.beltItems.splice(i, 1); i--; continue;
+              }
+            }
+          }
+          // Next tile is an assembling machine
+          else if (nextTile.kind === "placed_item" && nextTile.placedItemId?.startsWith("assembling_machine") && nextTile.chestInventory) {
+            let placedInAssembler = false;
+            for (let slot = 0; slot < 4; slot++) {
+              if (nextTile.chestInventory[slot] === null) {
+                nextTile.chestInventory[slot] = createItem(item.id, 1);
+                placedInAssembler = true; break;
+              } else if (nextTile.chestInventory[slot].id === item.id && nextTile.chestInventory[slot].count < 99) {
+                nextTile.chestInventory[slot].count++;
+                placedInAssembler = true; break;
+              }
+            }
+            if (placedInAssembler) {
+              tile.beltItems.splice(i, 1);
+              i--;
+              continue;
+            }
+          }
+        }
+      }
+
+      // If cannot transfer, clamp to end of belt
+      item.offset = 0.95;
+    }
+  }
+}
+
+// Factorio Mining Drill Simulation
+function updateMiningDrill(tile: Tile, grid: Tile[][], x: number, y: number, dt: number, powerSatisfaction = 1.0) {
+  const isElectric = tile.placedItemId === "electric_drill";
+  if (!tile.chestInventory) tile.chestInventory = Array.from({ length: 3 }, () => null);
+
+  // Check fuel if burner drill
+  if (!isElectric) {
+    const fuel = tile.chestInventory[0];
+    if (!fuel || (fuel.id !== "coal" && fuel.id !== "wood") || fuel.count <= 0) {
+      return; // Burner drill out of fuel
+    }
+  } else {
+    if (powerSatisfaction <= 0.1) return; // Electric drill unpowered
+  }
+
+  // Detect underlying ore patch
+  if (!tile.drillTargetOre) {
+    const currentKind = grid[y]?.[x]?.kind;
+    const oreMapping: Record<string, string> = {
+      ore_iron: "iron_ore",
+      ore_copper: "copper_ore",
+      ore_coal: "coal",
+      ore_uranium: "uranium_ore",
+      ore_gold: "gold_ore",
+      ore_silver: "silver_ore",
+      ore_aluminum: "iron_ore",
+      debris_stone: "stone",
+    };
+    tile.drillTargetOre = oreMapping[currentKind] || "stone";
+  }
+
+  const speed = isElectric ? 0.45 * powerSatisfaction : 0.25; // cycle progress/sec
+  if (tile.drillTimer === undefined) tile.drillTimer = 0;
+  tile.drillTimer += speed * dt;
+
+  if (tile.drillTimer >= 1.0) {
+    tile.drillTimer = 0;
+
+    // Consume 1 fuel occasionally for burner
+    if (!isElectric && Math.random() < 0.15 && tile.chestInventory[0]) {
+      tile.chestInventory[0].count -= 1;
+      if (tile.chestInventory[0].count <= 0) tile.chestInventory[0] = null;
+    }
+
+    const minedItem = tile.drillTargetOre || "stone";
+    const { dx, dy } = getDirectionVector(tile.direction);
+    const targetX = x + dx;
+    const targetY = y + dy;
+
+    if (targetX >= 0 && targetX < COLS && targetY >= 0 && targetY < ROWS) {
+      const forwardTile = grid[targetY]?.[targetX];
+      if (forwardTile) {
+        // Output directly onto belt
+        if (forwardTile.kind === "placed_item" && (forwardTile.placedItemId === "transport_belt" || forwardTile.placedItemId === "fast_transport_belt")) {
+          if (!forwardTile.beltItems) forwardTile.beltItems = [];
+          if (forwardTile.beltItems.length < 6) {
+            forwardTile.beltItems.push({
+              id: minedItem,
+              offset: 0.1,
+              lane: Math.random() < 0.5 ? 0 : 1,
+            });
+            return;
+          }
+        }
+        // Output into chest or furnace
+        if (forwardTile.kind === "placed_item" && forwardTile.chestInventory) {
+          addItem(forwardTile.chestInventory, createItem(minedItem, 1));
+          return;
+        }
+      }
+    }
+  }
+}
+
+// Factorio Robotic Inserter Simulation
+function updateInserter(tile: Tile, grid: Tile[][], x: number, y: number, dt: number, powerSatisfaction = 1.0) {
+  const isFast = tile.placedItemId === "fast_inserter" || tile.placedItemId === "filter_inserter";
+  const isLong = tile.placedItemId === "long_inserter";
+  const reach = isLong ? 2 : 1;
+  const swingSpeed = (isFast ? 7.0 : 4.0) * (powerSatisfaction || 1.0);
+
+  if (tile.inserterArmAngle === undefined) tile.inserterArmAngle = -Math.PI;
+
+  const { dx, dy } = getDirectionVector(tile.direction);
+  const backX = x - dx * reach;
+  const backY = y - dy * reach;
+  const frontX = x + dx * reach;
+  const frontY = y + dy * reach;
+
+  // Holding item -> swing towards front (angle 0)
+  if (tile.inserterHolding) {
+    if (tile.inserterArmAngle < 0) {
+      tile.inserterArmAngle = Math.min(0, tile.inserterArmAngle + swingSpeed * dt);
+    }
+
+    // At destination front
+    if (tile.inserterArmAngle >= 0) {
+      if (frontX >= 0 && frontX < COLS && frontY >= 0 && frontY < ROWS) {
+        const destTile = grid[frontY]?.[frontX];
+        if (destTile && destTile.kind === "placed_item") {
+          // Drop onto front belt
+          if (destTile.placedItemId === "transport_belt" || destTile.placedItemId === "fast_transport_belt") {
+            if (!destTile.beltItems) destTile.beltItems = [];
+            if (destTile.beltItems.length < 6) {
+              destTile.beltItems.push({
+                id: tile.inserterHolding.id,
+                offset: 0.1,
+                lane: 0,
+              });
+              tile.inserterHolding = null;
+              return;
+            }
+          }
+          // Drop into chest
+          else if (isChestBuilding(destTile.placedItemId) && destTile.chestInventory) {
+            const added = addItem(destTile.chestInventory, tile.inserterHolding);
+            if (added) {
+              tile.inserterHolding = null;
+              return;
+            }
+          }
+          // Drop into furnace
+          else if ((destTile.placedItemId === "furnace" || destTile.placedItemId === "stone_furnace" || destTile.placedItemId === "steel_furnace" || destTile.placedItemId === "electric_furnace") && destTile.chestInventory) {
+            const held = tile.inserterHolding;
+            if (held.id === "coal" || held.id === "wood") {
+              if (destTile.chestInventory[1] === null) {
+                destTile.chestInventory[1] = held;
+                tile.inserterHolding = null; return;
+              } else if (destTile.chestInventory[1].id === held.id && destTile.chestInventory[1].count < 99) {
+                destTile.chestInventory[1].count++;
+                tile.inserterHolding = null; return;
+              }
+            } else {
+              if (destTile.chestInventory[0] === null) {
+                destTile.chestInventory[0] = held;
+                tile.inserterHolding = null; return;
+              } else if (destTile.chestInventory[0].id === held.id && destTile.chestInventory[0].count < 99) {
+                destTile.chestInventory[0].count++;
+                tile.inserterHolding = null; return;
+              }
+            }
+          }
+          // Drop into assembling machine input
+          else if (destTile.placedItemId?.startsWith("assembling_machine") && destTile.chestInventory) {
+            const held = tile.inserterHolding;
+            for (let s = 0; s < 4; s++) {
+              if (destTile.chestInventory[s] === null) {
+                destTile.chestInventory[s] = held;
+                tile.inserterHolding = null; return;
+              } else if (destTile.chestInventory[s].id === held.id && destTile.chestInventory[s].count < 99) {
+                destTile.chestInventory[s].count++;
+                tile.inserterHolding = null; return;
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  // Not holding item -> swing back towards source (-Math.PI)
+  else {
+    if (tile.inserterArmAngle > -Math.PI) {
+      tile.inserterArmAngle = Math.max(-Math.PI, tile.inserterArmAngle - swingSpeed * dt);
+    }
+
+    // At source back
+    if (tile.inserterArmAngle <= -Math.PI) {
+      if (backX >= 0 && backX < COLS && backY >= 0 && backY < ROWS) {
+        const srcTile = grid[backY]?.[backX];
+        if (srcTile && srcTile.kind === "placed_item") {
+          // Grab from belt
+          if (srcTile.beltItems && srcTile.beltItems.length > 0) {
+            const grabbed = srcTile.beltItems.shift();
+            if (grabbed) {
+              tile.inserterHolding = createItem(grabbed.id, 1);
+              return;
+            }
+          }
+          // Grab from chest
+          else if (srcTile.chestInventory) {
+            // If pulling from furnace or assembler, grab output slot first
+            const isFurnace = srcTile.placedItemId === "furnace" || srcTile.placedItemId === "stone_furnace" || srcTile.placedItemId === "steel_furnace" || srcTile.placedItemId === "electric_furnace";
+            const isAssembler = srcTile.placedItemId?.startsWith("assembling_machine");
+            const targetSlot = isFurnace ? 2 : isAssembler ? 4 : -1;
+
+            if (targetSlot !== -1 && srcTile.chestInventory[targetSlot]) {
+              const item = srcTile.chestInventory[targetSlot]!;
+              tile.inserterHolding = createItem(item.id, 1);
+              item.count -= 1;
+              if (item.count <= 0) srcTile.chestInventory[targetSlot] = null;
+              return;
+            }
+
+            // Otherwise grab first available non-empty slot
+            for (let s = 0; s < srcTile.chestInventory.length; s++) {
+              const item = srcTile.chestInventory[s];
+              if (item && item.count > 0) {
+                tile.inserterHolding = createItem(item.id, 1);
+                item.count -= 1;
+                if (item.count <= 0) srcTile.chestInventory[s] = null;
+                return;
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+// Factorio Assembling Machine Simulation
+function updateAssemblingMachine(tile: Tile, grid: Tile[][], x: number, y: number, dt: number, powerSatisfaction = 1.0) {
+  if (!tile.chestInventory) {
+    tile.chestInventory = Array.from({ length: 5 }, () => null); // 0..3 inputs, 4 output
+  }
+
+  // Default to iron_gear if no recipe assigned
+  if (!tile.assemblerRecipeId) {
+    tile.assemblerRecipeId = "iron_gear";
+  }
+
+  const recipe = CRAFTING_RECIPES.find((r) => r.id === tile.assemblerRecipeId);
+  if (!recipe) return;
+
+  const craftTime = recipe.craftTimeSeconds || 1.5;
+  const speedTier = tile.placedItemId === "assembling_machine_3" ? 2.5 : tile.placedItemId === "assembling_machine_2" ? 1.5 : 1.0;
+
+  // Check inputs
+  let canCraft = true;
+  for (const input of recipe.inputs) {
+    let countFound = 0;
+    for (let slot = 0; slot < 4; slot++) {
+      const item = tile.chestInventory[slot];
+      if (item && item.id === input.itemId) {
+        countFound += item.count;
+      }
+    }
+    if (countFound < input.count) {
+      canCraft = false;
+      break;
+    }
+  }
+
+  // Check output slot space
+  const outSlot = tile.chestInventory[4];
+  if (outSlot && outSlot.id !== recipe.outputId) canCraft = false;
+  if (outSlot && outSlot.count >= 99) canCraft = false;
+
+  if (canCraft && powerSatisfaction > 0.1) {
+    if (tile.assemblerProgress === undefined) tile.assemblerProgress = 0;
+    tile.assemblerProgress += (dt * speedTier * powerSatisfaction) / craftTime;
+
+    if (tile.assemblerProgress >= 1.0) {
+      tile.assemblerProgress = 0;
+
+      // Deduct inputs
+      for (const input of recipe.inputs) {
+        let remaining = input.count;
+        for (let slot = 0; slot < 4; slot++) {
+          const item = tile.chestInventory[slot];
+          if (item && item.id === input.itemId) {
+            const take = Math.min(item.count, remaining);
+            item.count -= take;
+            remaining -= take;
+            if (item.count <= 0) tile.chestInventory[slot] = null;
+            if (remaining <= 0) break;
+          }
+        }
+      }
+
+      // Add output
+      if (tile.chestInventory[4] === null) {
+        tile.chestInventory[4] = createItem(recipe.outputId, recipe.outputCount);
+      } else {
+        tile.chestInventory[4]!.count += recipe.outputCount;
+      }
+    }
+  }
+}
+
+// Factorio Science Lab Simulation
+function updateScienceLab(tile: Tile, state: GameState, dt: number, powerSatisfaction = 1.0) {
+  if (!tile.chestInventory) tile.chestInventory = Array.from({ length: 6 }, () => null);
+  if (!state.activeResearchId || powerSatisfaction <= 0.1) return;
+
+  const tech = TECHNOLOGIES.find((t) => t.id === state.activeResearchId);
+  if (!tech) return;
+
+  // Check for any science pack in lab inventory
+  let packSlot = -1;
+  for (let s = 0; s < tile.chestInventory.length; s++) {
+    const item = tile.chestInventory[s];
+    if (item && item.id.endsWith("_science_pack") && item.count > 0) {
+      packSlot = s;
+      break;
+    }
+  }
+
+  const baseRate = 3.0 * powerSatisfaction;
+  if (packSlot !== -1) {
+    // Consume science pack over time
+    if (Math.random() < 0.08 * dt) {
+      tile.chestInventory[packSlot]!.count -= 1;
+      if (tile.chestInventory[packSlot]!.count <= 0) tile.chestInventory[packSlot] = null;
+    }
+    state.researchPoints = (state.researchPoints || 0) + baseRate * 2.5 * dt;
+    state.researchProgress = (state.researchProgress || 0) + baseRate * 2.5 * dt;
+
+    if (state.researchProgress >= tech.cost) {
+      if (!state.unlockedTechs) state.unlockedTechs = [];
+      state.unlockedTechs.push(tech.id);
+      state.researchProgress = 0;
+      state.activeResearchId = undefined;
+      gameAudio.playLevelUp();
     }
   }
 }
 
 export function updateEntities(state: GameState, dt: number): void {
-  // Update factory buildings on farm
-  const isPowered = (state.unlockedTechs || []).includes("tech_electricity"); // Basic electricity simulation: unlocked globally if you have the tech
-  
+  // 1. Calculate Power Grid Metrics across the entire farm map
+  let totalGenerationKw = 0;
+  let totalDemandKw = 0;
+  const hours = state.time / 60;
+  const isDay = hours >= 6 && hours <= 19;
+
   for (let y = 0; y < ROWS; y++) {
     for (let x = 0; x < COLS; x++) {
       const tile = state.tiles[y]?.[x];
-      if (tile && tile.kind === "placed_item") {
-        if (tile.placedItemId === "furnace") {
-          tickFurnace(tile, dt);
-        } else if (tile.placedItemId === "wood_cutter") {
-          processFactory(tile, state.tiles, y, x, dt, "wood", "fiber", 2, 5); // Wood to Fiber (Sawdust)
-        } else if (tile.placedItemId === "stone_cutter") {
-          processFactory(tile, state.tiles, y, x, dt, "stone", "coal", 3, 5); // Stone to Coal (Crushing)
+      if (tile && tile.kind === "placed_item" && tile.placedItemId) {
+        const id = tile.placedItemId;
+        if (id === "generator") {
+          totalGenerationKw += 500;
+        } else if (id === "solar_panel" && isDay) {
+          totalGenerationKw += 60;
+        } else if (id === "electric_drill") {
+          totalDemandKw += 90;
+        } else if (id === "assembling_machine_1") {
+          totalDemandKw += 75;
+        } else if (id === "assembling_machine_2") {
+          totalDemandKw += 150;
+        } else if (id === "assembling_machine_3") {
+          totalDemandKw += 375;
+        } else if (id === "electric_furnace") {
+          totalDemandKw += 180;
+        } else if (id === "science_lab") {
+          totalDemandKw += 60;
+        } else if (id === "inserter" || id === "fast_inserter" || id === "long_inserter" || id === "filter_inserter") {
+          totalDemandKw += 15;
         }
       }
     }
   }
-  // Update furnaces inside house
-  if (state.houseGrid) {
-    for (let y = 0; y < state.houseGrid.length; y++) {
-      for (let x = 0; x < state.houseGrid[y].length; x++) {
-        const tile = state.houseGrid[y]?.[x];
-        if (tile && tile.kind === "placed_item" && tile.placedItemId === "furnace") {
-          tickFurnace(tile, dt);
-        }
+
+  const satisfaction = totalDemandKw > 0 ? Math.min(1.0, Math.max(0.05, totalGenerationKw / totalDemandKw)) : 1.0;
+  state.powerGridStats = {
+    capacityKw: totalGenerationKw,
+    demandKw: totalDemandKw,
+    satisfaction,
+    accumulatorStorageMj: 5.0,
+    maxStorageMj: 10.0,
+  };
+
+  // 2. Factorio Logistics & Machines Tick Pipeline
+  for (let y = 0; y < ROWS; y++) {
+    for (let x = 0; x < COLS; x++) {
+      const tile = state.tiles[y]?.[x];
+      if (!tile || tile.kind !== "placed_item" || !tile.placedItemId) continue;
+
+      const id = tile.placedItemId;
+      if (id === "transport_belt" || id === "fast_transport_belt") {
+        updateTransportBelt(tile, state.tiles, x, y, dt);
+      } else if (id === "burner_drill" || id === "electric_drill") {
+        updateMiningDrill(tile, state.tiles, x, y, dt, satisfaction);
+      } else if (id === "inserter" || id === "fast_inserter" || id === "long_inserter" || id === "filter_inserter") {
+        updateInserter(tile, state.tiles, x, y, dt, satisfaction);
+      } else if (id.startsWith("assembling_machine") || id === "chemical_plant") {
+        updateAssemblingMachine(tile, state.tiles, x, y, dt, satisfaction);
+      } else if (id === "furnace" || id === "stone_furnace" || id === "steel_furnace" || id === "electric_furnace") {
+        tickFurnace(tile, dt, satisfaction);
+      } else if (id === "science_lab") {
+        updateScienceLab(tile, state, dt, satisfaction);
       }
     }
   }
@@ -2832,14 +3653,35 @@ export function interact(
       return result;
     }
 
-    // Regular Placeables
-    if (tile.kind === "grass" || tile.kind === "mine_dirt" || tile.kind === "soil" || tile.kind === "house_floor") {
+    // Regular & Factorio Placeables
+    if (tile.kind === "grass" || tile.kind === "mine_dirt" || tile.kind === "soil" || tile.kind === "house_floor" || tile.kind === "path" || tile.kind === "ore_iron" || tile.kind === "ore_copper" || tile.kind === "ore_coal" || tile.kind === "debris_stone" || tile.kind === "ore_uranium") {
       tile.kind = "placed_item";
       tile.placedItemId = heldItem.id;
+      tile.direction = state.placementDirection || "right";
 
       if (heldItem.id === "chest") {
         tile.chestInventory = Array.from({ length: 12 }, () => null);
-      } else if (heldItem.id === "furnace") {
+      } else if (heldItem.id === "iron_chest") {
+        tile.chestInventory = Array.from({ length: 24 }, () => null);
+      } else if (heldItem.id === "steel_chest") {
+        tile.chestInventory = Array.from({ length: 48 }, () => null);
+      } else if (heldItem.id === "logistics_chest") {
+        tile.chestInventory = Array.from({ length: 60 }, () => null);
+      } else if (heldItem.id === "transport_belt" || heldItem.id === "fast_transport_belt") {
+        tile.beltItems = [];
+      } else if (heldItem.id === "burner_drill" || heldItem.id === "electric_drill") {
+        tile.chestInventory = Array.from({ length: 3 }, () => null);
+        tile.drillTimer = 0;
+      } else if (heldItem.id === "inserter" || heldItem.id === "fast_inserter" || heldItem.id === "long_inserter" || heldItem.id === "filter_inserter") {
+        tile.inserterArmAngle = -Math.PI;
+        tile.inserterHolding = null;
+      } else if (heldItem.id.startsWith("assembling_machine") || heldItem.id === "chemical_plant") {
+        tile.chestInventory = Array.from({ length: 5 }, () => null);
+        tile.assemblerRecipeId = "iron_gear";
+        tile.assemblerProgress = 0;
+      } else if (heldItem.id === "science_lab") {
+        tile.chestInventory = Array.from({ length: 6 }, () => null);
+      } else if (heldItem.id === "furnace" || heldItem.id === "stone_furnace" || heldItem.id === "steel_furnace" || heldItem.id === "electric_furnace") {
         tile.chestInventory = Array.from({ length: 3 }, () => null);
       } else if (heldItem.id === "worker_cabin") {
         tile.chestInventory = Array.from({ length: 12 }, () => null);
@@ -4081,15 +4923,248 @@ export function draw(
         });
       }
 
-      // Render Placed Items
+      // Render Placed Items (Factorio Automation & Farm Placeables)
       if (t.kind === "placed_item" && t.placedItemId) {
         const id = t.placedItemId;
-        if (id === "chest") {
-          ctx.fillStyle = "#873600";
-          ctx.fillRect(px + 6, py + 10, TILE - 12, TILE - 14);
+        const dir = t.direction || "right";
+
+        // 1. Factorio Transport Belts
+        if (id === "transport_belt" || id === "fast_transport_belt") {
+          const isFast = id === "fast_transport_belt";
+          const beltColor = isFast ? "#c0392b" : "#f39c12";
+          const arrowColor = isFast ? "#e74c3c" : "#f1c40f";
+
+          // Belt Track Frame
+          ctx.fillStyle = "#2c3e50";
+          ctx.fillRect(px + 2, py + 2, TILE - 4, TILE - 4);
+          ctx.fillStyle = beltColor;
+          ctx.fillRect(px + 4, py + 4, TILE - 8, TILE - 8);
+
+          // Moving directional Chevron arrows
+          const animOffset = (Date.now() / (isFast ? 150 : 300)) % 10;
+          ctx.fillStyle = arrowColor;
+          ctx.save();
+          ctx.translate(px + TILE / 2, py + TILE / 2);
+          if (dir === "up") ctx.rotate(-Math.PI / 2);
+          else if (dir === "down") ctx.rotate(Math.PI / 2);
+          else if (dir === "left") ctx.rotate(Math.PI);
+
+          for (let i = -12; i <= 12; i += 8) {
+            const arrX = i + animOffset - 5;
+            if (arrX >= -12 && arrX <= 12) {
+              ctx.beginPath();
+              ctx.moveTo(arrX + 3, 0);
+              ctx.lineTo(arrX - 3, -4);
+              ctx.lineTo(arrX - 1, 0);
+              ctx.lineTo(arrX - 3, 4);
+              ctx.closePath();
+              ctx.fill();
+            }
+          }
+          ctx.restore();
+
+          // Render moving items on the belt
+          if (t.beltItems && t.beltItems.length > 0) {
+            const { dx, dy } = getDirectionVector(dir);
+            t.beltItems.forEach((bItem) => {
+              const startX = px + 4;
+              const startY = py + 4;
+              const ix = startX + (dx !== 0 ? (bItem.offset * (TILE - 12)) * (dx > 0 ? 1 : -1) + (dx < 0 ? TILE - 12 : 0) : bItem.lane * 8 + 4);
+              const iy = startY + (dy !== 0 ? (bItem.offset * (TILE - 12)) * (dy > 0 ? 1 : -1) + (dy < 0 ? TILE - 12 : 0) : bItem.lane * 8 + 4);
+
+              // Draw item icon / gem
+              ctx.fillStyle = bItem.id.includes("iron") ? "#3498db" : bItem.id.includes("copper") ? "#e67e22" : bItem.id.includes("coal") ? "#17202a" : bItem.id.includes("uranium") ? "#2ecc71" : "#f1c40f";
+              ctx.beginPath();
+              ctx.arc(ix + 4, iy + 4, 3.5, 0, Math.PI * 2);
+              ctx.fill();
+              ctx.strokeStyle = "#ffffff";
+              ctx.lineWidth = 0.8;
+              ctx.stroke();
+            });
+          }
+        }
+
+        // 2. Factorio Mining Drills (Burner & Electric)
+        else if (id === "burner_drill" || id === "electric_drill") {
+          const isElectric = id === "electric_drill";
+          const baseColor = isElectric ? "#16a085" : "#7f8c8d";
+          const rimColor = isElectric ? "#1abc9c" : "#95a5a6";
+
+          // Drill Machine Body
+          ctx.fillStyle = "#2c3e50";
+          ctx.fillRect(px + 2, py + 2, TILE - 4, TILE - 4);
+          ctx.fillStyle = baseColor;
+          ctx.fillRect(px + 4, py + 4, TILE - 8, TILE - 8);
+          ctx.fillStyle = rimColor;
+          ctx.fillRect(px + 6, py + 6, TILE - 12, 3);
+
+          // Animated Mining Head / Gear
+          const drillVibe = Math.sin(Date.now() / 60) * 1.5;
+          ctx.save();
+          ctx.translate(px + TILE / 2, py + TILE / 2);
+          ctx.fillStyle = "#34495e";
+          ctx.beginPath();
+          ctx.arc(0, 0, 7, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = "#f39c12";
+          ctx.fillRect(-2 + drillVibe, -2, 4, 4);
+
+          // Ejection Chute Indicator
+          if (dir === "up") ctx.rotate(-Math.PI / 2);
+          else if (dir === "down") ctx.rotate(Math.PI / 2);
+          else if (dir === "left") ctx.rotate(Math.PI);
+          ctx.fillStyle = "#e74c3c";
+          ctx.fillRect(8, -3, 4, 6);
+          ctx.restore();
+        }
+
+        // 3. Factorio Robotic Inserters
+        else if (id === "inserter" || id === "fast_inserter" || id === "long_inserter" || id === "filter_inserter") {
+          const isFast = id === "fast_inserter";
+          const isLong = id === "long_inserter";
+          const isFilter = id === "filter_inserter";
+          const armColor = isFilter ? "#9b59b6" : isLong ? "#e74c3c" : isFast ? "#3498db" : "#f1c40f";
+
+          // Base Turret
+          ctx.fillStyle = "#34495e";
+          ctx.beginPath();
+          ctx.arc(px + TILE / 2, py + TILE / 2, 7, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = armColor;
+          ctx.beginPath();
+          ctx.arc(px + TILE / 2, py + TILE / 2, 4, 0, Math.PI * 2);
+          ctx.fill();
+
+          // Articulated Arm & Hand
+          const armAngle = (t.inserterArmAngle !== undefined ? t.inserterArmAngle : 0);
+          const { dx, dy } = getDirectionVector(dir);
+          const baseAngle = Math.atan2(dy, dx);
+          const totalAngle = baseAngle + armAngle;
+
+          const armLen = isLong ? 18 : 12;
+          const endX = px + TILE / 2 + Math.cos(totalAngle) * armLen;
+          const endY = py + TILE / 2 + Math.sin(totalAngle) * armLen;
+
+          ctx.strokeStyle = armColor;
+          ctx.lineWidth = 3;
+          ctx.beginPath();
+          ctx.moveTo(px + TILE / 2, py + TILE / 2);
+          ctx.lineTo(endX, endY);
+          ctx.stroke();
+
+          // Hand Claw
+          ctx.fillStyle = "#ecf0f1";
+          ctx.beginPath();
+          ctx.arc(endX, endY, 3, 0, Math.PI * 2);
+          ctx.fill();
+
+          // Held Item
+          if (t.inserterHolding) {
+            ctx.fillStyle = "#f39c12";
+            ctx.beginPath();
+            ctx.arc(endX, endY, 3.5, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
+
+        // 4. Factorio Assembling Machines (Tier 1, 2, 3)
+        else if (id.startsWith("assembling_machine") || id === "chemical_plant") {
+          const isT2 = id === "assembling_machine_2";
+          const isT3 = id === "assembling_machine_3";
+          const isChem = id === "chemical_plant";
+          const bodyColor = isChem ? "#27ae60" : isT3 ? "#f1c40f" : isT2 ? "#2980b9" : "#7f8c8d";
+
+          // Assembler Building Structure
+          ctx.fillStyle = "#1a252f";
+          ctx.fillRect(px + 1, py + 1, TILE - 2, TILE - 2);
+          ctx.fillStyle = bodyColor;
+          ctx.fillRect(px + 3, py + 3, TILE - 6, TILE - 6);
+
+          // Spinning Industrial Cogs
+          ctx.save();
+          ctx.translate(px + TILE / 2, py + TILE / 2);
+          ctx.rotate(Date.now() / 250);
+          ctx.fillStyle = "#34495e";
+          ctx.fillRect(-6, -2, 12, 4);
+          ctx.fillRect(-2, -6, 4, 12);
+          ctx.fillStyle = "#ecf0f1";
+          ctx.beginPath();
+          ctx.arc(0, 0, 3, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+
+          // Crafting Progress Mini-Bar
+          if (t.assemblerProgress !== undefined && t.assemblerProgress > 0) {
+            ctx.fillStyle = "#000000";
+            ctx.fillRect(px + 4, py + TILE - 6, TILE - 8, 3);
+            ctx.fillStyle = "#2ecc71";
+            ctx.fillRect(px + 4, py + TILE - 6, (TILE - 8) * t.assemblerProgress, 3);
+          }
+        }
+
+        // 5. Factorio Science Research Lab
+        else if (id === "science_lab") {
+          ctx.fillStyle = "#1e272c";
+          ctx.fillRect(px + 2, py + 2, TILE - 4, TILE - 4);
+          ctx.fillStyle = "#3498db"; // glowing glass dome
+          ctx.beginPath();
+          ctx.arc(px + TILE / 2, py + TILE / 2, 10, 0, Math.PI * 2);
+          ctx.fill();
+          // Science Laser Beam Pulse
+          const pulse = Math.sin(Date.now() / 150) * 0.4 + 0.6;
+          ctx.fillStyle = `rgba(46, 204, 113, ${pulse})`;
+          ctx.beginPath();
+          ctx.arc(px + TILE / 2, py + TILE / 2, 6, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        // 6. Factorio Electrical Power Poles & Substations
+        else if (id === "power_pole" || id === "medium_power_pole" || id === "substation") {
+          const isMedium = id === "medium_power_pole";
+          const isSub = id === "substation";
+          ctx.fillStyle = isSub ? "#2c3e50" : isMedium ? "#7f8c8d" : "#795548";
+          ctx.fillRect(px + 14, py + 6, 4, 22);
+          ctx.fillRect(px + 6, py + 8, 20, 3);
+          ctx.fillStyle = "#3498db"; // insulators
+          ctx.fillRect(px + 7, py + 11, 3, 3);
+          ctx.fillRect(px + 22, py + 11, 3, 3);
+        }
+
+        // 7. Factorio Power Generators & Boilers
+        else if (id === "generator" || id === "boiler") {
+          ctx.fillStyle = "#34495e";
+          ctx.fillRect(px + 2, py + 4, TILE - 4, TILE - 8);
+          ctx.fillStyle = "#e67e22";
+          ctx.fillRect(px + 4, py + 6, 8, 8);
+          ctx.fillStyle = "#bdc3c7"; // turbine vent
+          ctx.beginPath();
+          ctx.arc(px + 22, py + 16, 6, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        // 8. Factorio Rocket Launch Silo
+        else if (id === "rocket_silo") {
+          ctx.fillStyle = "#1a1d20";
+          ctx.fillRect(px + 1, py + 1, TILE - 2, TILE - 2);
+          ctx.fillStyle = "#e74c3c";
+          ctx.beginPath();
+          ctx.arc(px + TILE / 2, py + TILE / 2, 12, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = "#ecf0f1";
+          ctx.fillRect(px + 13, py + 6, 6, 20);
+        }
+
+        // 9. Storage Chests
+        else if (id === "chest" || id === "iron_chest" || id === "steel_chest" || id === "logistics_chest") {
+          const chestColor = id === "logistics_chest" ? "#e74c3c" : id === "steel_chest" ? "#7f8c8d" : id === "iron_chest" ? "#3498db" : "#873600";
+          ctx.fillStyle = chestColor;
+          ctx.fillRect(px + 5, py + 9, TILE - 10, TILE - 12);
           ctx.fillStyle = "#f4d03f";
-          ctx.fillRect(px + 14, py + 18, 4, 3);
-        } else if (id === "torch") {
+          ctx.fillRect(px + 13, py + 17, 6, 4);
+        }
+
+        // Farm Decor / Tools
+        else if (id === "torch") {
           ctx.fillStyle = "#5c3a21";
           ctx.fillRect(px + 15, py + 14, 2, 14);
           const f = 5 + Math.sin(Date.now() / 90) * 2;
@@ -4110,34 +5185,24 @@ export function draw(
           ctx.fillRect(px + 10, py + 18, 12, 8);
           ctx.fillStyle = "#7f8c8d";
           ctx.fillRect(px + 15, py + 8, 2, 10);
-
           ctx.save();
           ctx.translate(px + 16, py + 8);
           ctx.rotate(Date.now() / 150);
           ctx.fillStyle = "#95a5a6";
           ctx.fillRect(-6, -1, 12, 2);
           ctx.restore();
-        } else if (id === "furnace") {
-          ctx.fillStyle = "#566573";
+        } else if (id === "furnace" || id === "stone_furnace" || id === "steel_furnace" || id === "electric_furnace") {
+          const isSteel = id === "steel_furnace";
+          const isElec = id === "electric_furnace";
+          ctx.fillStyle = isElec ? "#16a085" : isSteel ? "#34495e" : "#566573";
           ctx.fillRect(px + 4, py + 4, TILE - 8, TILE - 4);
-          ctx.fillStyle = "#2c3e50";
-          ctx.fillRect(px + 8, py + 16, TILE - 16, TILE - 20);
-          ctx.fillStyle = "#e67e22"; // fire glow
-          ctx.beginPath();
-          ctx.arc(px + 16, py + 22, 3 + Math.sin(Date.now() / 100), 0, Math.PI * 2);
-          ctx.fill();
-        } else if (id === "wood_cutter") {
-          ctx.fillStyle = "#873600";
-          ctx.fillRect(px + 4, py + 8, TILE - 8, TILE - 12);
-          ctx.fillStyle = "#bdc3c7"; // saw blade
-          ctx.beginPath();
-          ctx.arc(px + 16, py + 10, 6, 0, Math.PI * 2);
-          ctx.fill();
-        } else if (id === "stone_cutter") {
-          ctx.fillStyle = "#7f8c8d";
-          ctx.fillRect(px + 4, py + 8, TILE - 8, TILE - 12);
-          ctx.fillStyle = "#bdc3c7"; // saw blade
-          ctx.fillRect(px + 14, py + 6, 4, 12);
+          ctx.fillStyle = "#1a252f";
+          ctx.fillRect(px + 8, py + 14, TILE - 16, TILE - 18);
+          if (t.smeltActive) {
+            const glow = Math.sin(Date.now() / 90) * 0.3 + 0.7;
+            ctx.fillStyle = isElec ? `rgba(46, 204, 113, ${glow})` : `rgba(230, 126, 34, ${glow})`;
+            ctx.fillRect(px + 10, py + 16, 12, 8);
+          }
         } else if (id === "solar_panel") {
           ctx.fillStyle = "#2980b9";
           ctx.fillRect(px + 2, py + 6, TILE - 4, TILE - 10);
@@ -4149,108 +5214,25 @@ export function draw(
           ctx.fillRect(px + 8, py + 8, TILE - 16, TILE - 8);
           ctx.fillStyle = "#f1c40f";
           ctx.fillRect(px + 12, py + 14, 8, 4);
-        } else if (id === "pet_house") {
-          ctx.fillStyle = "#d35400";
-          ctx.beginPath();
-          ctx.moveTo(px + 16, py + 2);
-          ctx.lineTo(px + 2, py + 14);
-          ctx.lineTo(px + 30, py + 14);
-          ctx.fill();
-          ctx.fillStyle = "#e67e22";
-          ctx.fillRect(px + 6, py + 14, TILE - 12, TILE - 14);
-          ctx.fillStyle = "#000000";
-          ctx.beginPath();
-          ctx.arc(px + 16, py + 24, 4, Math.PI, 0);
-          ctx.fill();
-        } else if (id === "animal_house") {
-          ctx.fillStyle = "#c0392b";
-          ctx.beginPath();
-          ctx.moveTo(px + 16, py + 2);
-          ctx.lineTo(px + 0, py + 16);
-          ctx.lineTo(px + 32, py + 16);
-          ctx.fill();
-          ctx.fillStyle = "#e74c3c";
-          ctx.fillRect(px + 2, py + 16, TILE - 4, TILE - 16);
-          ctx.fillStyle = "#ecf0f1";
-          ctx.fillRect(px + 10, py + 20, 12, 12);
-                } else if (id === "chicken_egg") {
-          ctx.fillStyle = "#f9e79f";
-          ctx.beginPath();
-          ctx.arc(px + 16, py + 20, 5, 0, Math.PI * 2);
-          ctx.fill();
         } else if (id === "mailbox") {
           ctx.fillStyle = "#7f8c8d";
           ctx.fillRect(px + 10, py + 16, 12, 12);
           ctx.fillStyle = "#2c3e50";
           ctx.fillRect(px + 14, py + 28, 4, 4);
-
           if (state.hasUnreadMail) {
             ctx.fillStyle = "#e74c3c";
             ctx.fillRect(px + 20, py + 10, 4, 6);
-          } else {
-            ctx.fillStyle = "#7f8c8d";
-            ctx.fillRect(px + 20, py + 22, 6, 2);
           }
-        } else if (id === "pet_bowl_dog" || id === "pet_bowl_cat") {
-          ctx.fillStyle = "#8d6e63";
-          ctx.beginPath();
-          ctx.ellipse(px + 16, py + 22, 9, 5, 0, 0, Math.PI * 2);
-          ctx.fill();
-          if (t.watered) {
-            ctx.fillStyle = "#3498db";
-            ctx.beginPath();
-            ctx.ellipse(px + 16, py + 21, 6, 3, 0, 0, Math.PI * 2);
-            ctx.fill();
-          }
-        } else if (id === "worker_cabin") {
-          // Premium cabin with shadow base and chimneys smoke trigger in app
-          ctx.fillStyle = "rgba(0, 0, 0, 0.2)";
-          ctx.beginPath();
-          ctx.ellipse(px + 16, py + 28, 14, 4, 0, 0, Math.PI * 2);
-          ctx.fill();
-
+        } else if (id === "pet_house" || id === "animal_house" || id === "worker_cabin") {
           ctx.fillStyle = "#8d6e63";
           ctx.fillRect(px + 4, py + 12, TILE - 8, TILE - 12);
-          ctx.fillStyle = "#5d4037";
-          ctx.fillRect(px + 4, py + 16, TILE - 8, 2);
-          ctx.fillRect(px + 4, py + 22, TILE - 8, 2);
-
-          ctx.fillStyle = "#c62828"; // roof
+          ctx.fillStyle = "#c62828";
           ctx.beginPath();
           ctx.moveTo(px + 16, py + 2);
           ctx.lineTo(px, py + 12);
           ctx.lineTo(px + TILE, py + 12);
           ctx.closePath();
           ctx.fill();
-
-          ctx.fillStyle = "#b71c1c";
-          ctx.fillRect(px + 4, py + 10, TILE - 8, 2);
-
-          ctx.fillStyle = "#d84315"; // door
-          ctx.fillRect(px + 12, py + 18, 8, 14);
-          ctx.fillStyle = "#fdd835";
-          ctx.fillRect(px + 13, py + 19, 6, 13);
-
-          ctx.fillStyle = "#3e2723"; // window
-          ctx.fillRect(px + 22, py + 16, 6, 6);
-          const glow = (phase === "night" || phase === "evening") ? "#f1c40f" : "#85c1e9";
-          ctx.fillStyle = glow;
-          ctx.fillRect(px + 23, py + 17, 4, 4);
-        } else if (id === "furnace") {
-          ctx.fillStyle = "#7f8c8d";
-          ctx.fillRect(px + 4, py + 8, TILE - 8, TILE - 8);
-          ctx.fillStyle = "#566573";
-          ctx.fillRect(px + 4, py + 8, TILE - 8, 2);
-          ctx.fillRect(px + 4, py + 8, 2, TILE - 8);
-          ctx.fillStyle = "#2c3e50";
-          ctx.fillRect(px + 10, py + 18, 12, 10);
-          if (t.smeltActive) {
-            const fireGlow = Math.sin(Date.now() / 90) * 0.3 + 0.7;
-            ctx.fillStyle = `rgba(230, 126, 34, ${fireGlow})`;
-            ctx.fillRect(px + 12, py + 20, 8, 6);
-            ctx.fillStyle = `rgba(241, 196, 15, ${fireGlow})`;
-            ctx.fillRect(px + 14, py + 22, 4, 3);
-          }
         }
       }
 

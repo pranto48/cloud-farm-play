@@ -2041,6 +2041,15 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
     stopContinuousAction();
   };
 
+  const handleCanvasWheel = (e: React.WheelEvent<HTMLCanvasElement>) => {
+    e.preventDefault();
+    if (e.deltaY < 0) {
+      setZoom((z) => Math.min(2.0, parseFloat((z + 0.15).toFixed(2))));
+    } else {
+      setZoom((z) => Math.max(0.5, parseFloat((z - 0.15).toFixed(2))));
+    }
+  };
+
   const handleTileInteraction = (coords: { x: number; y: number }) => {
     if (zoningMode !== "none") return;
     const curState = stateRef.current;
@@ -2880,6 +2889,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
           onMouseDown={handleCanvasMouseDown}
           onMouseUp={handleCanvasMouseUp}
           onTouchStart={handleCanvasTouchStart}
+          onWheel={handleCanvasWheel}
           onMouseLeave={() => { handleCanvasMouseLeave(); isDraggingZone.current = false; }}
           onClick={handleCanvasClick}
           style={{ width: "100%", height: "100%", display: "block", imageRendering: "pixelated", cursor: "crosshair", touchAction: "none" }}
@@ -2994,6 +3004,30 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
             >
               <span className={`text-sm font-black ${state.godMode ? "text-amber-400" : "text-[#a78bfa]"}`}>/</span>
             </button>
+            {/* Zoom Controls */}
+            <div className="flex items-center bg-[#202224] border border-slate-700">
+              <button
+                onClick={handleZoomOut}
+                title="Zoom Out (-)"
+                className="w-7 h-8 flex items-center justify-center hover:bg-[#ff9200]/20 text-slate-200 hover:text-[#ff9200] font-mono font-black text-xs"
+              >
+                -
+              </button>
+              <button
+                onClick={handleZoomReset}
+                title="Reset Zoom (100%)"
+                className="px-1.5 h-8 flex items-center justify-center text-[10px] font-mono font-bold text-amber-400 border-x border-slate-700 hover:bg-slate-800"
+              >
+                {Math.round(zoom * 100)}%
+              </button>
+              <button
+                onClick={handleZoomIn}
+                title="Zoom In (+)"
+                className="w-7 h-8 flex items-center justify-center hover:bg-[#ff9200]/20 text-slate-200 hover:text-[#ff9200] font-mono font-black text-xs"
+              >
+                +
+              </button>
+            </div>
           </div>
 
           {/* Mailbox Button (if unread mail exists) */}
@@ -3183,6 +3217,33 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                 <span>🛠️ Free Craft</span>
                 <span className="text-[9px] font-mono px-1 py-0.5 rounded bg-black/50">{state.freeCraft ? "ON" : "OFF"}</span>
               </button>
+            </div>
+
+            {/* Mobile Zoom Controls Row */}
+            <div className="flex items-center justify-between p-2 bg-[#1a222d] border border-slate-700/80 rounded-lg mt-2 font-mono">
+              <span className="text-xs font-bold text-slate-300 flex items-center gap-1">
+                <span>🔍</span> Zoom View
+              </span>
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={handleZoomOut}
+                  className="w-8 h-7 bg-[#232f3e] active:bg-[#ff9200] border border-slate-600 rounded text-slate-100 font-black text-sm flex items-center justify-center"
+                >
+                  -
+                </button>
+                <button
+                  onClick={handleZoomReset}
+                  className="px-2 h-7 bg-[#11161d] border border-slate-700 rounded text-amber-400 font-bold text-[10px] flex items-center justify-center"
+                >
+                  {Math.round(zoom * 100)}%
+                </button>
+                <button
+                  onClick={handleZoomIn}
+                  className="w-8 h-7 bg-[#232f3e] active:bg-[#ff9200] border border-slate-600 rounded text-slate-100 font-black text-sm flex items-center justify-center"
+                >
+                  +
+                </button>
+              </div>
             </div>
 
             <div className="flex gap-2 pt-2 border-t border-slate-800">

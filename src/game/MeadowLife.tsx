@@ -281,19 +281,37 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
   const recipesByCategory = useMemo(() => {
     return {
       logistics: CRAFTING_RECIPES.filter((r) =>
-        ["transport_belt", "fast_transport_belt", "underground_belt", "splitter", "inserter", "fast_inserter", "long_inserter", "filter_inserter", "chest", "iron_chest", "steel_chest", "logistics_chest", "sprinkler_basic", "sprinkler_quality", "logistics_drone", "drone_hub"].includes(r.id)
+        [
+          "transport_belt", "fast_transport_belt", "underground_belt", "splitter", "fast_splitter", "express_splitter",
+          "inserter", "fast_inserter", "long_inserter", "filter_inserter", "stack_inserter", "stack_filter_inserter",
+          "chest", "iron_chest", "steel_chest", "active_provider_chest", "passive_provider_chest", "storage_chest", "requester_chest", "logistics_chest",
+          "pipe", "empty_barrel", "sulfuric_acid_barrel", "fluid_wagon", "train_stop", "sprinkler_basic", "sprinkler_quality", "logistics_drone", "drone_hub"
+        ].includes(r.id)
       ),
       production: CRAFTING_RECIPES.filter((r) =>
-        ["burner_drill", "electric_drill", "stone_furnace", "steel_furnace", "electric_furnace", "assembling_machine_1", "assembling_machine_2", "assembling_machine_3", "chemical_plant", "science_lab", "wood_cutter", "stone_cutter", "research_center", "player_store", "rocket_silo"].includes(r.id)
+        [
+          "burner_drill", "electric_drill", "stone_furnace", "steel_furnace", "electric_furnace",
+          "assembling_machine_1", "assembling_machine_2", "assembling_machine_3", "chemical_plant", "science_lab",
+          "wood_cutter", "stone_cutter", "research_center", "player_store", "rocket_silo"
+        ].includes(r.id)
       ),
       intermediates: CRAFTING_RECIPES.filter((r) =>
-        ["iron_gear", "copper_wire", "steel_plate", "electronic_circuit", "plastic_bar", "sulfur", "advanced_circuit", "processing_unit", "engine_unit", "electric_engine", "flying_robot_frame", "automation_science_pack", "logistic_science_pack", "chemical_science_pack", "rocket_fuel", "rocket_part", "satellite"].includes(r.id)
+        [
+          "iron_gear", "copper_wire", "iron_stick", "green_wire", "red_wire", "steel_plate",
+          "electronic_circuit", "advanced_circuit", "processing_unit", "plastic_bar", "sulfur",
+          "engine_unit", "electric_engine", "flying_robot_frame", "efficiency_module", "speed_module", "productivity_module",
+          "arithmetic_combinator", "decider_combinator", "programmable_speaker", "uranium_fuel_cell",
+          "automation_science_pack", "logistic_science_pack", "chemical_science_pack", "rocket_fuel", "rocket_part", "satellite"
+        ].includes(r.id)
       ),
       power: CRAFTING_RECIPES.filter((r) =>
-        ["power_pole", "medium_power_pole", "substation", "boiler", "generator", "solar_panel", "battery"].includes(r.id)
+        ["power_pole", "medium_power_pole", "substation", "boiler", "steam_engine", "generator", "solar_panel", "battery", "heat_pipe"].includes(r.id)
+      ),
+      combat: CRAFTING_RECIPES.filter((r) =>
+        ["energy_shield", "energy_shield_mk2", "belt_immunity_equipment", "personal_roboport", "explosives", "cluster_grenade", "radar"].includes(r.id)
       ),
       materials: CRAFTING_RECIPES.filter((r) =>
-        ["iron_bar", "copper_bar", "gold_bar", "silver_bar", "uranium_bar", "torch", "scarecrow", "bed", "stone_path"].includes(r.id)
+        ["iron_bar", "copper_bar", "gold_bar", "silver_bar", "uranium_bar", "stone_brick", "concrete", "torch", "scarecrow", "bed", "stone_path"].includes(r.id)
       ),
     };
   }, []);
@@ -307,7 +325,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
   const [sleepConfirmOpen, setSleepConfirmOpen] = useState(false);
   const [shippingBinOpen, setShippingBinOpen] = useState(false);
   const [furnaceOpenTile, setFurnaceOpenTile] = useState<{ x: number; y: number } | null>(null);
-  const [craftingCategory, setCraftingCategory] = useState<"logistics" | "production" | "intermediates" | "power" | "materials">("logistics");
+  const [craftingCategory, setCraftingCategory] = useState<"logistics" | "production" | "intermediates" | "power" | "combat" | "materials">("logistics");
   const [craftingQueue, setCraftingQueue] = useState<{ id: string; recipeId: string; name: string; iconSymbol: string; iconColor: string; progress: number; duration: number; remainingTime: number }[]>([]);
   const [hoveredRecipe, setHoveredRecipe] = useState<Recipe | null>(null);
   const hoveredTileRef = useRef<{ x: number; y: number } | null>(null);
@@ -4526,6 +4544,16 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                       Power Grid
                     </button>
                     <button
+                      onClick={() => setCraftingCategory("combat")}
+                      className={`flex items-center gap-1 px-2.5 py-1 text-xs border font-bold transition-all ${craftingCategory === "combat"
+                          ? "bg-zinc-850 border-orange-500 text-orange-400 font-extrabold"
+                          : "bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:bg-zinc-800"
+                        }`}
+                    >
+                      <span>🛡️</span>
+                      Combat
+                    </button>
+                    <button
                       onClick={() => setCraftingCategory("materials")}
                       className={`flex items-center gap-1 px-2.5 py-1 text-xs border font-bold transition-all ${craftingCategory === "materials"
                           ? "bg-zinc-850 border-orange-500 text-orange-400 font-extrabold"
@@ -4598,8 +4626,8 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                   </div>
                 </div>
 
-                {/* Right side: Detailed Recipe Inspector */}
-                <div className="bg-[#141517] p-3 rounded border border-slate-700 flex flex-col justify-between min-h-[220px]">
+                {/* Right side: Factorio Recipe Flow Card Inspector */}
+                <div className="bg-[#141517] p-3 rounded border border-slate-700 flex flex-col justify-between min-h-[240px]">
                   {hoveredRecipe ? (() => {
                     const itemDef = ITEM_DEFS[hoveredRecipe.outputId];
                     const isTechLocked = hoveredRecipe.techRequired && !(state.unlockedTechs || []).includes(hoveredRecipe.techRequired);
@@ -4607,18 +4635,51 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                     return (
                       <div className="space-y-3 flex-1 flex flex-col justify-between font-mono">
                         <div className="space-y-2">
-                          <div className="flex items-center gap-2 border-b border-zinc-800 pb-2">
-                            <span className="text-2xl bg-zinc-900 p-1 border border-zinc-800 rounded">
-                              {itemDef?.iconSymbol || "⚙"}
-                            </span>
-                            <div>
-                              <h4 className="font-extrabold text-sm text-orange-400 flex items-center gap-1">
-                                {hoveredRecipe.name}
-                                {isTechLocked && <span className="text-purple-400 text-xs">🔒</span>}
-                              </h4>
-                              <span className="text-[9px] text-zinc-500 font-bold uppercase">
-                                Produces x{hoveredRecipe.outputCount}
+                          {/* Factorio Recipe Header */}
+                          <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
+                            <div className="flex items-center gap-2">
+                              <span className="text-2xl bg-zinc-900 p-1 border border-zinc-800 rounded">
+                                {itemDef?.iconSymbol || "⚙"}
                               </span>
+                              <div>
+                                <h4 className="font-extrabold text-sm text-orange-400 flex items-center gap-1">
+                                  {hoveredRecipe.name}
+                                  {isTechLocked && <span className="text-purple-400 text-xs">🔒</span>}
+                                </h4>
+                                <span className="text-[9px] text-zinc-500 font-bold uppercase">
+                                  Output: x{hoveredRecipe.outputCount}
+                                </span>
+                              </div>
+                            </div>
+                            {hoveredRecipe.craftTimeSeconds && (
+                              <span className="text-[10px] text-amber-400 font-mono bg-zinc-900 px-1.5 py-0.5 rounded border border-zinc-800">
+                                ⏱️ {hoveredRecipe.craftTimeSeconds}s
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Factorio Recipe Flow Diagram */}
+                          <div className="p-2 bg-zinc-900/80 border border-zinc-800 rounded flex items-center justify-between gap-1 overflow-x-auto text-[10px]">
+                            {/* Inputs Flow */}
+                            <div className="flex items-center gap-1 shrink-0">
+                              {hoveredRecipe.inputs.map((inp) => (
+                                <div key={inp.itemId} className="flex flex-col items-center bg-zinc-950 p-1 rounded border border-zinc-800" title={ITEM_DEFS[inp.itemId]?.name || inp.itemId}>
+                                  <span className="text-sm">{ITEM_DEFS[inp.itemId]?.iconSymbol || "📦"}</span>
+                                  <span className="text-[9px] font-bold text-slate-300 font-mono">{inp.count}x</span>
+                                </div>
+                              ))}
+                            </div>
+
+                            {/* Arrow + Craft Time */}
+                            <div className="flex flex-col items-center justify-center px-1 text-slate-400 shrink-0">
+                              <span className="text-base font-bold text-orange-400 leading-none">➔</span>
+                              <span className="text-[8px] font-mono text-zinc-500">{hoveredRecipe.craftTimeSeconds || 0.5}s</span>
+                            </div>
+
+                            {/* Output Box */}
+                            <div className="flex flex-col items-center bg-orange-950/40 p-1 rounded border border-orange-600/60 shrink-0" title={itemDef?.name || hoveredRecipe.outputId}>
+                              <span className="text-sm">{itemDef?.iconSymbol || "⚙️"}</span>
+                              <span className="text-[9px] font-bold text-orange-300 font-mono">{hoveredRecipe.outputCount}x</span>
                             </div>
                           </div>
 
@@ -4645,9 +4706,9 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                           </p>
 
                           {/* Ingredient Checklist */}
-                          <div className="space-y-1.5 pt-1">
-                            <span className="text-[9px] text-zinc-500 font-bold uppercase tracking-wider block mb-1">
-                              Ingredients:
+                          <div className="space-y-1 pt-1">
+                            <span className="text-[9px] text-zinc-500 font-bold uppercase tracking-wider block mb-0.5">
+                              Required Ingredients:
                             </span>
                             {hoveredRecipe.inputs.map((input) => {
                               const playerHas = getGlobalItemCount(state, input.itemId);
@@ -4690,7 +4751,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                     );
                   })() : (
                     <div className="flex flex-col items-center justify-center text-center text-zinc-500 text-[10px] py-8 h-full flex-1">
-                      <span>⚙ Hover over a recipe to view costs & research requirements.</span>
+                      <span>⚙ Hover over a recipe to view costs & recipe flow.</span>
                       <span className="mt-1">Click to queue crafting.</span>
                     </div>
                   )}

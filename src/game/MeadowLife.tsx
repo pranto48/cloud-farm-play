@@ -282,36 +282,59 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
     return {
       logistics: CRAFTING_RECIPES.filter((r) =>
         [
-          "transport_belt", "fast_transport_belt", "underground_belt", "splitter", "fast_splitter", "express_splitter",
-          "inserter", "fast_inserter", "long_inserter", "filter_inserter", "stack_inserter", "stack_filter_inserter",
-          "chest", "iron_chest", "steel_chest", "active_provider_chest", "passive_provider_chest", "storage_chest", "requester_chest", "logistics_chest",
-          "pipe", "empty_barrel", "sulfuric_acid_barrel", "fluid_wagon", "train_stop", "sprinkler_basic", "sprinkler_quality", "logistics_drone", "drone_hub"
+          "chest", "iron_chest", "steel_chest", "storage_tank",
+          "transport_belt", "fast_transport_belt", "express_transport_belt", "turbo_transport_belt",
+          "underground_belt", "fast_underground_belt", "express_underground_belt", "turbo_underground_belt",
+          "splitter", "fast_splitter", "express_splitter", "turbo_splitter",
+          "burner_inserter", "inserter", "long_inserter", "fast_inserter", "filter_inserter", "stack_inserter", "stack_filter_inserter",
+          "power_pole", "medium_power_pole", "big_electric_pole", "substation",
+          "pipe", "pipe_to_ground", "small_pump",
+          "rail", "rail_signal", "rail_chain_signal", "train_stop", "locomotive", "cargo_wagon", "fluid_wagon", "artillery_wagon",
+          "car", "tank", "spidertron", "spidertron_remote",
+          "construction_robot", "logistic_robot", "active_provider_chest", "passive_provider_chest", "storage_chest", "buffer_chest", "requester_chest", "logistics_chest", "roboport",
+          "lamp", "red_wire", "green_wire", "arithmetic_combinator", "decider_combinator", "constant_combinator", "power_switch", "programmable_speaker", "display_panel",
+          "stone_brick", "concrete", "hazard_concrete", "refined_concrete", "refined_hazard_concrete", "landfill", "cliff_explosives"
         ].includes(r.id)
       ),
       production: CRAFTING_RECIPES.filter((r) =>
         [
-          "burner_drill", "electric_drill", "stone_furnace", "steel_furnace", "electric_furnace",
-          "assembling_machine_1", "assembling_machine_2", "assembling_machine_3", "chemical_plant", "science_lab",
-          "wood_cutter", "stone_cutter", "research_center", "player_store", "rocket_silo"
+          "repair_pack", "boiler", "steam_engine", "solar_panel", "battery", "nuclear_reactor", "heat_pipe", "heat_exchanger", "steam_turbine",
+          "burner_drill", "electric_drill", "big_mining_drill", "offshore_pump", "pumpjack",
+          "stone_furnace", "steel_furnace", "electric_furnace", "foundry",
+          "assembling_machine_1", "assembling_machine_2", "assembling_machine_3", "oil_refinery", "chemical_plant", "centrifuge", "science_lab",
+          "beacon",
+          "speed_module", "speed_module_2", "speed_module_3",
+          "productivity_module", "productivity_module_2", "productivity_module_3",
+          "efficiency_module", "efficiency_module_2", "efficiency_module_3",
+          "wood_cutter", "stone_cutter", "research_center", "player_store"
         ].includes(r.id)
       ),
       intermediates: CRAFTING_RECIPES.filter((r) =>
         [
-          "iron_gear", "copper_wire", "iron_stick", "green_wire", "red_wire", "steel_plate",
-          "electronic_circuit", "advanced_circuit", "processing_unit", "plastic_bar", "sulfur",
-          "engine_unit", "electric_engine", "flying_robot_frame", "efficiency_module", "speed_module", "productivity_module",
-          "arithmetic_combinator", "decider_combinator", "programmable_speaker", "uranium_fuel_cell",
-          "automation_science_pack", "logistic_science_pack", "chemical_science_pack", "rocket_fuel", "rocket_part", "satellite"
+          "iron_bar", "copper_bar", "steel_plate", "iron_gear", "copper_wire", "iron_stick", "green_wire", "red_wire",
+          "electronic_circuit", "advanced_circuit", "processing_unit",
+          "plastic_bar", "sulfur", "empty_barrel", "sulfuric_acid_barrel",
+          "engine_unit", "electric_engine", "flying_robot_frame", "lubricant",
+          "uranium_fuel_cell", "uranium_bar", "uranium_235", "uranium_238",
+          "arithmetic_combinator", "decider_combinator", "programmable_speaker"
         ].includes(r.id)
       ),
-      power: CRAFTING_RECIPES.filter((r) =>
-        ["power_pole", "medium_power_pole", "substation", "boiler", "steam_engine", "generator", "solar_panel", "battery", "heat_pipe"].includes(r.id)
+      space: CRAFTING_RECIPES.filter((r) =>
+        [
+          "automation_science_pack", "logistic_science_pack", "military_science_pack", "chemical_science_pack", "production_science_pack", "utility_science_pack",
+          "rocket_fuel", "rocket_part", "satellite", "rocket_silo"
+        ].includes(r.id)
       ),
       combat: CRAFTING_RECIPES.filter((r) =>
-        ["energy_shield", "energy_shield_mk2", "belt_immunity_equipment", "personal_roboport", "explosives", "cluster_grenade", "radar"].includes(r.id)
+        [
+          "submachine_gun", "firearm_magazine", "piercing_rounds_magazine", "uranium_rounds_magazine",
+          "gun_turret", "laser_turret", "flamethrower_turret",
+          "energy_shield", "energy_shield_mk2", "belt_immunity_equipment", "personal_roboport",
+          "explosives", "cluster_grenade", "radar", "raw_fish"
+        ].includes(r.id)
       ),
       materials: CRAFTING_RECIPES.filter((r) =>
-        ["iron_bar", "copper_bar", "gold_bar", "silver_bar", "uranium_bar", "stone_brick", "concrete", "torch", "scarecrow", "bed", "stone_path"].includes(r.id)
+        ["iron_bar", "copper_bar", "gold_bar", "silver_bar", "uranium_bar", "stone_brick", "concrete", "torch", "scarecrow", "bed", "stone_path", "sprinkler_basic", "sprinkler_quality"].includes(r.id)
       ),
     };
   }, []);
@@ -325,7 +348,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
   const [sleepConfirmOpen, setSleepConfirmOpen] = useState(false);
   const [shippingBinOpen, setShippingBinOpen] = useState(false);
   const [furnaceOpenTile, setFurnaceOpenTile] = useState<{ x: number; y: number } | null>(null);
-  const [craftingCategory, setCraftingCategory] = useState<"logistics" | "production" | "intermediates" | "power" | "combat" | "materials">("logistics");
+  const [craftingCategory, setCraftingCategory] = useState<"logistics" | "production" | "intermediates" | "space" | "combat" | "materials">("logistics");
   const [craftingQueue, setCraftingQueue] = useState<{ id: string; recipeId: string; name: string; iconSymbol: string; iconColor: string; progress: number; duration: number; remainingTime: number }[]>([]);
   const [hoveredRecipe, setHoveredRecipe] = useState<Recipe | null>(null);
   const hoveredTileRef = useRef<{ x: number; y: number } | null>(null);
@@ -4501,77 +4524,77 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 font-mono">
                 {/* Left side: Category Selectors & Recipe Grid */}
                 <div className="md:col-span-2 space-y-4">
-                  {/* Factorio-style Tab buttons */}
+                  {/* Factorio-style Tab buttons (Matching 5 authentic Factorio categories) */}
                   <div className="flex flex-wrap gap-1.5 border-b border-zinc-700 pb-2">
                     <button
                       onClick={() => setCraftingCategory("logistics")}
-                      className={`flex items-center gap-1 px-2.5 py-1 text-xs border font-bold transition-all ${craftingCategory === "logistics"
-                          ? "bg-zinc-850 border-orange-500 text-orange-400 font-extrabold"
+                      className={`flex items-center gap-1.5 px-3 py-1.5 text-xs border font-bold transition-all ${craftingCategory === "logistics"
+                          ? "bg-zinc-800 border-amber-500 text-amber-300 font-extrabold shadow-sm"
                           : "bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:bg-zinc-800"
                         }`}
                     >
-                      <span>⏩</span>
-                      Logistics
+                      <span className="text-sm">🚜</span>
+                      <span>Logistics</span>
                     </button>
                     <button
                       onClick={() => setCraftingCategory("production")}
-                      className={`flex items-center gap-1 px-2.5 py-1 text-xs border font-bold transition-all ${craftingCategory === "production"
-                          ? "bg-zinc-850 border-orange-500 text-orange-400 font-extrabold"
+                      className={`flex items-center gap-1.5 px-3 py-1.5 text-xs border font-bold transition-all ${craftingCategory === "production"
+                          ? "bg-zinc-800 border-amber-500 text-amber-300 font-extrabold shadow-sm"
                           : "bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:bg-zinc-800"
                         }`}
                     >
-                      <span>🏭</span>
-                      Production
+                      <span className="text-sm">🏭</span>
+                      <span>Production</span>
                     </button>
                     <button
                       onClick={() => setCraftingCategory("intermediates")}
-                      className={`flex items-center gap-1 px-2.5 py-1 text-xs border font-bold transition-all ${craftingCategory === "intermediates"
-                          ? "bg-zinc-850 border-orange-500 text-orange-400 font-extrabold"
+                      className={`flex items-center gap-1.5 px-3 py-1.5 text-xs border font-bold transition-all ${craftingCategory === "intermediates"
+                          ? "bg-zinc-800 border-amber-500 text-amber-300 font-extrabold shadow-sm"
                           : "bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:bg-zinc-800"
                         }`}
                     >
-                      <span>⚙️</span>
-                      Intermediates
+                      <span className="text-sm">⚙️</span>
+                      <span>Intermediates</span>
                     </button>
                     <button
-                      onClick={() => setCraftingCategory("power")}
-                      className={`flex items-center gap-1 px-2.5 py-1 text-xs border font-bold transition-all ${craftingCategory === "power"
-                          ? "bg-zinc-850 border-orange-500 text-orange-400 font-extrabold"
+                      onClick={() => setCraftingCategory("space")}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 text-xs border font-bold transition-all ${craftingCategory === "space"
+                          ? "bg-zinc-800 border-amber-500 text-amber-300 font-extrabold shadow-sm"
                           : "bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:bg-zinc-800"
                         }`}
                     >
-                      <span>⚡</span>
-                      Power Grid
+                      <span className="text-sm">🚀</span>
+                      <span>Space & Science</span>
                     </button>
                     <button
                       onClick={() => setCraftingCategory("combat")}
-                      className={`flex items-center gap-1 px-2.5 py-1 text-xs border font-bold transition-all ${craftingCategory === "combat"
-                          ? "bg-zinc-850 border-orange-500 text-orange-400 font-extrabold"
+                      className={`flex items-center gap-1.5 px-3 py-1.5 text-xs border font-bold transition-all ${craftingCategory === "combat"
+                          ? "bg-zinc-800 border-amber-500 text-amber-300 font-extrabold shadow-sm"
                           : "bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:bg-zinc-800"
                         }`}
                     >
-                      <span>🛡️</span>
-                      Combat
+                      <span className="text-sm">⚔️</span>
+                      <span>Combat</span>
                     </button>
                     <button
                       onClick={() => setCraftingCategory("materials")}
-                      className={`flex items-center gap-1 px-2.5 py-1 text-xs border font-bold transition-all ${craftingCategory === "materials"
-                          ? "bg-zinc-850 border-orange-500 text-orange-400 font-extrabold"
+                      className={`flex items-center gap-1.5 px-3 py-1.5 text-xs border font-bold transition-all ${craftingCategory === "materials"
+                          ? "bg-zinc-800 border-amber-500 text-amber-300 font-extrabold shadow-sm"
                           : "bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:bg-zinc-800"
                         }`}
                     >
-                      <span>🧱</span>
-                      Materials
+                      <span className="text-sm">🧱</span>
+                      <span>Materials</span>
                     </button>
                     <button
                       onClick={() => setCraftingCategory("cheats" as any)}
-                      className={`flex items-center gap-1 px-2.5 py-1 text-xs border font-bold transition-all ${(craftingCategory as any) === "cheats"
+                      className={`flex items-center gap-1.5 px-3 py-1.5 text-xs border font-bold transition-all ${(craftingCategory as any) === "cheats"
                           ? "bg-purple-950 border-amber-400 text-amber-300 font-extrabold animate-pulse"
                           : "bg-purple-950/40 border-purple-900 text-purple-300 hover:bg-purple-900"
                         }`}
                     >
-                      <span>⚡</span>
-                      Cheats
+                      <span className="text-sm">⚡</span>
+                      <span>Cheats</span>
                     </button>
                   </div>
 

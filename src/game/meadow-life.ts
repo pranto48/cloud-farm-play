@@ -3065,23 +3065,23 @@ export function generateHouseInterior(): Tile[][] {
 export function newGame(): GameState {
   const inv = Array.from({ length: 30 }, () => null as Item | null);
 
-  // Equip standard tools
-  inv[0] = createItem("hoe");
-  inv[1] = createItem("watering_can");
-  inv[2] = createItem("scythe");
-  inv[3] = createItem("pickaxe");
-  inv[4] = createItem("axe");
-  inv[5] = createItem("sword");
-  inv[6] = createItem("milk_pail"); // Milking pail
-  inv[7] = createItem("parsnip_seed", 15);
+  // Equip standard Factorio starter package
+  inv[0] = createItem("pistol");
+  inv[1] = createItem("firearm_magazine", 20);
+  inv[2] = createItem("burner_drill", 2);
+  inv[3] = createItem("stone_furnace", 2);
+  inv[4] = createItem("iron_bar", 15);
+  inv[5] = createItem("copper_bar", 10);
+  inv[6] = createItem("coal", 15);
+  inv[7] = createItem("wood", 20);
 
   const initialLetters: MailLetter[] = [
     {
-      id: "lewis_welcome",
-      sender: "Mayor Lewis",
-      content: "Welcome to your new farm in Meadow Valley! To help you get started on your crops, I left some free parsnip seeds in this letter. Best of luck!",
-      giftItemId: "parsnip_seed",
-      giftCount: 5,
+      id: "factorio_welcome",
+      sender: "Engineering Command",
+      content: "Crash landing protocol complete. Use your burner drill and stone furnace to automate iron and copper production. Research automation in the Lab to expand your factory!",
+      giftItemId: "iron_bar",
+      giftCount: 20,
       claimed: false,
     },
   ];
@@ -5028,7 +5028,7 @@ export function interact(
           tile.hitPoints = undefined;
           addItem(state.inventory, createItem("wood", Math.floor(Math.random() * 4) + 3));
           if (Math.random() < 0.2) {
-            addItem(state.inventory, createItem("parsnip_seed", 1)); // stand in for tree seed
+            addItem(state.inventory, createItem("wood", 2));
           }
           const lvlMsg = addExperience(state, "farming", 8);
           result.message = "Chopped down tree" + (lvlMsg ? `. ${lvlMsg}` : "");

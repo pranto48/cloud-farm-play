@@ -293,59 +293,61 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
           "rail", "rail_ramp", "rail_support", "elevated_straight_rail", "elevated_curved_rail", "rail_signal", "rail_chain_signal", "train_stop",
           "locomotive", "cargo_wagon", "fluid_wagon", "artillery_wagon",
           "car", "tank", "spidertron", "spidertron_remote",
-          "construction_robot", "logistic_robot", "active_provider_chest", "passive_provider_chest", "storage_chest", "buffer_chest", "requester_chest", "logistics_chest", "roboport",
-          "lamp", "red_wire", "green_wire", "arithmetic_combinator", "decider_combinator", "constant_combinator", "power_switch", "programmable_speaker", "display_panel",
+          "construction_robot", "logistic_robot", "active_provider_chest", "passive_provider_chest", "storage_chest", "buffer_chest", "requester_chest", "roboport",
+          "lamp", "red_wire", "green_wire", "arithmetic_combinator", "decider_combinator", "constant_combinator", "selector_combinator", "power_switch", "programmable_speaker", "display_panel",
           "stone_brick", "concrete", "hazard_concrete", "refined_concrete", "refined_hazard_concrete", "landfill", "cliff_explosives"
         ].includes(r.id)
       ),
       production: CRAFTING_RECIPES.filter((r) =>
         [
-          "repair_pack", "boiler", "steam_engine", "solar_panel", "battery", "nuclear_reactor", "heat_pipe", "heat_exchanger", "steam_turbine",
+          "repair_pack", "boiler", "steam_engine", "solar_panel", "battery", "nuclear_reactor", "heat_pipe", "heat_exchanger", "steam_turbine", "fusion_reactor", "fusion_generator",
           "burner_drill", "electric_drill", "big_mining_drill", "offshore_pump", "pumpjack",
-          "stone_furnace", "steel_furnace", "electric_furnace", "foundry",
-          "assembling_machine_1", "assembling_machine_2", "assembling_machine_3", "oil_refinery", "chemical_plant", "centrifuge", "science_lab",
+          "stone_furnace", "steel_furnace", "electric_furnace", "foundry", "biochamber",
+          "assembling_machine_1", "assembling_machine_2", "assembling_machine_3", "oil_refinery", "chemical_plant", "centrifuge", "electromagnetic_plant", "cryogenic_plant", "science_lab", "biolab",
           "beacon",
           "speed_module", "speed_module_2", "speed_module_3",
           "productivity_module", "productivity_module_2", "productivity_module_3",
           "efficiency_module", "efficiency_module_2", "efficiency_module_3",
-          "wood_cutter", "stone_cutter", "research_center", "player_store"
+          "quality_module_1", "quality_module_2", "quality_module_3",
+          "agricultural_tower", "captive_biter_spawner"
         ].includes(r.id)
       ),
       intermediates: CRAFTING_RECIPES.filter((r) =>
         [
-          "iron_bar", "copper_bar", "steel_plate", "iron_gear", "copper_wire", "iron_stick", "green_wire", "red_wire",
-          "electronic_circuit", "advanced_circuit", "processing_unit",
-          "plastic_bar", "sulfur", "empty_barrel", "crude_oil_barrel", "heavy_oil_barrel", "light_oil_barrel", "petroleum_gas_barrel", "sulfuric_acid_barrel", "lubricant_barrel", "water_barrel",
-          "engine_unit", "electric_engine", "flying_robot_frame", "lubricant",
-          "low_density_structure", "rocket_control_unit", "nuclear_fuel",
-          "uranium_fuel_cell", "uranium_bar", "uranium_235", "uranium_238",
-          "arithmetic_combinator", "decider_combinator", "programmable_speaker"
+          "wood", "stone", "coal", "iron_ore", "copper_ore", "uranium_ore", "raw_fish", "ice", "calcite", "tungsten_ore", "holmium_ore", "scrap",
+          "iron_bar", "copper_bar", "steel_plate", "tungsten_plate", "plastic_bar", "sulfur", "carbon_fiber",
+          "iron_gear", "copper_wire", "iron_stick", "green_wire", "red_wire",
+          "electronic_circuit", "advanced_circuit", "processing_unit", "quantum_processor",
+          "empty_barrel", "crude_oil_barrel", "heavy_oil_barrel", "light_oil_barrel", "petroleum_gas_barrel", "sulfuric_acid_barrel", "lubricant_barrel", "water_barrel", "lubricant",
+          "engine_unit", "electric_engine", "flying_robot_frame",
+          "low_density_structure", "rocket_control_unit", "rocket_fuel", "nuclear_fuel", "fusion_fuel_cell",
+          "uranium_fuel_cell", "uranium_235", "uranium_238",
+          "yumako", "jellynut", "bioflux", "nutrients", "pentapod_egg", "biter_egg"
         ].includes(r.id)
       ),
       space: CRAFTING_RECIPES.filter((r) =>
         [
           "space_platform_starter_pack", "space_platform_hub", "cargo_bay", "cargo_landing_pad", "cargo_pod", "thruster", "asteroid_collector",
-          "automation_science_pack", "logistic_science_pack", "military_science_pack", "chemical_science_pack", "production_science_pack", "utility_science_pack",
-          "rocket_fuel", "rocket_part", "satellite", "rocket_silo"
+          "metallic_asteroid_chunk", "carbonic_asteroid_chunk", "oxide_asteroid_chunk", "promethium_asteroid_chunk",
+          "automation_science_pack", "logistic_science_pack", "military_science_pack", "chemical_science_pack", "production_science_pack", "utility_science_pack", "space_science_pack",
+          "metallurgic_science_pack", "agricultural_science_pack", "electromagnetic_science_pack", "cryogenic_science_pack", "promethium_science_pack",
+          "rocket_part", "satellite", "rocket_silo"
         ].includes(r.id)
       ),
       combat: CRAFTING_RECIPES.filter((r) =>
         [
-          "pistol", "submachine_gun", "shotgun", "combat_shotgun", "rocket_launcher", "flamethrower",
+          "pistol", "submachine_gun", "shotgun", "combat_shotgun", "rocket_launcher", "flamethrower", "railgun", "tesla_gun",
           "firearm_magazine", "piercing_rounds_magazine", "uranium_rounds_magazine",
           "shotgun_shells", "piercing_shotgun_shells", "cannon_shell", "explosive_cannon_shell", "uranium_cannon_shell",
           "rocket", "explosive_rocket", "atomic_bomb", "flamethrower_ammo", "artillery_shell",
-          "grenade", "poison_capsule", "slowdown_capsule", "defender_capsule", "distractor_capsule", "destroyer_capsule",
+          "grenade", "cluster_grenade", "poison_capsule", "slowdown_capsule", "defender_capsule", "distractor_capsule", "destroyer_capsule",
           "light_armor", "heavy_armor", "modular_armor", "power_armor", "power_armor_mk2",
-          "battery_equipment", "battery_mk2_equipment", "solar_panel_equipment", "personal_fusion_reactor_equipment",
-          "personal_roboport_mk2_equipment", "night_vision_equipment", "discharge_defense_equipment", "exoskeleton_equipment",
-          "gun_turret", "laser_turret", "flamethrower_turret", "artillery_turret", "rocket_turret", "tesla_turret", "railgun_turret",
-          "gate", "land_mine", "energy_shield", "energy_shield_mk2", "belt_immunity_equipment", "personal_roboport",
-          "explosives", "cluster_grenade", "radar", "raw_fish"
+          "solar_panel_equipment", "personal_fusion_reactor_equipment", "battery_equipment", "battery_mk2_equipment", "energy_shield", "energy_shield_mk2",
+          "personal_roboport", "personal_roboport_mk2_equipment", "night_vision_equipment", "belt_immunity_equipment", "exoskeleton_equipment",
+          "discharge_defense_equipment", "discharge_defense_remote", "personal_laser_defense_equipment",
+          "stone_wall", "gate", "land_mine",
+          "gun_turret", "laser_turret", "flamethrower_turret", "rocket_turret", "tesla_turret", "railgun_turret", "artillery_turret", "artillery_targeting_remote", "radar", "raw_fish"
         ].includes(r.id)
-      ),
-      materials: CRAFTING_RECIPES.filter((r) =>
-        ["iron_bar", "copper_bar", "gold_bar", "silver_bar", "uranium_bar", "stone_brick", "concrete", "torch", "scarecrow", "bed", "stone_path", "sprinkler_basic", "sprinkler_quality"].includes(r.id)
       ),
     };
   }, []);
@@ -359,7 +361,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
   const [sleepConfirmOpen, setSleepConfirmOpen] = useState(false);
   const [shippingBinOpen, setShippingBinOpen] = useState(false);
   const [furnaceOpenTile, setFurnaceOpenTile] = useState<{ x: number; y: number } | null>(null);
-  const [craftingCategory, setCraftingCategory] = useState<"logistics" | "production" | "intermediates" | "space" | "combat" | "materials">("logistics");
+  const [craftingCategory, setCraftingCategory] = useState<"logistics" | "production" | "intermediates" | "space" | "combat">("logistics");
   const [craftingQueue, setCraftingQueue] = useState<{ id: string; recipeId: string; name: string; iconSymbol: string; iconColor: string; progress: number; duration: number; remainingTime: number }[]>([]);
   const [hoveredRecipe, setHoveredRecipe] = useState<Recipe | null>(null);
   const hoveredTileRef = useRef<{ x: number; y: number } | null>(null);
@@ -4586,16 +4588,6 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                     >
                       <span className="text-sm">⚔️</span>
                       <span>Combat</span>
-                    </button>
-                    <button
-                      onClick={() => setCraftingCategory("materials")}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 text-xs border font-bold transition-all ${craftingCategory === "materials"
-                          ? "bg-zinc-800 border-amber-500 text-amber-300 font-extrabold shadow-sm"
-                          : "bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:bg-zinc-800"
-                        }`}
-                    >
-                      <span className="text-sm">🧱</span>
-                      <span>Materials</span>
                     </button>
                     <button
                       onClick={() => setCraftingCategory("cheats" as any)}

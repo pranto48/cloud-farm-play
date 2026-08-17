@@ -30,6 +30,7 @@ import {
   TECHNOLOGIES,
   LAND_PARCELS,
   applyLandPurchase,
+  ensureMapExploration,
   type GameState,
   type Tile,
   type Enemy,
@@ -432,17 +433,25 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
   }, [isFullscreen, isMobile, showTouchControls]);
 
   const toggleFullscreen = async () => {
+    const nextVal = !isFullscreen;
+    setIsFullscreen(nextVal);
     if (!mainContainerRef.current) return;
     try {
-      if (!document.fullscreenElement) {
-        await mainContainerRef.current.requestFullscreen();
-        setIsFullscreen(true);
+      if (nextVal) {
+        if (mainContainerRef.current.requestFullscreen) {
+          await mainContainerRef.current.requestFullscreen();
+        } else if ((mainContainerRef.current as any).webkitRequestFullscreen) {
+          (mainContainerRef.current as any).webkitRequestFullscreen();
+        }
       } else {
-        await document.exitFullscreen();
-        setIsFullscreen(false);
+        if (document.fullscreenElement && document.exitFullscreen) {
+          await document.exitFullscreen();
+        } else if ((document as any).webkitExitFullscreen) {
+          (document as any).webkitExitFullscreen();
+        }
       }
     } catch (err) {
-      console.error("Error attempting to toggle fullscreen:", err);
+      console.log("Fullscreen fallback to CSS full-viewport mode:", err);
     }
   };
 
@@ -604,6 +613,9 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
           } else if (Math.abs(dy) > 0) {
             p.dir = dy > 0 ? "down" : "up";
           }
+
+          // Dynamically generate procedural infinite chunks as player explores
+          ensureMapExploration(cur, p.x, p.y);
         }
       }
 
@@ -663,24 +675,22 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
           const pSubX = p.subX !== undefined ? p.subX : p.x;
           const pSubY = p.subY !== undefined ? p.subY : p.y;
 
-          const cameraX = Math.max(
-            0,
-            Math.min(
-              (stateRef.current.inMine ? 24 : COLS) * TILE - canvasSize.width,
-              pSubX * TILE + 16 - canvasSize.width / 2
-            )
-          );
-          const cameraY = Math.max(
-            0,
-            Math.min(
-              (stateRef.current.inMine ? 24 : ROWS) * TILE - canvasSize.height,
-              pSubY * TILE + 16 - canvasSize.height / 2
-            )
-          );
+          const inBld = stateRef.current.inMine || stateRef.current.inHouse;
+          const curCols = currentGrid[0]?.length || COLS;
+          const curRows = currentGrid.length || ROWS;
+
+          const cameraX = inBld
+            ? Math.max(0, Math.min(curCols * TILE - canvasSize.width, pSubX * TILE + 16 - canvasSize.width / 2))
+            : pSubX * TILE + 16 - canvasSize.width / 2;
+
+          const cameraY = inBld
+            ? Math.max(0, Math.min(curRows * TILE - canvasSize.height, pSubY * TILE + 16 - canvasSize.height / 2))
+            : pSubY * TILE + 16 - canvasSize.height / 2;
+
           const startCol = Math.max(0, Math.floor(cameraX / TILE));
-          const endCol = Math.min(stateRef.current.inMine ? 24 : COLS, Math.ceil((cameraX + canvasSize.width) / TILE));
+          const endCol = Math.min(curCols, Math.ceil((cameraX + canvasSize.width) / TILE));
           const startRow = Math.max(0, Math.floor(cameraY / TILE));
-          const endRow = Math.min(stateRef.current.inMine ? 24 : ROWS, Math.ceil((cameraY + canvasSize.height) / TILE));
+          const endRow = Math.min(curRows, Math.ceil((cameraY + canvasSize.height) / TILE));
 
           for (let y = startRow; y < endRow; y++) {
             for (let x = startCol; x < endCol; x++) {
@@ -852,18 +862,27 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
       const gridCols = stateRef.current.inHouse ? 10 : (stateRef.current.inMine ? 24 : COLS);
       const gridRows = stateRef.current.inHouse ? 10 : (stateRef.current.inMine ? 24 : ROWS);
 
+      const inBld = stateRef.current.inHouse || stateRef.current.inMine;
       let cameraX = 0;
-      if (gridCols * TILE < canvasSize.width) {
-        cameraX = -(canvasSize.width - gridCols * TILE) / 2;
+      if (inBld) {
+        if (gridCols * TILE < canvasSize.width) {
+          cameraX = -(canvasSize.width - gridCols * TILE) / 2;
+        } else {
+          cameraX = Math.max(0, Math.min(gridCols * TILE - canvasSize.width, pSubX * TILE + 16 - canvasSize.width / 2));
+        }
       } else {
-        cameraX = Math.max(0, Math.min(gridCols * TILE - canvasSize.width, pSubX * TILE + 16 - canvasSize.width / 2));
+        cameraX = pSubX * TILE + 16 - canvasSize.width / 2;
       }
 
       let cameraY = 0;
-      if (gridRows * TILE < canvasSize.height) {
-        cameraY = -(canvasSize.height - gridRows * TILE) / 2;
+      if (inBld) {
+        if (gridRows * TILE < canvasSize.height) {
+          cameraY = -(canvasSize.height - gridRows * TILE) / 2;
+        } else {
+          cameraY = Math.max(0, Math.min(gridRows * TILE - canvasSize.height, pSubY * TILE + 16 - canvasSize.height / 2));
+        }
       } else {
-        cameraY = Math.max(0, Math.min(gridRows * TILE - canvasSize.height, pSubY * TILE + 16 - canvasSize.height / 2));
+        cameraY = pSubY * TILE + 16 - canvasSize.height / 2;
       }
       ctx.translate(-cameraX, -cameraY);
 
@@ -2622,19 +2641,19 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
   return (
     <div
       ref={mainContainerRef}
-      className={`flex flex-col items-center justify-center w-full px-2 transition-all duration-300 ${isFullscreen
-          ? "bg-[#18110e] p-0 min-h-screen text-slate-200"
-          : "max-w-4xl"
+      className={`flex flex-col items-center justify-center transition-all duration-300 ${isFullscreen
+          ? "fixed inset-0 z-[100] w-screen h-[100dvh] p-0 m-0 bg-[#18110e] text-slate-200 overflow-hidden"
+          : "w-full max-w-4xl px-2"
         }`}
     >
       {/* Game Screen Frame */}
       <div
         className={`relative overflow-hidden bg-black transition-all duration-300 ${isFullscreen
-            ? "border-0 rounded-none w-screen h-screen"
+            ? "border-0 rounded-none w-screen h-[100dvh]"
             : "rounded-xl border-4 border-[#2d3033] bg-[#141517] shadow-2xl"
           }`}
         style={{
-          height: isFullscreen ? "100vh" : `${canvasSize.height}px`,
+          height: isFullscreen ? "100dvh" : `${canvasSize.height}px`,
           width: isFullscreen ? "100vw" : "704px",
           maxWidth: isFullscreen ? "none" : "704px"
         }}

@@ -1376,6 +1376,138 @@ function makeMap(): Tile[][] {
   return t;
 }
 
+// AI Procedural Infinite Biome & Chunk Generation
+export function generateProceduralTile(worldX: number, worldY: number, season?: Season): Tile {
+  // Deterministic multi-frequency procedural noise
+  const nx = worldX * 0.04;
+  const ny = worldY * 0.04;
+  
+  const biomeVal = Math.sin(nx * 1.5 + Math.cos(ny * 1.2)) * 0.5 + Math.cos(ny * 1.7 + Math.sin(nx * 0.8)) * 0.5;
+  const oreNoise = Math.sin(worldX * 0.22) * Math.cos(worldY * 0.22);
+  const detailNoise = (Math.sin(worldX * 12.9898 + worldY * 78.233) * 43758.5453) % 1;
+  const rand = Math.abs(detailNoise);
+
+  // Biome 1: River / Water Basin (Low elevation)
+  if (biomeVal < -0.68) {
+    return { kind: "water", age: 0, watered: true };
+  }
+  
+  // Biome 2: Factorio Rich Ore Clusters (Dense ore fields in the wild)
+  if (oreNoise > 0.65) {
+    if (oreNoise > 0.88) {
+      return { kind: "ore_uranium", age: 0, watered: false };
+    } else if (oreNoise > 0.80) {
+      return { kind: "ore_gold", age: 0, watered: false };
+    } else if (oreNoise > 0.74) {
+      return { kind: "ore_iron", age: 0, watered: false };
+    } else if (oreNoise > 0.68) {
+      return { kind: "ore_copper", age: 0, watered: false };
+    } else {
+      return { kind: "ore_coal", age: 0, watered: false };
+    }
+  }
+
+  // Biome 3: Deep Ancient Forest
+  if (biomeVal > 0.45) {
+    if (rand < 0.35) {
+      return { kind: "tree", age: 0, watered: false };
+    } else if (rand < 0.42) {
+      return { kind: "debris_weed", age: 0, watered: false };
+    } else if (rand < 0.46) {
+      return { kind: "debris_branch", age: 0, watered: false };
+    }
+  }
+
+  // Biome 4: Mountain Quarry / Boulder Fields
+  if (biomeVal > 0.22 && biomeVal <= 0.45 && rand < 0.16) {
+    if (rand < 0.07) return { kind: "debris_stone", age: 0, watered: false };
+    if (rand < 0.11) return { kind: "ore_silver", age: 0, watered: false };
+    if (rand < 0.14) return { kind: "ore_aluminum", age: 0, watered: false };
+    return { kind: "ore_iron", age: 0, watered: false };
+  }
+
+  // Biome 5: Wild Fertile Meadow (Default)
+  if (rand < 0.04) {
+    return { kind: "debris_weed", age: 0, watered: false };
+  } else if (rand < 0.07) {
+    return { kind: "debris_branch", age: 0, watered: false };
+  } else if (rand < 0.09) {
+    return { kind: "debris_stone", age: 0, watered: false };
+  }
+
+  return { kind: "grass", age: -1, watered: false };
+}
+
+// Dynamically generate and expand world chunks as player explores
+export function ensureMapExploration(state: GameState, playerX: number, playerY: number): void {
+  if (state.inHouse || state.inMine || !state.tiles) return;
+
+  const CHUNK_SIZE = 32;
+  const BUFFER = 24;
+  const rows = state.tiles.length;
+  const cols = state.tiles[0]?.length || 0;
+
+  // 1. Expand East (Right)
+  if (playerX >= cols - BUFFER) {
+    for (let y = 0; y < rows; y++) {
+      for (let x = cols; x < cols + CHUNK_SIZE; x++) {
+        state.tiles[y].push(generateProceduralTile(x, y, state.season));
+      }
+    }
+  }
+
+  // 2. Expand South (Bottom)
+  if (playerY >= rows - BUFFER) {
+    const curCols = state.tiles[0]?.length || cols;
+    for (let y = rows; y < rows + CHUNK_SIZE; y++) {
+      const newRow: Tile[] = [];
+      for (let x = 0; x < curCols; x++) {
+        newRow.push(generateProceduralTile(x, y, state.season));
+      }
+      state.tiles.push(newRow);
+    }
+  }
+
+  // 3. Expand North (Top)
+  if (playerY <= BUFFER) {
+    const curCols = state.tiles[0]?.length || cols;
+    const addedRows: Tile[][] = [];
+    for (let y = 0; y < CHUNK_SIZE; y++) {
+      const newRow: Tile[] = [];
+      for (let x = 0; x < curCols; x++) {
+        newRow.push(generateProceduralTile(x, y - CHUNK_SIZE, state.season));
+      }
+      addedRows.push(newRow);
+    }
+    state.tiles.unshift(...addedRows);
+
+    // Offset all entities
+    state.player.y += CHUNK_SIZE;
+    if (state.player.subY !== undefined) state.player.subY += CHUNK_SIZE;
+    state.animals?.forEach(a => a.y += CHUNK_SIZE);
+    state.pets?.forEach(p => { p.y += CHUNK_SIZE; p.bowlY += CHUNK_SIZE; });
+    state.workers?.forEach(w => { w.y += CHUNK_SIZE; w.cabinY += CHUNK_SIZE; });
+  }
+
+  // 4. Expand West (Left)
+  if (playerX <= BUFFER) {
+    for (let y = 0; y < state.tiles.length; y++) {
+      const addedCols: Tile[] = [];
+      for (let x = 0; x < CHUNK_SIZE; x++) {
+        addedCols.push(generateProceduralTile(x - CHUNK_SIZE, y, state.season));
+      }
+      state.tiles[y].unshift(...addedCols);
+    }
+
+    // Offset all entities
+    state.player.x += CHUNK_SIZE;
+    if (state.player.subX !== undefined) state.player.subX += CHUNK_SIZE;
+    state.animals?.forEach(a => a.x += CHUNK_SIZE);
+    state.pets?.forEach(p => { p.x += CHUNK_SIZE; p.bowlX += CHUNK_SIZE; });
+    state.workers?.forEach(w => { w.x += CHUNK_SIZE; w.cabinX += CHUNK_SIZE; });
+  }
+}
+
 function rollMineGem(depth: number): string | null {
   const rand = Math.random();
   // 1. Check for Prismatic Shard (very rare, depth >= 10, 0.4% chance)
@@ -4159,17 +4291,25 @@ export function draw(
   const playerPy = (p.subY !== undefined ? p.subY : p.y) * TILE + TILE / 2;
 
   let cameraX = 0;
-  if (gridCols * TILE < viewWidth) {
-    cameraX = -(viewWidth - gridCols * TILE) / 2;
+  if (state.inHouse || state.inMine) {
+    if (gridCols * TILE < viewWidth) {
+      cameraX = -(viewWidth - gridCols * TILE) / 2;
+    } else {
+      cameraX = Math.max(0, Math.min(gridCols * TILE - viewWidth, playerPx - viewWidth / 2));
+    }
   } else {
-    cameraX = Math.max(0, Math.min(gridCols * TILE - viewWidth, playerPx - viewWidth / 2));
+    cameraX = playerPx - viewWidth / 2;
   }
 
   let cameraY = 0;
-  if (gridRows * TILE < viewHeight) {
-    cameraY = -(viewHeight - gridRows * TILE) / 2;
+  if (state.inHouse || state.inMine) {
+    if (gridRows * TILE < viewHeight) {
+      cameraY = -(viewHeight - gridRows * TILE) / 2;
+    } else {
+      cameraY = Math.max(0, Math.min(gridRows * TILE - viewHeight, playerPy - viewHeight / 2));
+    }
   } else {
-    cameraY = Math.max(0, Math.min(gridRows * TILE - viewHeight, playerPy - viewHeight / 2));
+    cameraY = playerPy - viewHeight / 2;
   }
 
   // Background

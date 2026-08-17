@@ -183,7 +183,19 @@ export interface GameState {
     dir: "up" | "down" | "left" | "right";
     health: number;
     maxHealth: number;
+    shield?: number;
+    maxShield?: number;
+    reachDistance?: number;
+    lastDamageTime?: number;
+    isCharacterDetached?: boolean;
   };
+  characterCorpses?: {
+    id: string;
+    x: number;
+    y: number;
+    items: (Item | null)[];
+    timestamp: number;
+  }[];
   day: number;
   time: number;
   inventory: (Item | null)[];
@@ -3079,9 +3091,13 @@ export function newGame(): GameState {
       subX: STATIC_POINTS.playerSpawn.x,
       subY: STATIC_POINTS.playerSpawn.y,
       dir: "down",
-      health: 100,
-      maxHealth: 100,
+      health: 250,
+      maxHealth: 250,
+      shield: 0,
+      maxShield: 100,
+      reachDistance: 10,
     },
+    characterCorpses: [],
     day: 1,
     time: DAY_START_MINUTES,
     inventory: inv,
@@ -4035,6 +4051,16 @@ export function updateEntities(state: GameState, dt: number): void {
   }
 
   const satisfaction = totalDemandKw > 0 ? Math.min(1.0, Math.max(0.05, totalGenerationKw / totalDemandKw)) : 1.0;
+  // Factorio Character Natural Health & Shield Regeneration
+  if (state.player && !state.godMode) {
+    if (state.player.health < state.player.maxHealth) {
+      state.player.health = Math.min(state.player.maxHealth, state.player.health + 0.35 * dt);
+    }
+    if (state.player.maxShield && (state.player.shield ?? 0) < state.player.maxShield) {
+      state.player.shield = Math.min(state.player.maxShield, (state.player.shield ?? 0) + 1.5 * dt);
+    }
+  }
+
   // Initialize Pollution Grid & Stats if missing
   if (!state.pollutionGrid) {
     state.pollutionGrid = Array.from({ length: ROWS }, () => Array(COLS).fill(0));
@@ -6868,6 +6894,49 @@ export function draw(
         }
       }
     }
+  }
+
+  // ==========================================
+  // FACTORIO CHARACTER CORPSES
+  // ==========================================
+  if (state.characterCorpses && state.characterCorpses.length > 0) {
+    state.characterCorpses.forEach((corpse) => {
+      const cx = corpse.x * TILE + 16;
+      const cy = corpse.y * TILE + 16;
+      ctx.fillStyle = "rgba(0,0,0,0.4)";
+      ctx.beginPath();
+      ctx.ellipse(cx, cy + 6, 12, 5, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#7f8c8d";
+      ctx.fillRect(cx - 8, cy - 4, 16, 8);
+      ctx.fillStyle = "#e74c3c";
+      ctx.fillRect(cx - 2, cy - 2, 4, 4);
+    });
+  }
+
+  // ==========================================
+  // FACTORIO CHARACTER NIGHT FLASHLIGHT CONE
+  // ==========================================
+  if (state.time >= 1200 || state.time <= 360 || state.inMine) {
+    ctx.save();
+    ctx.beginPath();
+    const coneDist = 6 * TILE;
+    const coneAngle = Math.PI / 3.5;
+    let dirAngle = Math.PI / 2; // down
+    if (p.dir === "up") dirAngle = -Math.PI / 2;
+    else if (p.dir === "left") dirAngle = Math.PI;
+    else if (p.dir === "right") dirAngle = 0;
+
+    ctx.moveTo(playerPx, playerPy);
+    ctx.arc(playerPx, playerPy, coneDist, dirAngle - coneAngle / 2, dirAngle + coneAngle / 2);
+    ctx.closePath();
+    const grad = ctx.createRadialGradient(playerPx, playerPy, 4, playerPx, playerPy, coneDist);
+    grad.addColorStop(0, "rgba(255, 250, 200, 0.4)");
+    grad.addColorStop(0.65, "rgba(255, 240, 180, 0.12)");
+    grad.addColorStop(1, "rgba(255, 240, 180, 0)");
+    ctx.fillStyle = grad;
+    ctx.fill();
+    ctx.restore();
   }
 
   // ==========================================

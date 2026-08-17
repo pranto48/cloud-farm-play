@@ -4297,128 +4297,180 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
         )}
       </Dialog>
 
-      {/* D. TABBED JOURNAL / BACKPACK */}
+      {/* D. FACTORIO CHARACTER & LOGISTICS JOURNAL GUI */}
       <Dialog open={inventoryOpen} onOpenChange={setInventoryOpen}>
-        <DialogContent container={mainContainerRef.current} className="w-[96vw] max-w-3xl max-h-[90dvh] bg-[#141517] border-[3px] border-[#4a5568] text-slate-100 rounded-lg font-mono shadow-[0_0_20px_rgba(0,0,0,0.8)] overflow-y-auto p-3 sm:p-6">
+        <DialogContent container={mainContainerRef.current} className="w-[98vw] max-w-4xl max-h-[92dvh] bg-[#12151a] border-[3px] border-[#3b4759] text-slate-100 rounded-lg font-mono shadow-[0_0_30px_rgba(0,0,0,0.9)] overflow-y-auto p-3 sm:p-5">
           <DialogHeader>
-            <DialogTitle className="text-lg sm:text-xl font-black uppercase tracking-wider flex items-center gap-2 text-[#e2e8f0] border-b border-[#4a5568] pb-3 bg-[#1e222a] -mt-3 -mx-3 sm:-mt-6 sm:-mx-6 px-4 sm:px-6 pt-4 sm:pt-6">
-              <Backpack className="h-5 w-5 text-[#ff9200]" />
-              <span>Backpack Journal</span>
+            <DialogTitle className="text-sm sm:text-base font-black uppercase tracking-wider flex items-center justify-between text-[#ff9200] border-b border-[#3b4759] pb-2.5 bg-[#1a202c] -mt-3 -mx-3 sm:-mt-5 sm:-mx-5 px-3 sm:px-5 pt-3 sm:pt-4">
+              <div className="flex items-center gap-2">
+                <span className="text-xl">🏭</span>
+                <span className="text-white">FACTORIO CHARACTER GUI</span>
+                <span className="text-[10px] text-amber-400 bg-amber-950/80 px-2 py-0.5 border border-amber-600/60 rounded">LOGISTICS & INVENTORY</span>
+              </div>
+              <div className="flex items-center gap-3 text-xs">
+                <span className="text-yellow-400 font-bold">🪙 {state.coins}G</span>
+                <span className="text-emerald-400 font-bold">⚡ {Math.round(state.energy)}/{state.maxEnergy}</span>
+                <span className="text-red-400 font-bold">❤️ {state.player.health}/{state.player.maxHealth}</span>
+              </div>
             </DialogTitle>
           </DialogHeader>
 
-          <div className="flex border-b border-slate-800 gap-1 my-1 overflow-x-auto pb-1">
-            {(["inventory", "crafting", "workers", "social", "skills"] as const).map((tab) => (
+          {/* Factorio Navigation Category Tabs */}
+          <div className="flex border-b border-[#2d3748] gap-1 my-1 overflow-x-auto pb-1">
+            {([
+              { id: "inventory", label: "🎒 Character & Inventory", icon: "🎒" },
+              { id: "crafting", label: "⚙️ Factorio Crafting", icon: "⚙️" },
+              { id: "workers", label: "👷 Automation Workers", icon: "👷" },
+              { id: "social", label: "👥 Social & NPCs", icon: "👥" },
+              { id: "skills", label: "📊 Skills & Upgrades", icon: "📊" },
+            ] as const).map((tab) => (
               <button
-                key={tab}
-                onClick={() => setActiveTab(tab as any)}
-                className={`px-3 sm:px-4 py-1.5 text-xs font-bold uppercase transition-all rounded-none whitespace-nowrap ${activeTab === tab
-                    ? "bg-[#2d3748] text-white border-t-2 border-[#38b2ac] shadow-inner"
-                    : "bg-[#2f3136] text-slate-400 hover:text-slate-200 border-t-2 border-transparent"
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id as any)}
+                className={`px-3 py-1.5 text-xs font-bold uppercase transition-all rounded-none whitespace-nowrap flex items-center gap-1.5 ${activeTab === tab.id
+                    ? "bg-[#253041] text-[#ff9200] border-t-2 border-[#ff9200] shadow-inner font-black"
+                    : "bg-[#181d26] text-slate-400 hover:text-slate-200 border-t-2 border-transparent"
                   }`}
               >
-                {tab === "crafting" ? "⚙️ Crafting" : tab === "inventory" ? "🎒 Bag" : tab}
+                <span>{tab.icon}</span>
+                <span>{tab.label}</span>
               </button>
             ))}
           </div>
 
-          <div className="py-2 min-h-[250px] max-h-[60vh] overflow-y-auto">
+          <div className="py-2 min-h-[280px] max-h-[64vh] overflow-y-auto">
             {activeTab === "inventory" && (
               <div className="space-y-3">
-                <div className="flex justify-end">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="text-[10px] h-6 px-2.5 bg-[#3a3f44] border-slate-700 text-slate-200 hover:bg-[#ff9200]/25 hover:border-[#ff9200] rounded-none font-mono"
-                    onClick={handleSortInventory}
-                  >
-                    Sort Inventory
-                  </Button>
-                </div>
-                <div className="grid grid-cols-5 sm:grid-cols-8 md:grid-cols-10 gap-1 bg-[#1a202c] p-2 sm:p-3 border-2 border-[#2d3748] rounded-sm">
-                  {state.inventory.map((item, idx) => (
-                    <button
-                      key={idx}
-                      onClick={(e) => handleSlotClick(idx, "inventory", e)}
-                      onContextMenu={(e) => handleSlotRightClick(e, idx, "inventory")}
-                      onMouseEnter={() => item && setHoveredItem(item)}
-                      onMouseLeave={() => setHoveredItem(null)}
-                      className={`relative flex items-center justify-center h-[44px] transition-all rounded-none ${item
-                          ? "bg-[#2d3748] hover:bg-[#4a5568] border-2 border-[#4a5568] hover:border-[#38b2ac] shadow-[inset_0_2px_4px_rgba(0,0,0,0.4)] text-slate-100"
-                          : "bg-[#1a202c] border-2 border-[#2d3748] shadow-[inset_0_2px_4px_rgba(0,0,0,0.6)] text-slate-600"
-                        }`}
+                {/* Character Equipment & Quick Controls Header */}
+                <div className="flex flex-wrap items-center justify-between gap-2 p-2 bg-[#171c24] border border-[#2d3748] rounded">
+                  {/* Left: Quick Equipment Slots */}
+                  <div className="flex items-center gap-2 text-xs">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase">Equipment:</span>
+                    <div className="flex items-center gap-1">
+                      <div className="w-8 h-8 bg-[#202734] border border-slate-600 rounded flex items-center justify-center text-sm" title="Armor Suit Slot">
+                        🛡️
+                      </div>
+                      <div className="w-8 h-8 bg-[#202734] border border-amber-500/80 rounded flex items-center justify-center text-sm" title="Active Held Item">
+                        {state.inventory[state.hotbarIndex]?.iconSymbol || "🗡️"}
+                      </div>
+                      <div className="w-8 h-8 bg-[#202734] border border-slate-600 rounded flex items-center justify-center text-sm" title="Flashlight / Torch Module">
+                        🔦
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Right: Quick Action Utilities */}
+                  <div className="flex items-center gap-1.5">
+                    {heldItem && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="text-[10px] h-6 px-2 bg-amber-950/60 border-amber-500 text-amber-300 hover:bg-amber-900 rounded font-mono"
+                        onClick={() => setHeldItem(null)}
+                      >
+                        Clear Hand (Q)
+                      </Button>
+                    )}
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="text-[10px] h-6 px-2.5 bg-[#253041] border-slate-600 text-slate-200 hover:bg-[#ff9200]/25 hover:border-[#ff9200] rounded font-mono"
+                      onClick={handleSortInventory}
                     >
-                      {idx < 10 && (
-                        <span className="absolute top-0.5 left-1 text-[8px] font-bold text-slate-500 leading-none">
-                          {idx === 9 ? "0" : idx + 1}
-                        </span>
-                      )}
-                      {item ? (
-                        <>
-                          <span className="text-2xl mt-1 select-none">{item.iconSymbol || "🎁"}</span>
-                          {item.count > 1 && (
-                            <span className="absolute bottom-0.5 right-1 px-1 bg-black/60 rounded text-[9px] font-bold text-white font-mono">
-                              {item.count}
-                            </span>
-                          )}
-                        </>
-                      ) : (
-                        <span className="text-xs opacity-10 text-stone-100">-</span>
-                      )}
-                    </button>
-                  ))}
+                      🔄 Auto-Sort
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Factorio 40-Slot Character Grid */}
+                <div className="bg-[#141922] p-2.5 sm:p-3 border-2 border-[#2b3545] rounded-sm">
+                  <div className="grid grid-cols-5 sm:grid-cols-8 md:grid-cols-10 gap-1 sm:gap-1.5">
+                    {state.inventory.map((item, idx) => (
+                      <button
+                        key={idx}
+                        onClick={(e) => handleSlotClick(idx, "inventory", e)}
+                        onContextMenu={(e) => handleSlotRightClick(e, idx, "inventory")}
+                        onMouseEnter={() => item && setHoveredItem(item)}
+                        onMouseLeave={() => setHoveredItem(null)}
+                        className={`relative flex items-center justify-center h-[46px] transition-all rounded ${
+                          idx === state.hotbarIndex ? "ring-2 ring-amber-400 ring-offset-1 ring-offset-[#141922]" : ""
+                        } ${item
+                            ? "bg-[#202836] hover:bg-[#2b3648] border-2 border-[#3d4d65] hover:border-[#ff9200] shadow-[inset_0_2px_4px_rgba(0,0,0,0.5)] text-slate-100"
+                            : "bg-[#141922] border-2 border-[#202734] shadow-[inset_0_2px_4px_rgba(0,0,0,0.7)] text-slate-700 hover:border-slate-600"
+                          }`}
+                      >
+                        {idx < 10 && (
+                          <span className="absolute top-0.5 left-1 text-[8px] font-bold text-amber-500/80 leading-none">
+                            {idx === 9 ? "0" : idx + 1}
+                          </span>
+                        )}
+                        {item ? (
+                          <>
+                            <span className="text-2xl mt-1 select-none">{item.iconSymbol || "🎁"}</span>
+                            {item.count > 1 && (
+                              <span className="absolute bottom-0.5 right-0.5 px-1 bg-black/80 rounded text-[9px] font-bold text-amber-400 font-mono border border-black">
+                                {item.count}
+                              </span>
+                            )}
+                          </>
+                        ) : (
+                          <span className="text-xs opacity-10 text-stone-100">-</span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
                 </div>
 
                 {heldItem && (
-                  <div className="p-2 bg-[#ff9200]/10 border border-[#ff9200]/20 rounded-none text-[10px] text-[#ff9200] flex items-center justify-between font-mono">
-                    <span>Holding: {heldItem.item.name} ({heldItem.item.count}x)</span>
-                    <Button size="sm" variant="outline" className="text-[10px] h-5 px-1.5 rounded-none border-slate-700 hover:bg-slate-800" onClick={() => setHeldItem(null)}>
-                      Clear
+                  <div className="p-2 bg-[#ff9200]/15 border border-[#ff9200]/40 rounded text-xs text-[#ff9200] flex items-center justify-between font-mono">
+                    <span>Holding in Cursor: <strong>{heldItem.item.name}</strong> ({heldItem.item.count}x)</span>
+                    <Button size="sm" variant="outline" className="text-[10px] h-5 px-2 rounded border-amber-600/60 hover:bg-amber-900/40 text-amber-300" onClick={() => setHeldItem(null)}>
+                      Clear (Q)
                     </Button>
                   </div>
                 )}
 
                 {/* Detailed Hover Inspection Tooltip */}
                 {hoveredItem ? (
-                  <div className="p-2 bg-[#141517] border border-slate-700 rounded-none flex items-start gap-2.5 transition-all font-mono">
-                    <span className="text-2xl bg-[#1e2022] p-1 rounded-none border border-slate-800">{hoveredItem.iconSymbol || "🎁"}</span>
+                  <div className="p-2.5 bg-[#171c24] border border-[#3b4759] rounded flex items-start gap-3 transition-all font-mono">
+                    <span className="text-3xl bg-[#10141a] p-1.5 rounded border border-[#2b3545]">{hoveredItem.iconSymbol || "🎁"}</span>
                     <div className="flex-1 text-[11px] leading-snug">
                       <div className="flex justify-between items-center">
-                        <span className="font-bold text-[#ff9200]">{hoveredItem.name}</span>
-                        {hoveredItem.price > 0 && <span className="font-bold text-yellow-500">{hoveredItem.price}g</span>}
+                        <span className="font-bold text-base text-[#ff9200]">{hoveredItem.name}</span>
+                        {hoveredItem.price > 0 && <span className="font-bold text-yellow-400 bg-yellow-950/60 px-1.5 py-0.5 rounded border border-yellow-700/50">{hoveredItem.price}g</span>}
                       </div>
-                      <p className="text-slate-350 text-[10px] mt-0.5">{hoveredItem.description}</p>
+                      <p className="text-slate-300 text-[11px] mt-1">{hoveredItem.description}</p>
                       {(hoveredItem.energyRestore !== undefined || hoveredItem.healthRestore !== undefined) && (
-                        <div className="flex gap-2 mt-1 text-[9px] font-bold">
+                        <div className="flex gap-3 mt-1.5 text-[10px] font-bold">
                           {hoveredItem.energyRestore !== undefined && hoveredItem.energyRestore !== 0 && (
-                            <span className="text-emerald-450">⚡ Energy: {hoveredItem.energyRestore > 0 ? "+" : ""}{hoveredItem.energyRestore}</span>
+                            <span className="text-emerald-400 bg-emerald-950/60 px-1.5 py-0.5 rounded border border-emerald-800/60">⚡ Energy: {hoveredItem.energyRestore > 0 ? "+" : ""}{hoveredItem.energyRestore}</span>
                           )}
                           {hoveredItem.healthRestore !== undefined && hoveredItem.healthRestore !== 0 && (
-                            <span className="text-red-400">❤️ Health: {hoveredItem.healthRestore > 0 ? "+" : ""}{hoveredItem.healthRestore}</span>
+                            <span className="text-red-400 bg-red-950/60 px-1.5 py-0.5 rounded border border-red-800/60">❤️ Health: {hoveredItem.healthRestore > 0 ? "+" : ""}{hoveredItem.healthRestore}</span>
                           )}
                         </div>
                       )}
                     </div>
                   </div>
                 ) : (
-                  <div className="p-2 bg-[#141517]/30 border border-dashed border-slate-800 rounded-none text-center text-slate-500 text-[10px] py-3 font-mono">
-                    Hover over an item to inspect details. Right-click to split stacks.
+                  <div className="p-2.5 bg-[#141922]/60 border border-dashed border-[#2b3545] rounded text-center text-slate-400 text-[11px] font-mono">
+                    🖱️ Hover over any item to inspect stats. Left-click to select, Right-click to split stacks.
                   </div>
                 )}
 
-                {/* Global Storage Section */}
-                <div className="mt-4 border-t border-[#ff9200]/30 pt-3">
-                  <h3 className="text-[#ff9200] font-bold mb-2 flex items-center gap-2">
-                    <span>📦</span> Global Storage (All Chests)
+                {/* Factorio Global Logistics Storage Overview */}
+                <div className="mt-3 border-t border-[#ff9200]/30 pt-2.5">
+                  <h3 className="text-[#ff9200] font-bold mb-2 flex items-center gap-2 text-xs">
+                    <span>📦</span> FACTORIO GLOBAL STORAGE (ALL CHESTS & SILOS)
                   </h3>
-                  <div className="flex flex-wrap gap-1 bg-[#1a202c] p-3 border-2 border-[#2d3748] rounded-sm max-h-[120px] overflow-y-auto">
+                  <div className="flex flex-wrap gap-1.5 bg-[#141922] p-2.5 border-2 border-[#2b3545] rounded max-h-[120px] overflow-y-auto">
                     {getGlobalStorageItems(state).length === 0 ? (
-                      <div className="text-slate-500 text-xs italic">No items stored in chests.</div>
+                      <div className="text-slate-500 text-xs italic">No items stored in logistics chests.</div>
                     ) : (
                       getGlobalStorageItems(state).map((item, idx) => (
-                        <div key={idx} className="w-10 h-10 bg-[#2d3748] border border-slate-600 flex items-center justify-center relative rounded text-2xl">
-                          <span title={item.name}>{item.iconSymbol}</span>
-                          <span className="absolute bottom-0.5 right-1 text-[9px] font-black text-white outline-text">{item.count}</span>
+                        <div key={idx} className="w-10 h-10 bg-[#202836] border border-[#3d4d65] flex items-center justify-center relative rounded text-2xl" title={`${item.name} (${item.count} total)`}>
+                          <span>{item.iconSymbol}</span>
+                          <span className="absolute bottom-0.5 right-1 text-[9px] font-black text-amber-300 font-mono bg-black/80 px-1 rounded">{item.count}</span>
                         </div>
                       ))
                     )}

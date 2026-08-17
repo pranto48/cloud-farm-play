@@ -110,7 +110,7 @@ function LoginPage() {
           />
           <Label htmlFor="trust-device" className="text-xs cursor-pointer select-none text-stone-300 flex items-center gap-1.5">
             <ShieldCheck className="h-3.5 w-3.5 text-emerald-400 inline" />
-            Trust this device & save login session
+            Trust this device & keep logged in for 30 days
           </Label>
         </div>
 

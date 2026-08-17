@@ -362,6 +362,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
   const [joystickKnobPos, setJoystickKnobPos] = useState({ x: 0, y: 0 });
   const [mobileSprint, setMobileSprint] = useState(false);
   const [controlMode, setControlMode] = useState<"joystick" | "dpad">("joystick");
+  const [mobileQuickMenuOpen, setMobileQuickMenuOpen] = useState(false);
   const joystickCenterRef = useRef<{ x: number; y: number } | null>(null);
   const joystickTouchIdRef = useRef<number | null>(null);
 
@@ -2788,9 +2789,19 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
           </div>
         )}
 
-        {/* Floating Top-Left Action Bar */}
-        <div className="absolute top-3 left-3 z-20 flex items-center gap-1.5 bg-[#202224]/80 border border-slate-700 p-1 font-mono shadow-md flex-wrap max-w-[85%] sm:max-w-none">
-          {/* Mobile Controls Toggle Button */}
+        {/* Floating Top-Left Action Bar (Separated Mobile & Desktop View) */}
+        <div className="absolute top-3 left-3 z-20 flex items-center gap-1 bg-[#202224]/85 border border-slate-700 p-1 font-mono shadow-md select-none">
+          {/* Mobile Quick Menu Hamburger Button */}
+          <button
+            onClick={() => setMobileQuickMenuOpen(true)}
+            title="Open Game Menu"
+            className="flex items-center gap-1 px-2 h-8 bg-gradient-to-r from-[#ff9200]/20 to-[#ff9200]/10 hover:bg-[#ff9200]/30 border border-[#ff9200]/60 text-[#ff9200] font-black text-xs cursor-pointer active:scale-95 transition-transform"
+          >
+            <span>☰</span>
+            <span className="text-[10px] uppercase tracking-wider hidden sm:inline">MENU</span>
+          </button>
+
+          {/* Touch Controls Toggle Button */}
           <button
             onClick={() => setShowTouchControls((prev) => !prev)}
             title="Toggle Mobile Touch Controls"
@@ -2799,7 +2810,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
             📱
           </button>
 
-          {/* Backpack Journal Button */}
+          {/* Quick Backpack Button */}
           <button
             onClick={() => { setInventoryOpen(true); setActiveTab("inventory"); }}
             title="Backpack Journal (I)"
@@ -2808,67 +2819,68 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
             <Backpack className="h-4 w-4 text-[#ff9200]" />
           </button>
 
-          {/* Pierre's Shop Button */}
-          <button
-            onClick={() => setShopOpen(true)}
-            title="Pierre's Shop"
-            className="w-8 h-8 flex items-center justify-center bg-[#2a2c2e] hover:bg-[#ff9200]/20 border border-slate-600 hover:border-[#ff9200] text-slate-100 transition-all cursor-pointer font-bold text-xs"
-          >
-            <Coins className="h-4 w-4 text-yellow-500" />
-          </button>
+          {/* Desktop Only Buttons */}
+          <div className="hidden md:flex items-center gap-1">
+            {/* Pierre's Shop Button */}
+            <button
+              onClick={() => setShopOpen(true)}
+              title="Pierre's Shop"
+              className="w-8 h-8 flex items-center justify-center bg-[#2a2c2e] hover:bg-[#ff9200]/20 border border-slate-600 hover:border-[#ff9200] text-slate-100 transition-all cursor-pointer font-bold text-xs"
+            >
+              <Coins className="h-4 w-4 text-yellow-500" />
+            </button>
 
-          {/* Multiplayer Rooms & Separate Maps Button */}
-          <button
-            onClick={() => setMultiplayerOpen(true)}
-            title="Multiplayer Rooms & Separate Maps"
-            className="h-8 px-2 flex items-center justify-center gap-1.5 bg-[#2a2c2e] hover:bg-[#38b2ac]/20 border border-slate-600 hover:border-[#38b2ac] text-slate-100 transition-all cursor-pointer font-bold text-xs"
-          >
-            <Users className="h-4 w-4 text-[#38b2ac]" />
-            <span className="text-[#38b2ac] hidden sm:inline">
-              {state.currentRoomCode ? `[${state.currentRoomCode}]` : "🌐 Rooms"}
-            </span>
-          </button>
+            {/* Multiplayer Rooms Button */}
+            <button
+              onClick={() => setMultiplayerOpen(true)}
+              title="Multiplayer Rooms & Separate Maps"
+              className="h-8 px-2 flex items-center justify-center gap-1 bg-[#2a2c2e] hover:bg-[#38b2ac]/20 border border-slate-600 hover:border-[#38b2ac] text-slate-100 transition-all cursor-pointer font-bold text-xs"
+            >
+              <Users className="h-4 w-4 text-[#38b2ac]" />
+              <span className="text-[#38b2ac] text-[10px]">
+                {state.currentRoomCode ? `[${state.currentRoomCode}]` : "Rooms"}
+              </span>
+            </button>
 
-          {/* Mailbox Button (shown if letters exist) */}
+            {/* Sleep (Save & Grow) Button */}
+            <button
+              onClick={handleManualSleep}
+              title="Sleep (Save & Grow)"
+              className="w-8 h-8 flex items-center justify-center bg-[#2a2c2e] hover:bg-[#ff9200]/20 border border-slate-600 hover:border-[#ff9200] text-slate-100 transition-all cursor-pointer font-bold text-xs"
+            >
+              <Bed className="h-4 w-4 text-emerald-400" />
+            </button>
+
+            {/* About / Guide Button */}
+            <button
+              onClick={() => setAboutOpen(true)}
+              title="About & Cheats (H)"
+              className="h-8 px-2 flex items-center justify-center gap-1 bg-[#2a2c2e] hover:bg-[#22d3ee]/20 border border-slate-600 hover:border-[#22d3ee] text-slate-100 transition-all cursor-pointer font-bold text-xs"
+            >
+              <HelpCircle className="h-4 w-4 text-[#22d3ee]" />
+              <span className="text-[#22d3ee] text-[10px]">Guide (H)</span>
+            </button>
+
+            {/* Cheat Console Button */}
+            <button
+              onClick={() => { setChatOpen(true); setTimeout(() => chatInputRef.current?.focus(), 50); }}
+              title="Cheat Console (/)"
+              className={`w-8 h-8 flex items-center justify-center bg-[#2a2c2e] hover:bg-[#a78bfa]/20 border transition-all cursor-pointer font-bold text-xs font-mono ${state.godMode ? "border-amber-500 bg-amber-500/10 animate-pulse" : "border-slate-600 hover:border-[#a78bfa]"}`}
+            >
+              <span className={`text-sm font-black ${state.godMode ? "text-amber-400" : "text-[#a78bfa]"}`}>/</span>
+            </button>
+          </div>
+
+          {/* Mailbox Button (if unread mail exists) */}
           {state.mailboxLetters.length > 0 && (
             <button
               onClick={() => setMailboxOpen(true)}
               title={`Mailbox (${state.mailboxLetters.filter(l => !l.claimed).length} unread)`}
-              className={`w-8 h-8 flex items-center justify-center bg-[#2a2c2e] hover:bg-[#ff9200]/20 border border-slate-600 hover:border-[#ff9200] text-slate-100 transition-all cursor-pointer font-bold text-xs ${state.hasUnreadMail ? "animate-pulse border-red-500 text-red-500 bg-red-500/10" : ""
-                }`}
+              className={`w-8 h-8 flex items-center justify-center bg-[#2a2c2e] hover:bg-[#ff9200]/20 border border-slate-600 hover:border-[#ff9200] text-slate-100 transition-all cursor-pointer font-bold text-xs ${state.hasUnreadMail ? "animate-pulse border-red-500 text-red-500 bg-red-500/10" : ""}`}
             >
               <Mail className="h-4 w-4" />
             </button>
           )}
-
-          {/* Sleep (Save & Grow) Button */}
-          <button
-            onClick={handleManualSleep}
-            title="Sleep (Save & Grow)"
-            className="w-8 h-8 flex items-center justify-center bg-[#2a2c2e] hover:bg-[#ff9200]/20 border border-slate-600 hover:border-[#ff9200] text-slate-100 transition-all cursor-pointer font-bold text-xs"
-          >
-            <Bed className="h-4 w-4 text-emerald-400" />
-          </button>
-
-          {/* About / Game Guide Button (H) */}
-          <button
-            onClick={() => setAboutOpen(true)}
-            title="About & Cheats (H)"
-            className="h-8 px-2 flex items-center justify-center gap-1 bg-[#2a2c2e] hover:bg-[#22d3ee]/20 border border-slate-600 hover:border-[#22d3ee] text-slate-100 transition-all cursor-pointer font-bold text-xs"
-          >
-            <HelpCircle className="h-4 w-4 text-[#22d3ee]" />
-            <span className="text-[#22d3ee] hidden sm:inline">About & Cheats (H)</span>
-          </button>
-
-          {/* Cheat Console Button (/) */}
-          <button
-            onClick={() => { setChatOpen(true); setTimeout(() => chatInputRef.current?.focus(), 50); }}
-            title="Cheat Console (/)"
-            className={`w-8 h-8 flex items-center justify-center bg-[#2a2c2e] hover:bg-[#a78bfa]/20 border transition-all cursor-pointer font-bold text-xs font-mono ${state.godMode ? "border-amber-500 bg-amber-500/10 animate-pulse" : "border-slate-600 hover:border-[#a78bfa]"}`}
-          >
-            <span className={`text-sm font-black ${state.godMode ? "text-amber-400" : "text-[#a78bfa]"}`}>/</span>
-          </button>
-
 
           <span className="w-[1px] h-5 bg-slate-700 mx-0.5"></span>
 
@@ -2890,6 +2902,136 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
             {isFullscreen ? <Minimize className="h-4 w-4" /> : <Maximize className="h-4 w-4" />}
           </button>
         </div>
+
+        {/* Mobile Quick Menu Drawer (Modal Sheet) */}
+        <Dialog open={mobileQuickMenuOpen} onOpenChange={setMobileQuickMenuOpen}>
+          <DialogContent container={mainContainerRef.current} className="w-[96vw] max-w-md bg-[#13171e]/95 border-2 border-[#ff9200]/70 text-slate-100 rounded-xl font-mono shadow-[0_0_30px_rgba(0,0,0,0.9)] backdrop-blur-xl p-4">
+            <DialogHeader>
+              <DialogTitle className="text-base font-black uppercase tracking-wider flex items-center justify-between text-[#ff9200] border-b border-slate-700/80 pb-2">
+                <span className="flex items-center gap-2">
+                  <span>📱</span>
+                  <span>Mobile Game Menu</span>
+                </span>
+                <span className="text-[10px] text-slate-400 font-normal">Day {state.day} • {state.coins}G</span>
+              </DialogTitle>
+            </DialogHeader>
+
+            <div className="grid grid-cols-2 gap-2.5 py-3">
+              {/* Backpack & Factorio Crafting */}
+              <button
+                onClick={() => { setMobileQuickMenuOpen(false); setInventoryOpen(true); setActiveTab("inventory"); }}
+                className="p-3 bg-[#1e2530] hover:bg-[#ff9200]/20 border border-slate-700 hover:border-[#ff9200] rounded-lg flex items-center gap-2.5 text-left active:scale-95 transition-all"
+              >
+                <span className="text-2xl">🎒</span>
+                <div>
+                  <div className="font-bold text-xs text-slate-100">Backpack</div>
+                  <div className="text-[9px] text-slate-400">Inventory & Storage</div>
+                </div>
+              </button>
+
+              {/* Factorio Crafting Tab */}
+              <button
+                onClick={() => { setMobileQuickMenuOpen(false); setInventoryOpen(true); setActiveTab("crafting"); }}
+                className="p-3 bg-[#1e2530] hover:bg-orange-500/20 border border-slate-700 hover:border-orange-500 rounded-lg flex items-center gap-2.5 text-left active:scale-95 transition-all"
+              >
+                <span className="text-2xl">⚙️</span>
+                <div>
+                  <div className="font-bold text-xs text-orange-400">Crafting</div>
+                  <div className="text-[9px] text-slate-400">Factorio Logistics</div>
+                </div>
+              </button>
+
+              {/* Pierre's Shop */}
+              <button
+                onClick={() => { setMobileQuickMenuOpen(false); setShopOpen(true); }}
+                className="p-3 bg-[#1e2530] hover:bg-yellow-500/20 border border-slate-700 hover:border-yellow-500 rounded-lg flex items-center gap-2.5 text-left active:scale-95 transition-all"
+              >
+                <span className="text-2xl">🛒</span>
+                <div>
+                  <div className="font-bold text-xs text-yellow-400">Pierre's Store</div>
+                  <div className="text-[9px] text-slate-400">Buy Seeds & Machines</div>
+                </div>
+              </button>
+
+              {/* Research Center */}
+              <button
+                onClick={() => { setMobileQuickMenuOpen(false); setResearchCenterOpen(true); }}
+                className="p-3 bg-[#1e2530] hover:bg-cyan-500/20 border border-slate-700 hover:border-cyan-500 rounded-lg flex items-center gap-2.5 text-left active:scale-95 transition-all"
+              >
+                <span className="text-2xl">🔬</span>
+                <div>
+                  <div className="font-bold text-xs text-cyan-400">Research Tree</div>
+                  <div className="text-[9px] text-slate-400">Unlock Techs ({state.researchPoints || 0} RP)</div>
+                </div>
+              </button>
+
+              {/* Sleep & Save Day */}
+              <button
+                onClick={() => { setMobileQuickMenuOpen(false); handleManualSleep(); }}
+                className="p-3 bg-[#1e2530] hover:bg-emerald-500/20 border border-slate-700 hover:border-emerald-500 rounded-lg flex items-center gap-2.5 text-left active:scale-95 transition-all"
+              >
+                <span className="text-2xl">🛏️</span>
+                <div>
+                  <div className="font-bold text-xs text-emerald-400">Sleep & Save</div>
+                  <div className="text-[9px] text-slate-400">Advance to next day</div>
+                </div>
+              </button>
+
+              {/* Multiplayer Rooms */}
+              <button
+                onClick={() => { setMobileQuickMenuOpen(false); setMultiplayerOpen(true); }}
+                className="p-3 bg-[#1e2530] hover:bg-teal-500/20 border border-slate-700 hover:border-teal-500 rounded-lg flex items-center gap-2.5 text-left active:scale-95 transition-all"
+              >
+                <span className="text-2xl">🌐</span>
+                <div>
+                  <div className="font-bold text-xs text-teal-400">Multiplayer</div>
+                  <div className="text-[9px] text-slate-400">Rooms & Custom Maps</div>
+                </div>
+              </button>
+
+              {/* Touch Control Mode Switch */}
+              <button
+                onClick={() => setControlMode(prev => prev === "joystick" ? "dpad" : "joystick")}
+                className="p-3 bg-[#1e2530] hover:bg-amber-500/20 border border-slate-700 hover:border-amber-500 rounded-lg flex items-center gap-2.5 text-left active:scale-95 transition-all"
+              >
+                <span className="text-2xl">🕹️</span>
+                <div>
+                  <div className="font-bold text-xs text-amber-300">Controls Mode</div>
+                  <div className="text-[9px] text-slate-400">Current: {controlMode.toUpperCase()}</div>
+                </div>
+              </button>
+
+              {/* Sprint Run Toggle */}
+              <button
+                onClick={() => setMobileSprint(prev => !prev)}
+                className="p-3 bg-[#1e2530] hover:bg-amber-500/20 border border-slate-700 hover:border-amber-500 rounded-lg flex items-center gap-2.5 text-left active:scale-95 transition-all"
+              >
+                <span className="text-2xl">🏃</span>
+                <div>
+                  <div className="font-bold text-xs text-amber-300">Turbo Sprint</div>
+                  <div className="text-[9px] text-slate-400">{mobileSprint ? "Speed: FAST (ON)" : "Speed: WALK (OFF)"}</div>
+                </div>
+              </button>
+            </div>
+
+            <div className="flex gap-2 pt-2 border-t border-slate-800">
+              {/* Cheats Console Button */}
+              <button
+                onClick={() => { setMobileQuickMenuOpen(false); setChatOpen(true); }}
+                className="flex-1 py-2 bg-purple-950/70 border border-purple-700 text-purple-300 text-xs font-bold rounded-lg text-center active:scale-95"
+              >
+                ⚡ Cheats Console (/)
+              </button>
+              {/* Game Guide Button */}
+              <button
+                onClick={() => { setMobileQuickMenuOpen(false); setAboutOpen(true); }}
+                className="flex-1 py-2 bg-cyan-950/70 border border-cyan-700 text-cyan-300 text-xs font-bold rounded-lg text-center active:scale-95"
+              >
+                📖 Game Guide (H)
+              </button>
+            </div>
+          </DialogContent>
+        </Dialog>
 
         {/* Mine Depth label */}
         {state.inMine && (
@@ -3925,30 +4067,30 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
 
       {/* D. TABBED JOURNAL / BACKPACK */}
       <Dialog open={inventoryOpen} onOpenChange={setInventoryOpen}>
-        <DialogContent container={mainContainerRef.current} className="max-w-3xl bg-[#141517] border-[3px] border-[#4a5568] text-slate-100 rounded-sm font-mono shadow-[0_0_20px_rgba(0,0,0,0.8)]">
+        <DialogContent container={mainContainerRef.current} className="w-[96vw] max-w-3xl max-h-[90dvh] bg-[#141517] border-[3px] border-[#4a5568] text-slate-100 rounded-lg font-mono shadow-[0_0_20px_rgba(0,0,0,0.8)] overflow-y-auto p-3 sm:p-6">
           <DialogHeader>
-            <DialogTitle className="text-xl font-black uppercase tracking-wider flex items-center gap-2 text-[#e2e8f0] border-b border-[#4a5568] pb-3 bg-[#1e222a] -mt-6 -mx-6 px-6 pt-6">
+            <DialogTitle className="text-lg sm:text-xl font-black uppercase tracking-wider flex items-center gap-2 text-[#e2e8f0] border-b border-[#4a5568] pb-3 bg-[#1e222a] -mt-3 -mx-3 sm:-mt-6 sm:-mx-6 px-4 sm:px-6 pt-4 sm:pt-6">
               <Backpack className="h-5 w-5 text-[#ff9200]" />
               <span>Backpack Journal</span>
             </DialogTitle>
           </DialogHeader>
 
-          <div className="flex border-b border-slate-800 gap-1 my-1">
+          <div className="flex border-b border-slate-800 gap-1 my-1 overflow-x-auto pb-1">
             {(["inventory", "crafting", "workers", "social", "skills"] as const).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab as any)}
-                className={`px-4 py-1.5 text-xs font-bold uppercase transition-all rounded-none ${activeTab === tab
+                className={`px-3 sm:px-4 py-1.5 text-xs font-bold uppercase transition-all rounded-none whitespace-nowrap ${activeTab === tab
                     ? "bg-[#2d3748] text-white border-t-2 border-[#38b2ac] shadow-inner"
                     : "bg-[#2f3136] text-slate-400 hover:text-slate-200 border-t-2 border-transparent"
                   }`}
               >
-                {tab}
+                {tab === "crafting" ? "⚙️ Crafting" : tab === "inventory" ? "🎒 Bag" : tab}
               </button>
             ))}
           </div>
 
-          <div className="py-2 min-h-[250px] max-h-[330px] overflow-y-auto">
+          <div className="py-2 min-h-[250px] max-h-[60vh] overflow-y-auto">
             {activeTab === "inventory" && (
               <div className="space-y-3">
                 <div className="flex justify-end">
@@ -3961,7 +4103,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                     Sort Inventory
                   </Button>
                 </div>
-                <div className="grid grid-cols-10 gap-1 bg-[#1a202c] p-3 border-2 border-[#2d3748] rounded-sm">
+                <div className="grid grid-cols-5 sm:grid-cols-8 md:grid-cols-10 gap-1 bg-[#1a202c] p-2 sm:p-3 border-2 border-[#2d3748] rounded-sm">
                   {state.inventory.map((item, idx) => (
                     <button
                       key={idx}
@@ -4122,7 +4264,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                   </div>
 
                   {/* Recipes Grid / Cheats All Items Grid */}
-                  <div className="grid grid-cols-6 gap-2 p-3 bg-zinc-950/80 rounded border border-zinc-800/80 min-h-[220px] max-h-[280px] overflow-y-auto">
+                  <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-1.5 sm:gap-2 p-2 sm:p-3 bg-zinc-950/80 rounded border border-zinc-800/80 min-h-[220px] max-h-[300px] overflow-y-auto">
                     {(craftingCategory as any) === "cheats" ? (
                       Object.values(ITEM_DEFS).map((itemDef) => (
                         <button

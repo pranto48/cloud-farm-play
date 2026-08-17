@@ -358,6 +358,12 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
 
   const chargingToolRef = useRef<{ toolId: string; startTime: number; maxLevel: number } | null>(null);
   const actionHoldIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const joystickVectorRef = useRef<{ dx: number; dy: number; active: boolean }>({ dx: 0, dy: 0, active: false });
+  const [joystickKnobPos, setJoystickKnobPos] = useState({ x: 0, y: 0 });
+  const [mobileSprint, setMobileSprint] = useState(false);
+  const [controlMode, setControlMode] = useState<"joystick" | "dpad">("joystick");
+  const joystickCenterRef = useRef<{ x: number; y: number } | null>(null);
+  const joystickTouchIdRef = useRef<number | null>(null);
 
   const startContinuousAction = () => {
     if (actionHoldIntervalRef.current) clearInterval(actionHoldIntervalRef.current);
@@ -379,6 +385,82 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
       clearInterval(actionHoldIntervalRef.current);
       actionHoldIntervalRef.current = null;
     }
+  };
+
+  const handleJoystickTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    const touch = e.changedTouches[0];
+    if (!touch) return;
+    joystickTouchIdRef.current = touch.identifier;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
+    joystickCenterRef.current = { x: centerX, y: centerY };
+    updateJoystick(touch.clientX, touch.clientY);
+  };
+
+  const handleJoystickTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    if (joystickTouchIdRef.current === null) return;
+    for (let i = 0; i < e.changedTouches.length; i++) {
+      const touch = e.changedTouches[i];
+      if (touch.identifier === joystickTouchIdRef.current) {
+        updateJoystick(touch.clientX, touch.clientY);
+        break;
+      }
+    }
+  };
+
+  const handleJoystickTouchEnd = (e: React.TouchEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    if (joystickTouchIdRef.current === null) return;
+    for (let i = 0; i < e.changedTouches.length; i++) {
+      if (e.changedTouches[i].identifier === joystickTouchIdRef.current) {
+        resetJoystick();
+        break;
+      }
+    }
+  };
+
+  const updateJoystick = (clientX: number, clientY: number) => {
+    if (!joystickCenterRef.current) return;
+    const maxRadius = 42;
+    const deltaX = clientX - joystickCenterRef.current.x;
+    const deltaY = clientY - joystickCenterRef.current.y;
+    const distance = Math.hypot(deltaX, deltaY);
+
+    if (distance === 0) {
+      resetJoystick();
+      return;
+    }
+
+    const clampedDist = Math.min(distance, maxRadius);
+    const angle = Math.atan2(deltaY, deltaX);
+
+    const knobX = Math.cos(angle) * clampedDist;
+    const knobY = Math.sin(angle) * clampedDist;
+
+    setJoystickKnobPos({ x: knobX, y: knobY });
+
+    const normalizedDist = clampedDist / maxRadius;
+    const deadzone = 0.15;
+    if (normalizedDist < deadzone) {
+      joystickVectorRef.current = { dx: 0, dy: 0, active: false };
+    } else {
+      const moveAmount = (normalizedDist - deadzone) / (1 - deadzone);
+      joystickVectorRef.current = {
+        dx: Math.cos(angle) * moveAmount,
+        dy: Math.sin(angle) * moveAmount,
+        active: true,
+      };
+    }
+  };
+
+  const resetJoystick = () => {
+    joystickTouchIdRef.current = null;
+    joystickCenterRef.current = null;
+    setJoystickKnobPos({ x: 0, y: 0 });
+    joystickVectorRef.current = { dx: 0, dy: 0, active: false };
   };
 
   // Detect mobile device on mount
@@ -562,61 +644,66 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
 
       const cur = stateRef.current;
 
-      // Factorio Continuous Vector Player Movement
-      const keys = pressedKeysRef.current;
-      if (keys.size > 0 && !inventoryOpen && !shopOpen && !chestOpenTile && !mailboxOpen && !chatOpen) {
-        let dx = 0;
-        let dy = 0;
-        if (keys.has("w") || keys.has("arrowup")) dy -= 1;
-        if (keys.has("s") || keys.has("arrowdown")) dy += 1;
-        if (keys.has("a") || keys.has("arrowleft")) dx -= 1;
-        if (keys.has("d") || keys.has("arrowright")) dx += 1;
+      // Continuous Vector Player Movement (Keyboard & Virtual Touch Joystick)
+      let dx = 0;
+      let dy = 0;
+      if (joystickVectorRef.current.active) {
+        dx = joystickVectorRef.current.dx;
+        dy = joystickVectorRef.current.dy;
+      } else {
+        const keys = pressedKeysRef.current;
+        if (keys.size > 0) {
+          if (keys.has("w") || keys.has("arrowup")) dy -= 1;
+          if (keys.has("s") || keys.has("arrowdown")) dy += 1;
+          if (keys.has("a") || keys.has("arrowleft")) dx -= 1;
+          if (keys.has("d") || keys.has("arrowright")) dx += 1;
 
-        if (dx !== 0 || dy !== 0) {
           if (dx !== 0 && dy !== 0) {
             dx *= 0.7071;
             dy *= 0.7071;
           }
-
-          const p = cur.player;
-          const isShift = keys.has("shift");
-          const speed = (isShift ? 9.5 : 6.5) * dt;
-
-          if (p.subX === undefined) p.subX = p.x;
-          if (p.subY === undefined) p.subY = p.y;
-
-          const grid = cur.inHouse ? cur.houseGrid! : (cur.inMine ? cur.mineGrid : cur.tiles);
-          const rows = grid.length;
-          const cols = grid[0]?.length || 0;
-
-          // X Movement with collision sliding
-          const newSubX = Math.max(0, Math.min(cols - 1, p.subX + dx * speed));
-          const targetX = Math.floor(newSubX + (dx > 0 ? 0.25 : -0.25));
-          const curY = Math.floor(p.subY);
-          if (targetX >= 0 && targetX < cols && curY >= 0 && curY < rows && isWalkable(grid[curY]?.[targetX])) {
-            p.subX = newSubX;
-            p.x = Math.floor(newSubX);
-          }
-
-          // Y Movement with collision sliding
-          const newSubY = Math.max(0, Math.min(rows - 1, p.subY + dy * speed));
-          const targetY = Math.floor(newSubY + (dy > 0 ? 0.25 : -0.25));
-          const curX = Math.floor(p.subX);
-          if (curX >= 0 && curX < cols && targetY >= 0 && targetY < rows && isWalkable(grid[targetY]?.[curX])) {
-            p.subY = newSubY;
-            p.y = Math.floor(newSubY);
-          }
-
-          // Facing direction
-          if (Math.abs(dx) > Math.abs(dy)) {
-            p.dir = dx > 0 ? "right" : "left";
-          } else if (Math.abs(dy) > 0) {
-            p.dir = dy > 0 ? "down" : "up";
-          }
-
-          // Dynamically generate procedural infinite chunks as player explores
-          ensureMapExploration(cur, p.x, p.y);
         }
+      }
+
+      if ((dx !== 0 || dy !== 0) && !inventoryOpen && !shopOpen && !chestOpenTile && !mailboxOpen && !chatOpen) {
+        const p = cur.player;
+        const isShift = pressedKeysRef.current.has("shift") || mobileSprint;
+        const speed = (isShift ? 9.5 : 6.5) * dt;
+
+        if (p.subX === undefined) p.subX = p.x;
+        if (p.subY === undefined) p.subY = p.y;
+
+        const grid = cur.inHouse ? cur.houseGrid! : (cur.inMine ? cur.mineGrid : cur.tiles);
+        const rows = grid.length;
+        const cols = grid[0]?.length || 0;
+
+        // X Movement with collision sliding
+        const newSubX = Math.max(0, Math.min(cols - 1, p.subX + dx * speed));
+        const targetX = Math.floor(newSubX + (dx > 0 ? 0.25 : -0.25));
+        const curY = Math.floor(p.subY);
+        if (targetX >= 0 && targetX < cols && curY >= 0 && curY < rows && isWalkable(grid[curY]?.[targetX])) {
+          p.subX = newSubX;
+          p.x = Math.floor(newSubX);
+        }
+
+        // Y Movement with collision sliding
+        const newSubY = Math.max(0, Math.min(rows - 1, p.subY + dy * speed));
+        const targetY = Math.floor(newSubY + (dy > 0 ? 0.25 : -0.25));
+        const curX = Math.floor(p.subX);
+        if (curX >= 0 && curX < cols && targetY >= 0 && targetY < rows && isWalkable(grid[targetY]?.[curX])) {
+          p.subY = newSubY;
+          p.y = Math.floor(newSubY);
+        }
+
+        // Facing direction
+        if (Math.abs(dx) > Math.abs(dy)) {
+          p.dir = dx > 0 ? "right" : "left";
+        } else if (Math.abs(dy) > 0) {
+          p.dir = dy > 0 ? "down" : "up";
+        }
+
+        // Dynamically generate procedural infinite chunks as player explores
+        ensureMapExploration(cur, p.x, p.y);
       }
 
       // High Performance Throttled Entity & Machine Updates (10 Ticks / sec)
@@ -2930,82 +3017,156 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
           </div>
         )}
 
-        {/* Mobile Virtual D-Pad & Action Controls Overlay */}
+        {/* Mobile Touch Gaming Suite (Optimized for iPhone & Android) */}
         {showTouchControls && (
           <>
-            {/* Virtual D-Pad (Bottom-Left) */}
-            <div className="absolute bottom-16 left-2 sm:left-4 z-30 flex flex-col items-center select-none pointer-events-auto touch-none opacity-90 hover:opacity-100 transition-opacity">
-              {/* Up Button */}
-              <button
-                onTouchStart={(e) => { e.preventDefault(); pressedKeysRef.current.add("w"); }}
-                onTouchEnd={(e) => { e.preventDefault(); pressedKeysRef.current.delete("w"); }}
-                onTouchCancel={() => pressedKeysRef.current.delete("w")}
-                onMouseDown={() => pressedKeysRef.current.add("w")}
-                onMouseUp={() => pressedKeysRef.current.delete("w")}
-                onMouseLeave={() => pressedKeysRef.current.delete("w")}
-                className="w-11 h-11 bg-[#1a222d]/90 active:bg-[#ff9200]/70 border-2 border-[#3b4c63] active:border-[#ff9200] rounded-t-lg flex items-center justify-center text-white text-base shadow-xl active:scale-95 transition-transform"
-              >
-                ▲
-              </button>
-              <div className="flex gap-2 -my-0.5">
-                {/* Left Button */}
-                <button
-                  onTouchStart={(e) => { e.preventDefault(); pressedKeysRef.current.add("a"); }}
-                  onTouchEnd={(e) => { e.preventDefault(); pressedKeysRef.current.delete("a"); }}
-                  onTouchCancel={() => pressedKeysRef.current.delete("a")}
-                  onMouseDown={() => pressedKeysRef.current.add("a")}
-                  onMouseUp={() => pressedKeysRef.current.delete("a")}
-                  onMouseLeave={() => pressedKeysRef.current.delete("a")}
-                  className="w-11 h-11 bg-[#1a222d]/90 active:bg-[#ff9200]/70 border-2 border-[#3b4c63] active:border-[#ff9200] rounded-l-lg flex items-center justify-center text-white text-base shadow-xl active:scale-95 transition-transform"
-                >
-                  ◀
-                </button>
-                {/* Center Core */}
-                <div className="w-9 h-9 bg-[#11161d]/90 rounded-full border border-slate-700/60 flex items-center justify-center text-[11px] text-stone-500 font-bold">
-                  🕹️
+            {/* Movement Controller (Bottom-Left) */}
+            <div
+              className="absolute z-30 select-none pointer-events-auto touch-none"
+              style={{
+                bottom: "calc(4.2rem + env(safe-area-inset-bottom, 0px))",
+                left: "calc(0.75rem + env(safe-area-inset-left, 0px))"
+              }}
+            >
+              {controlMode === "joystick" ? (
+                /* Dynamic Virtual Analog Joystick (360° Vector Tracking) */
+                <div className="flex flex-col items-center gap-1">
+                  <div
+                    onTouchStart={handleJoystickTouchStart}
+                    onTouchMove={handleJoystickTouchMove}
+                    onTouchEnd={handleJoystickTouchEnd}
+                    onTouchCancel={resetJoystick}
+                    className="relative w-28 h-28 rounded-full bg-[#12171f]/85 border-2 border-[#3d516b]/80 shadow-[0_0_20px_rgba(0,0,0,0.8)] backdrop-blur-md flex items-center justify-center cursor-pointer active:border-[#ff9200]/80 transition-colors"
+                  >
+                    {/* Directional ticks */}
+                    <span className="absolute top-1 text-[8px] text-slate-500 font-bold">▲</span>
+                    <span className="absolute bottom-1 text-[8px] text-slate-500 font-bold">▼</span>
+                    <span className="absolute left-1 text-[8px] text-slate-500 font-bold">◀</span>
+                    <span className="absolute right-1 text-[8px] text-slate-500 font-bold">▶</span>
+
+                    {/* Outer guide ring */}
+                    <div className="w-16 h-16 rounded-full border border-slate-700/40 pointer-events-none" />
+
+                    {/* Glowing Movable Thumb Knob */}
+                    <div
+                      className="absolute w-12 h-12 rounded-full bg-gradient-to-br from-[#ff9200] to-[#d35400] border-2 border-white shadow-[0_0_12px_rgba(255,146,0,0.7)] flex items-center justify-center text-white text-xs font-bold pointer-events-none transition-transform duration-75"
+                      style={{
+                        transform: `translate(${joystickKnobPos.x}px, ${joystickKnobPos.y}px)`
+                      }}
+                    >
+                      🕹️
+                    </div>
+                  </div>
+
+                  {/* Mode switch button */}
+                  <button
+                    onClick={() => setControlMode("dpad")}
+                    className="px-2 py-0.5 bg-[#1b222d]/80 hover:bg-[#ff9200]/30 border border-slate-700 rounded text-[9px] font-mono text-slate-300 active:scale-95"
+                  >
+                    Switch to D-Pad 🎛️
+                  </button>
                 </div>
-                {/* Right Button */}
-                <button
-                  onTouchStart={(e) => { e.preventDefault(); pressedKeysRef.current.add("d"); }}
-                  onTouchEnd={(e) => { e.preventDefault(); pressedKeysRef.current.delete("d"); }}
-                  onTouchCancel={() => pressedKeysRef.current.delete("d")}
-                  onMouseDown={() => pressedKeysRef.current.add("d")}
-                  onMouseUp={() => pressedKeysRef.current.delete("d")}
-                  onMouseLeave={() => pressedKeysRef.current.delete("d")}
-                  className="w-11 h-11 bg-[#1a222d]/90 active:bg-[#ff9200]/70 border-2 border-[#3b4c63] active:border-[#ff9200] rounded-r-lg flex items-center justify-center text-white text-base shadow-xl active:scale-95 transition-transform"
-                >
-                  ▶
-                </button>
-              </div>
-              {/* Down Button */}
-              <button
-                onTouchStart={(e) => { e.preventDefault(); pressedKeysRef.current.add("s"); }}
-                onTouchEnd={(e) => { e.preventDefault(); pressedKeysRef.current.delete("s"); }}
-                onTouchCancel={() => pressedKeysRef.current.delete("s")}
-                onMouseDown={() => pressedKeysRef.current.add("s")}
-                onMouseUp={() => pressedKeysRef.current.delete("s")}
-                onMouseLeave={() => pressedKeysRef.current.delete("s")}
-                className="w-11 h-11 bg-[#1a222d]/90 active:bg-[#ff9200]/70 border-2 border-[#3b4c63] active:border-[#ff9200] rounded-b-lg flex items-center justify-center text-white text-base shadow-xl active:scale-95 transition-transform"
-              >
-                ▼
-              </button>
+              ) : (
+                /* Classic 4-Way D-Pad */
+                <div className="flex flex-col items-center">
+                  {/* Up Button */}
+                  <button
+                    onTouchStart={(e) => { e.preventDefault(); pressedKeysRef.current.add("w"); }}
+                    onTouchEnd={(e) => { e.preventDefault(); pressedKeysRef.current.delete("w"); }}
+                    onTouchCancel={() => pressedKeysRef.current.delete("w")}
+                    onMouseDown={() => pressedKeysRef.current.add("w")}
+                    onMouseUp={() => pressedKeysRef.current.delete("w")}
+                    onMouseLeave={() => pressedKeysRef.current.delete("w")}
+                    className="w-12 h-12 bg-[#1a222d]/90 active:bg-[#ff9200]/80 border-2 border-[#3b4c63] active:border-[#ff9200] rounded-t-xl flex items-center justify-center text-white text-lg shadow-xl active:scale-95 transition-transform"
+                  >
+                    ▲
+                  </button>
+                  <div className="flex gap-2 -my-0.5">
+                    {/* Left Button */}
+                    <button
+                      onTouchStart={(e) => { e.preventDefault(); pressedKeysRef.current.add("a"); }}
+                      onTouchEnd={(e) => { e.preventDefault(); pressedKeysRef.current.delete("a"); }}
+                      onTouchCancel={() => pressedKeysRef.current.delete("a")}
+                      onMouseDown={() => pressedKeysRef.current.add("a")}
+                      onMouseUp={() => pressedKeysRef.current.delete("a")}
+                      onMouseLeave={() => pressedKeysRef.current.delete("a")}
+                      className="w-12 h-12 bg-[#1a222d]/90 active:bg-[#ff9200]/80 border-2 border-[#3b4c63] active:border-[#ff9200] rounded-l-xl flex items-center justify-center text-white text-lg shadow-xl active:scale-95 transition-transform"
+                    >
+                      ◀
+                    </button>
+                    {/* Center Core Switcher */}
+                    <button
+                      onClick={() => setControlMode("joystick")}
+                      className="w-10 h-10 bg-[#11161d]/95 rounded-full border border-slate-700/80 flex items-center justify-center text-[10px] text-amber-400 font-bold active:scale-90"
+                      title="Switch to Joystick"
+                    >
+                      🕹️
+                    </button>
+                    {/* Right Button */}
+                    <button
+                      onTouchStart={(e) => { e.preventDefault(); pressedKeysRef.current.add("d"); }}
+                      onTouchEnd={(e) => { e.preventDefault(); pressedKeysRef.current.delete("d"); }}
+                      onTouchCancel={() => pressedKeysRef.current.delete("d")}
+                      onMouseDown={() => pressedKeysRef.current.add("d")}
+                      onMouseUp={() => pressedKeysRef.current.delete("d")}
+                      onMouseLeave={() => pressedKeysRef.current.delete("d")}
+                      className="w-12 h-12 bg-[#1a222d]/90 active:bg-[#ff9200]/80 border-2 border-[#3b4c63] active:border-[#ff9200] rounded-r-xl flex items-center justify-center text-white text-lg shadow-xl active:scale-95 transition-transform"
+                    >
+                      ▶
+                    </button>
+                  </div>
+                  {/* Down Button */}
+                  <button
+                    onTouchStart={(e) => { e.preventDefault(); pressedKeysRef.current.add("s"); }}
+                    onTouchEnd={(e) => { e.preventDefault(); pressedKeysRef.current.delete("s"); }}
+                    onTouchCancel={() => pressedKeysRef.current.delete("s")}
+                    onMouseDown={() => pressedKeysRef.current.add("s")}
+                    onMouseUp={() => pressedKeysRef.current.delete("s")}
+                    onMouseLeave={() => pressedKeysRef.current.delete("s")}
+                    className="w-12 h-12 bg-[#1a222d]/90 active:bg-[#ff9200]/80 border-2 border-[#3b4c63] active:border-[#ff9200] rounded-b-xl flex items-center justify-center text-white text-lg shadow-xl active:scale-95 transition-transform"
+                  >
+                    ▼
+                  </button>
+                </div>
+              )}
             </div>
 
-            {/* Mobile Action Controls (Bottom-Right) */}
-            <div className="absolute bottom-16 right-2 sm:right-4 z-30 flex flex-col items-end gap-2 select-none pointer-events-auto touch-none opacity-90 hover:opacity-100 transition-opacity">
-              <div className="flex gap-1.5">
-                {/* Rotate Button (R) */}
+            {/* Mobile Action Controls Cluster (Bottom-Right) */}
+            <div
+              className="absolute z-30 flex flex-col items-end gap-2.5 select-none pointer-events-auto touch-none"
+              style={{
+                bottom: "calc(4.2rem + env(safe-area-inset-bottom, 0px))",
+                right: "calc(0.75rem + env(safe-area-inset-right, 0px))"
+              }}
+            >
+              {/* Secondary Action Buttons Row */}
+              <div className="flex items-center gap-2">
+                {/* Sprint Turbo Toggle Button */}
+                <button
+                  onClick={() => setMobileSprint(prev => !prev)}
+                  className={`w-11 h-11 rounded-full flex flex-col items-center justify-center shadow-lg active:scale-90 transition-transform font-bold text-[10px] border-2 ${
+                    mobileSprint
+                      ? "bg-amber-500 border-amber-300 text-black animate-pulse shadow-[0_0_10px_#f59e0b]"
+                      : "bg-[#1f2937]/90 border-slate-600 text-slate-300"
+                  }`}
+                  title="Toggle Sprint Run"
+                >
+                  <span className="text-base">🏃</span>
+                  <span className="text-[7px] leading-none font-mono">{mobileSprint ? "RUN" : "WALK"}</span>
+                </button>
+
+                {/* Rotate Placement Button (R) */}
                 <button
                   onClick={() => {
                     setState((prev) => {
                       const dirs: ("right" | "down" | "left" | "up")[] = ["right", "down", "left", "up"];
                       const currentIdx = dirs.indexOf(prev.placementDirection || "right");
                       const nextDir = dirs[(currentIdx + 1) % dirs.length];
-                      toast(`Placement Direction: ${nextDir.toUpperCase()} 🔄`);
+                      toast(`Direction: ${nextDir.toUpperCase()} 🔄`);
                       return { ...prev, placementDirection: nextDir };
                     });
                   }}
-                  className="w-11 h-11 bg-amber-950/90 active:bg-amber-600 border-2 border-amber-500/70 text-amber-300 rounded-full flex flex-col items-center justify-center shadow-lg active:scale-90 transition-transform font-bold text-[10px]"
+                  className="w-11 h-11 bg-amber-950/90 active:bg-amber-600 border-2 border-amber-500/80 text-amber-300 rounded-full flex flex-col items-center justify-center shadow-lg active:scale-90 transition-transform font-bold text-[10px]"
                 >
                   <span className="text-sm">🔄</span>
                   <span className="text-[7px] leading-none font-mono">ROT</span>
@@ -3017,7 +3178,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                     const f = frontTile(state);
                     if (f) handleTileInteraction(f);
                   }}
-                  className="w-11 h-11 bg-blue-950/90 active:bg-blue-600 border-2 border-blue-500/70 text-blue-300 rounded-full flex flex-col items-center justify-center shadow-lg active:scale-90 transition-transform font-bold text-[10px]"
+                  className="w-11 h-11 bg-blue-950/90 active:bg-blue-600 border-2 border-blue-500/80 text-blue-300 rounded-full flex flex-col items-center justify-center shadow-lg active:scale-90 transition-transform font-bold text-[10px]"
                 >
                   <span className="text-sm">💬</span>
                   <span className="text-[7px] leading-none font-mono">INSP</span>
@@ -3026,14 +3187,14 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                 {/* Bag / Crafting Button (I) */}
                 <button
                   onClick={() => { setInventoryOpen(true); setActiveTab("inventory"); }}
-                  className="w-11 h-11 bg-purple-950/90 active:bg-purple-600 border-2 border-purple-500/70 text-purple-300 rounded-full flex flex-col items-center justify-center shadow-lg active:scale-90 transition-transform font-bold text-[10px]"
+                  className="w-11 h-11 bg-purple-950/90 active:bg-purple-600 border-2 border-purple-500/80 text-purple-300 rounded-full flex flex-col items-center justify-center shadow-lg active:scale-90 transition-transform font-bold text-[10px]"
                 >
                   <span className="text-sm">🎒</span>
                   <span className="text-[7px] leading-none font-mono">BAG</span>
                 </button>
               </div>
 
-              {/* Primary Action Button (USE / ACTION / PLACE) - supports continuous tap & hold */}
+              {/* Primary Action Button (USE / ACTION / PLACE) - supports single tap & hold-to-repeat */}
               <button
                 onTouchStart={(e) => { e.preventDefault(); startContinuousAction(); }}
                 onTouchEnd={(e) => { e.preventDefault(); stopContinuousAction(); }}
@@ -3041,24 +3202,29 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                 onMouseDown={startContinuousAction}
                 onMouseUp={stopContinuousAction}
                 onMouseLeave={stopContinuousAction}
-                className="w-14 h-14 bg-gradient-to-br from-emerald-600 to-teal-700 active:from-emerald-500 active:to-teal-600 border-2 border-emerald-300 text-white rounded-full flex flex-col items-center justify-center shadow-2xl active:scale-95 transition-transform font-extrabold cursor-pointer"
+                className="w-16 h-16 bg-gradient-to-br from-emerald-500 via-teal-600 to-emerald-700 active:from-emerald-400 active:to-teal-500 border-[3px] border-emerald-200 text-white rounded-full flex flex-col items-center justify-center shadow-[0_0_18px_rgba(16,185,129,0.6)] active:scale-95 transition-transform font-extrabold cursor-pointer"
               >
-                <span className="text-xl">⚡</span>
-                <span className="text-[8px] uppercase tracking-wider font-mono">ACTION</span>
+                <span className="text-2xl drop-shadow">⚡</span>
+                <span className="text-[9px] uppercase tracking-wider font-mono font-black drop-shadow">ACTION</span>
               </button>
             </div>
 
             {/* Quick Hotbar Slot Switchers for Mobile */}
-            <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-30 flex items-center justify-between w-[95%] max-w-[340px] pointer-events-none">
+            <div
+              className="absolute z-30 flex items-center justify-between w-[96%] max-w-[360px] pointer-events-none left-1/2 -translate-x-1/2"
+              style={{
+                bottom: "calc(0.5rem + env(safe-area-inset-bottom, 0px))"
+              }}
+            >
               <button
                 onClick={() => setState((prev) => ({ ...prev, hotbarIndex: (prev.hotbarIndex - 1 + 10) % 10 }))}
-                className="pointer-events-auto w-7 h-7 sm:w-8 sm:h-8 bg-slate-900/90 border border-slate-600 active:bg-[#ff9200] text-white rounded-full flex items-center justify-center font-bold text-xs shadow-lg"
+                className="pointer-events-auto w-8 h-8 bg-slate-900/95 border-2 border-slate-600 active:bg-[#ff9200] active:border-white text-white rounded-full flex items-center justify-center font-bold text-xs shadow-xl active:scale-90 transition-transform"
               >
                 ◀
               </button>
               <button
                 onClick={() => setState((prev) => ({ ...prev, hotbarIndex: (prev.hotbarIndex + 1) % 10 }))}
-                className="pointer-events-auto w-7 h-7 sm:w-8 sm:h-8 bg-slate-900/90 border border-slate-600 active:bg-[#ff9200] text-white rounded-full flex items-center justify-center font-bold text-xs shadow-lg"
+                className="pointer-events-auto w-8 h-8 bg-slate-900/95 border-2 border-slate-600 active:bg-[#ff9200] active:border-white text-white rounded-full flex items-center justify-center font-bold text-xs shadow-xl active:scale-90 transition-transform"
               >
                 ▶
               </button>

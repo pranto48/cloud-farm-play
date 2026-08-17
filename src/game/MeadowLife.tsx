@@ -395,6 +395,8 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
 
   // About Page
   const [aboutOpen, setAboutOpen] = useState(false);
+  const [productionStatsOpen, setProductionStatsOpen] = useState(false);
+  const [productionStatsTab, setProductionStatsTab] = useState<"items" | "electricity" | "pollution">("items");
 
   // Player Store
   const [playerStoreOpen, setPlayerStoreOpen] = useState(false);
@@ -727,6 +729,10 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
         }
       } else if (key === "e") {
         setInventoryOpen((prev) => !prev);
+      } else if (key === "p") {
+        setProductionStatsOpen((prev) => !prev);
+      } else if (key === "h") {
+        setAboutOpen((prev) => !prev);
       } else if (key === "r") {
         setState((prev) => {
           const dirs: ("right" | "down" | "left" | "up")[] = ["right", "down", "left", "up"];
@@ -3196,6 +3202,16 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
             >
               <HelpCircle className="h-4 w-4 text-[#22d3ee]" />
               <span className="text-[#22d3ee] text-[10px]">Guide (H)</span>
+            </button>
+
+            {/* Production Statistics Button (P) */}
+            <button
+              onClick={() => setProductionStatsOpen(true)}
+              title="Factorio Production Statistics (P)"
+              className="h-8 px-2 flex items-center justify-center gap-1 bg-[#2a2c2e] hover:bg-orange-500/20 border border-slate-600 hover:border-orange-500 text-slate-100 transition-all cursor-pointer font-bold text-xs font-mono"
+            >
+              <span className="text-orange-400 text-sm">📊</span>
+              <span className="text-orange-400 text-[10px]">Stats (P)</span>
             </button>
 
             {/* Cheat Console Button */}
@@ -6312,6 +6328,174 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
           ✨ GOD MODE ACTIVE ✨
         </div>
       )}
+
+      {/* === FACTORIO PRODUCTION STATISTICS DIALOG (P-Key Window) === */}
+      <Dialog open={productionStatsOpen} onOpenChange={setProductionStatsOpen}>
+        <DialogContent container={mainContainerRef.current} className="max-w-3xl max-h-[85vh] overflow-y-auto bg-[#141517] border-2 border-[#ff9200] text-slate-100 rounded-lg font-mono shadow-2xl">
+          <DialogHeader>
+            <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
+              <DialogTitle className="text-xl font-black flex items-center gap-2 text-orange-400">
+                <span>📊</span>
+                <span>PRODUCTION STATISTICS (P)</span>
+              </DialogTitle>
+              <div className="flex items-center gap-1">
+                {(["items", "electricity", "pollution"] as const).map((tab) => (
+                  <button
+                    key={tab}
+                    onClick={() => setProductionStatsTab(tab)}
+                    className={`px-3 py-1 text-xs font-bold rounded border transition-all ${
+                      productionStatsTab === tab
+                        ? "bg-orange-600 border-orange-400 text-white shadow-sm"
+                        : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:bg-zinc-800"
+                    }`}
+                  >
+                    {tab === "items" && "Items / min"}
+                    {tab === "electricity" && "Electric Grid (kW)"}
+                    {tab === "pollution" && "Pollution & Evolution"}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </DialogHeader>
+
+          {/* Tab 1: Item Production / Consumption Rates */}
+          {productionStatsTab === "items" && (
+            <div className="space-y-4 py-2 text-xs">
+              <div className="grid grid-cols-2 gap-2 text-center">
+                <div className="p-2 bg-emerald-950/40 border border-emerald-800/60 rounded">
+                  <span className="text-emerald-400 font-bold block text-sm">PRODUCTION FLOW</span>
+                  <span className="text-[10px] text-zinc-400">Total items synthesized per minute</span>
+                </div>
+                <div className="p-2 bg-red-950/40 border border-red-800/60 rounded">
+                  <span className="text-red-400 font-bold block text-sm">CONSUMPTION FLOW</span>
+                  <span className="text-[10px] text-zinc-400">Total raw materials processed</span>
+                </div>
+              </div>
+
+              {/* Items Table */}
+              <div className="bg-zinc-950 p-2 rounded border border-zinc-800 space-y-1.5 max-h-[360px] overflow-y-auto">
+                {[
+                  { id: "iron_bar", name: "Iron Plate", prod: 120, cons: 85, icon: "🔩" },
+                  { id: "copper_bar", name: "Copper Plate", prod: 90, cons: 60, icon: "🟫" },
+                  { id: "copper_wire", name: "Copper Cable", prod: 180, cons: 150, icon: "🧵" },
+                  { id: "iron_gear", name: "Iron Gear Wheel", prod: 60, cons: 45, icon: "⚙️" },
+                  { id: "electronic_circuit", name: "Electronic Circuit (Green)", prod: 45, cons: 30, icon: "🟩" },
+                  { id: "advanced_circuit", name: "Advanced Circuit (Red)", prod: 15, cons: 10, icon: "🟥" },
+                  { id: "steel_plate", name: "Steel Plate", prod: 24, cons: 18, icon: "🛡️" },
+                  { id: "automation_science_pack", name: "Automation Science (Red)", prod: 12, cons: 12, icon: "🧪" },
+                  { id: "logistic_science_pack", name: "Logistic Science (Green)", prod: 10, cons: 10, icon: "🧪" },
+                ].map((row) => {
+                  const maxRate = Math.max(row.prod, row.cons, 1);
+                  return (
+                    <div key={row.id} className="flex items-center gap-3 p-1.5 bg-zinc-900/60 rounded border border-zinc-800 text-[11px]">
+                      <span className="text-xl shrink-0">{row.icon}</span>
+                      <div className="w-44 truncate font-bold text-zinc-200">{row.name}</div>
+
+                      {/* Production & Consumption Bars */}
+                      <div className="flex-1 flex flex-col gap-1">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[9px] text-emerald-400 font-bold w-12 text-right">+{row.prod}/m</span>
+                          <div className="flex-1 bg-zinc-800 h-2 rounded-none overflow-hidden">
+                            <div className="bg-emerald-500 h-full" style={{ width: `${(row.prod / maxRate) * 100}%` }} />
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[9px] text-red-400 font-bold w-12 text-right">-{row.cons}/m</span>
+                          <div className="flex-1 bg-zinc-800 h-2 rounded-none overflow-hidden">
+                            <div className="bg-red-500 h-full" style={{ width: `${(row.cons / maxRate) * 100}%` }} />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Tab 2: Electric Power Grid */}
+          {productionStatsTab === "electricity" && (
+            <div className="space-y-4 py-2 text-xs">
+              <div className="p-3 bg-zinc-950 border border-zinc-800 rounded space-y-2">
+                <div className="flex justify-between items-center text-sm font-bold text-amber-400">
+                  <span>POWER SATISFACTION</span>
+                  <span>{Math.round((state.powerGridStats?.satisfaction || 1.0) * 100)}%</span>
+                </div>
+                <div className="w-full bg-zinc-800 h-3 border border-zinc-700 overflow-hidden">
+                  <div
+                    className="bg-gradient-to-r from-emerald-500 to-green-400 h-full transition-all"
+                    style={{ width: `${Math.min(100, (state.powerGridStats?.satisfaction || 1.0) * 100)}%` }}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                {/* Generation breakdown */}
+                <div className="p-3 bg-emerald-950/30 border border-emerald-800/60 rounded space-y-2">
+                  <h4 className="font-extrabold text-emerald-300 text-xs flex justify-between">
+                    <span>⚡ POWER GENERATION</span>
+                    <span>{state.powerGridStats?.capacityKw || 900} kW</span>
+                  </h4>
+                  <div className="space-y-1 text-[11px] text-zinc-300">
+                    <div className="flex justify-between">
+                      <span>Steam Engine Generators</span>
+                      <span className="font-bold text-emerald-400">900 kW</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Solar Array (Daylight)</span>
+                      <span className="font-bold text-emerald-400">60 kW</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Demand breakdown */}
+                <div className="p-3 bg-red-950/30 border border-red-800/60 rounded space-y-2">
+                  <h4 className="font-extrabold text-red-300 text-xs flex justify-between">
+                    <span>⚡ FACTORY CONSUMPTION</span>
+                    <span>{state.powerGridStats?.demandKw || 350} kW</span>
+                  </h4>
+                  <div className="space-y-1 text-[11px] text-zinc-300">
+                    <div className="flex justify-between">
+                      <span>Electric Mining Drills</span>
+                      <span className="font-bold text-red-400">180 kW</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Assembling Machines</span>
+                      <span className="font-bold text-red-400">150 kW</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Robotic Inserters</span>
+                      <span className="font-bold text-red-400">20 kW</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Tab 3: Pollution & Biter Evolution */}
+          {productionStatsTab === "pollution" && (
+            <div className="space-y-4 py-2 text-xs">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="p-3 bg-red-950/40 border border-red-800/80 rounded space-y-1.5">
+                  <span className="text-red-400 font-extrabold text-xs block">🌫️ TOTAL EMITTED POLLUTION</span>
+                  <div className="text-2xl font-black text-white font-mono">
+                    {Math.round(state.productionStats?.pollutionTotal || 240)} <span className="text-xs text-red-400 font-normal">units</span>
+                  </div>
+                  <span className="text-[9px] text-zinc-400">Boilers, Furnaces & Drills contribute to global cloud</span>
+                </div>
+                <div className="p-3 bg-purple-950/40 border border-purple-800/80 rounded space-y-1.5">
+                  <span className="text-purple-400 font-extrabold text-xs block">👾 BITER EVOLUTION FACTOR</span>
+                  <div className="text-2xl font-black text-purple-300 font-mono">
+                    {((state.evolutionFactor || 0.01) * 100).toFixed(2)}%
+                  </div>
+                  <span className="text-[9px] text-zinc-400">Higher evolution unlocks Medium and Big biters</span>
+                </div>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* === ABOUT PAGE DIALOG === */}
       <Dialog open={aboutOpen} onOpenChange={setAboutOpen}>

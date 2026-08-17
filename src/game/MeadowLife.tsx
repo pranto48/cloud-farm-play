@@ -358,8 +358,6 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
 
   const chargingToolRef = useRef<{ toolId: string; startTime: number; maxLevel: number } | null>(null);
   const actionHoldIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const pressedKeysRef = useRef<Set<string>>(new Set());
-  const hoveredTileRef = useRef<{ x: number; y: number } | null>(null);
   const joystickVectorRef = useRef<{ dx: number; dy: number; active: boolean }>({ dx: 0, dy: 0, active: false });
   const [joystickKnobPos, setJoystickKnobPos] = useState({ x: 0, y: 0 });
   const [mobileSprint, setMobileSprint] = useState(false);
@@ -687,86 +685,6 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
       window.removeEventListener("keyup", handleKeyUp);
     };
   }, [heldItem]);
-
-  const handleCanvasMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    const coords = getMouseTileCoords(e.clientX, e.clientY);
-    if (!coords) return;
-    hoveredTileRef.current = coords;
-
-    if (isDraggingZone.current && zoningMode !== "none") {
-      setState((prev) => {
-        const next = structuredClone(prev);
-        const grid = next.inHouse ? next.houseGrid! : (next.inMine ? next.mineGrid : next.tiles);
-        const t = grid[coords.y]?.[coords.x];
-        if (t) {
-          t.zone = zoningMode === "erase" ? undefined : zoningMode;
-        }
-        return next;
-      });
-    }
-  };
-
-  const handleCanvasMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (e.button === 0) {
-      if (zoningMode !== "none") {
-        isDraggingZone.current = true;
-        const coords = getMouseTileCoords(e.clientX, e.clientY);
-        if (coords) {
-          setState((prev) => {
-            const next = structuredClone(prev);
-            const grid = next.inHouse ? next.houseGrid! : (next.inMine ? next.mineGrid : next.tiles);
-            const t = grid[coords.y]?.[coords.x];
-            if (t) {
-              t.zone = zoningMode === "erase" ? undefined : zoningMode;
-            }
-            return next;
-          });
-        }
-      } else {
-        startContinuousAction();
-      }
-    }
-  };
-
-  const handleCanvasMouseUp = () => {
-    isDraggingZone.current = false;
-    stopContinuousAction();
-  };
-
-  const handleCanvasMouseLeave = () => {
-    hoveredTileRef.current = null;
-    isDraggingZone.current = false;
-    stopContinuousAction();
-  };
-
-  const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    const coords = getMouseTileCoords(e.clientX, e.clientY);
-    if (!coords) return;
-    const { x, y } = coords;
-
-    // Check interaction with buildings / chests / machines
-    const cur = stateRef.current;
-    const grid = cur.inHouse ? cur.houseGrid! : (cur.inMine ? cur.mineGrid : cur.tiles);
-    const tile = grid[y]?.[x];
-    if (!tile) return;
-
-    // Direct inspect / machine dialog
-    handleTileInteraction(tile);
-  };
-
-  const handleCanvasTouchStart = (e: React.TouchEvent<HTMLCanvasElement>) => {
-    if (e.touches.length > 0) {
-      const touch = e.touches[0];
-      const coords = getMouseTileCoords(touch.clientX, touch.clientY);
-      if (coords) {
-        hoveredTileRef.current = coords;
-        const cur = stateRef.current;
-        const grid = cur.inHouse ? cur.houseGrid! : (cur.inMine ? cur.mineGrid : cur.tiles);
-        const tile = grid[coords.y]?.[coords.x];
-        if (tile) handleTileInteraction(tile);
-      }
-    }
-  };
 
   // Synchronize state changes to parent (save handler)
   useEffect(() => {
@@ -1111,9 +1029,9 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
 
       // Draw particle overlay
       ctx.save();
-      const p = stateRef.current.player;
-      const pSubX = p.subX !== undefined ? p.subX : p.x;
-      const pSubY = p.subY !== undefined ? p.subY : p.y;
+      const playerPos = stateRef.current.player;
+      const pSubX = playerPos.subX !== undefined ? playerPos.subX : playerPos.x;
+      const pSubY = playerPos.subY !== undefined ? playerPos.subY : playerPos.y;
       const gridCols = stateRef.current.inHouse ? 10 : (stateRef.current.inMine ? 24 : COLS);
       const gridRows = stateRef.current.inHouse ? 10 : (stateRef.current.inMine ? 24 : ROWS);
 
@@ -1185,9 +1103,9 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
       });
 
       if (chargingToolRef.current) {
-        const p = curState.player;
-        const ppx = (p.subX !== undefined ? p.subX : p.x) * TILE + 16;
-        const ppy = (p.subY !== undefined ? p.subY : p.y) * TILE - 8;
+        const chargingPlayer = curState.player;
+        const ppx = (chargingPlayer.subX !== undefined ? chargingPlayer.subX : chargingPlayer.x) * TILE + 16;
+        const ppy = (chargingPlayer.subY !== undefined ? chargingPlayer.subY : chargingPlayer.y) * TILE - 8;
 
         const duration = Date.now() - chargingToolRef.current.startTime;
         const maxLvl = chargingToolRef.current.maxLevel;
@@ -2066,35 +1984,41 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
   };
 
   const handleCanvasMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (zoningMode !== "none" && e.button === 0) {
-      isDraggingZone.current = true;
-      const coords = getMouseTileCoords(e.clientX, e.clientY);
-      if (coords) {
-        const curState = stateRef.current;
-        const grid = curState.inHouse ? curState.houseGrid! : (curState.inMine ? curState.mineGrid : curState.tiles);
-        const targetZone = zoningMode === "erase" ? undefined : zoningMode;
+    if (e.button === 0) {
+      if (zoningMode !== "none") {
+        isDraggingZone.current = true;
+        const coords = getMouseTileCoords(e.clientX, e.clientY);
+        if (coords) {
+          const curState = stateRef.current;
+          const grid = curState.inHouse ? curState.houseGrid! : (curState.inMine ? curState.mineGrid : curState.tiles);
+          const targetZone = zoningMode === "erase" ? undefined : zoningMode;
 
-        if (grid[coords.y]?.[coords.x] && grid[coords.y][coords.x].zone !== targetZone) {
-          setState(prev => {
-            const next = structuredClone(prev);
-            const gridNext = next.inHouse ? next.houseGrid! : (next.inMine ? next.mineGrid : next.tiles);
-            if (gridNext[coords.y]?.[coords.x]) {
-              gridNext[coords.y][coords.x].zone = targetZone;
-            }
-            return next;
-          });
+          if (grid[coords.y]?.[coords.x] && grid[coords.y][coords.x].zone !== targetZone) {
+            setState(prev => {
+              const next = structuredClone(prev);
+              const gridNext = next.inHouse ? next.houseGrid! : (next.inMine ? next.mineGrid : next.tiles);
+              if (gridNext[coords.y]?.[coords.x]) {
+                gridNext[coords.y][coords.x].zone = targetZone;
+              }
+              return next;
+            });
+          }
         }
+      } else {
+        startContinuousAction();
       }
     }
   };
 
   const handleCanvasMouseUp = () => {
     isDraggingZone.current = false;
+    stopContinuousAction();
   };
-
 
   const handleCanvasMouseLeave = () => {
     hoveredTileRef.current = null;
+    isDraggingZone.current = false;
+    stopContinuousAction();
   };
 
   const handleTileInteraction = (coords: { x: number; y: number }) => {

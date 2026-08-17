@@ -358,6 +358,8 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
 
   const chargingToolRef = useRef<{ toolId: string; startTime: number; maxLevel: number } | null>(null);
   const actionHoldIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const pressedKeysRef = useRef<Set<string>>(new Set());
+  const hoveredTileRef = useRef<{ x: number; y: number } | null>(null);
   const joystickVectorRef = useRef<{ dx: number; dy: number; active: boolean }>({ dx: 0, dy: 0, active: false });
   const [joystickKnobPos, setJoystickKnobPos] = useState({ x: 0, y: 0 });
   const [mobileSprint, setMobileSprint] = useState(false);
@@ -618,6 +620,154 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
     }
   };
 
+  // Global Keyboard Control Listener (Factorio Controls: WASD, Q, E, R, F, Space, 1-0, Shift)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (["INPUT", "TEXTAREA", "SELECT"].includes((e.target as HTMLElement)?.tagName)) return;
+      const key = e.key.toLowerCase();
+      pressedKeysRef.current.add(key);
+
+      if (key === "q") {
+        // Factorio Pip-Tool (Sample cursor or clear hand)
+        if (heldItem) {
+          setHeldItem(null);
+        } else if (hoveredTileRef.current) {
+          const { x, y } = hoveredTileRef.current;
+          const g = stateRef.current.inHouse ? stateRef.current.houseGrid! : (stateRef.current.inMine ? stateRef.current.mineGrid : stateRef.current.tiles);
+          const t = g[y]?.[x];
+          if (t) {
+            const targetItemId = t.placedItemId || (t.cropId ? `${t.cropId}_seed` : null);
+            if (targetItemId) {
+              const idx = stateRef.current.inventory.findIndex((it) => it && it.id === targetItemId);
+              if (idx !== -1 && stateRef.current.inventory[idx]) {
+                setHeldItem({ item: stateRef.current.inventory[idx]!, originalSlot: idx, source: "inventory" });
+                toast(`Selected ${ITEM_DEFS[targetItemId]?.name || targetItemId} (Q)`);
+              }
+            }
+          }
+        }
+      } else if (key === "e") {
+        setInventoryOpen((prev) => !prev);
+      } else if (key === "r") {
+        setState((prev) => {
+          const dirs: ("right" | "down" | "left" | "up")[] = ["right", "down", "left", "up"];
+          const currentIdx = dirs.indexOf(prev.placementDirection || "right");
+          const nextDir = dirs[(currentIdx + 1) % dirs.length];
+          toast(`Placement Direction: ${nextDir.toUpperCase()} 🔄`);
+          return { ...prev, placementDirection: nextDir };
+        });
+      } else if (key === "f") {
+        const f = frontTile(stateRef.current);
+        if (f) handleTileInteraction(f);
+      } else if (key >= "1" && key <= "9") {
+        const slot = parseInt(key) - 1;
+        setState((prev) => ({ ...prev, hotbarIndex: slot }));
+      } else if (key === "0") {
+        setState((prev) => ({ ...prev, hotbarIndex: 9 }));
+      } else if (key === " ") {
+        e.preventDefault();
+        setIsSpacePressed(true);
+        startContinuousAction();
+      }
+    };
+
+    const handleKeyUp = (e: KeyboardEvent) => {
+      const key = e.key.toLowerCase();
+      pressedKeysRef.current.delete(key);
+      if (key === " ") {
+        setIsSpacePressed(false);
+        stopContinuousAction();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("keyup", handleKeyUp);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("keyup", handleKeyUp);
+    };
+  }, [heldItem]);
+
+  const handleCanvasMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    const coords = getMouseTileCoords(e.clientX, e.clientY);
+    if (!coords) return;
+    hoveredTileRef.current = coords;
+
+    if (isDraggingZone.current && zoningMode !== "none") {
+      setState((prev) => {
+        const next = structuredClone(prev);
+        const grid = next.inHouse ? next.houseGrid! : (next.inMine ? next.mineGrid : next.tiles);
+        const t = grid[coords.y]?.[coords.x];
+        if (t) {
+          t.zone = zoningMode === "erase" ? undefined : zoningMode;
+        }
+        return next;
+      });
+    }
+  };
+
+  const handleCanvasMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (e.button === 0) {
+      if (zoningMode !== "none") {
+        isDraggingZone.current = true;
+        const coords = getMouseTileCoords(e.clientX, e.clientY);
+        if (coords) {
+          setState((prev) => {
+            const next = structuredClone(prev);
+            const grid = next.inHouse ? next.houseGrid! : (next.inMine ? next.mineGrid : next.tiles);
+            const t = grid[coords.y]?.[coords.x];
+            if (t) {
+              t.zone = zoningMode === "erase" ? undefined : zoningMode;
+            }
+            return next;
+          });
+        }
+      } else {
+        startContinuousAction();
+      }
+    }
+  };
+
+  const handleCanvasMouseUp = () => {
+    isDraggingZone.current = false;
+    stopContinuousAction();
+  };
+
+  const handleCanvasMouseLeave = () => {
+    hoveredTileRef.current = null;
+    isDraggingZone.current = false;
+    stopContinuousAction();
+  };
+
+  const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    const coords = getMouseTileCoords(e.clientX, e.clientY);
+    if (!coords) return;
+    const { x, y } = coords;
+
+    // Check interaction with buildings / chests / machines
+    const cur = stateRef.current;
+    const grid = cur.inHouse ? cur.houseGrid! : (cur.inMine ? cur.mineGrid : cur.tiles);
+    const tile = grid[y]?.[x];
+    if (!tile) return;
+
+    // Direct inspect / machine dialog
+    handleTileInteraction(tile);
+  };
+
+  const handleCanvasTouchStart = (e: React.TouchEvent<HTMLCanvasElement>) => {
+    if (e.touches.length > 0) {
+      const touch = e.touches[0];
+      const coords = getMouseTileCoords(touch.clientX, touch.clientY);
+      if (coords) {
+        hoveredTileRef.current = coords;
+        const cur = stateRef.current;
+        const grid = cur.inHouse ? cur.houseGrid! : (cur.inMine ? cur.mineGrid : cur.tiles);
+        const tile = grid[coords.y]?.[coords.x];
+        if (tile) handleTileInteraction(tile);
+      }
+    }
+  };
+
   // Synchronize state changes to parent (save handler)
   useEffect(() => {
     onStateChange(state);
@@ -666,17 +816,17 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
         }
       }
 
+      const grid = cur.inHouse ? cur.houseGrid! : (cur.inMine ? cur.mineGrid : cur.tiles);
+      const rows = grid.length;
+      const cols = grid[0]?.length || 0;
+      const p = cur.player;
+
+      if (p.subX === undefined) p.subX = p.x;
+      if (p.subY === undefined) p.subY = p.y;
+
       if ((dx !== 0 || dy !== 0) && !inventoryOpen && !shopOpen && !chestOpenTile && !mailboxOpen && !chatOpen) {
-        const p = cur.player;
         const isShift = pressedKeysRef.current.has("shift") || mobileSprint;
         const speed = (isShift ? 9.5 : 6.5) * dt;
-
-        if (p.subX === undefined) p.subX = p.x;
-        if (p.subY === undefined) p.subY = p.y;
-
-        const grid = cur.inHouse ? cur.houseGrid! : (cur.inMine ? cur.mineGrid : cur.tiles);
-        const rows = grid.length;
-        const cols = grid[0]?.length || 0;
 
         // X Movement with collision sliding
         const newSubX = Math.max(0, Math.min(cols - 1, p.subX + dx * speed));
@@ -705,6 +855,23 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
 
         // Dynamically generate procedural infinite chunks as player explores
         ensureMapExploration(cur, p.x, p.y);
+      }
+
+      // Factorio Belt Riding Dynamic Physics
+      const curTile = grid[Math.floor(p.subY)]?.[Math.floor(p.subX)];
+      if (curTile && curTile.placedItemId && curTile.placedItemId.includes("belt")) {
+        const beltSpeed = (curTile.placedItemId.includes("express") ? 3.5 : curTile.placedItemId.includes("fast") ? 2.5 : 1.8) * dt;
+        const bVec = getDirectionVector(curTile.direction);
+        const pushX = Math.max(0, Math.min(cols - 1, p.subX + bVec.dx * beltSpeed));
+        const pushY = Math.max(0, Math.min(rows - 1, p.subY + bVec.dy * beltSpeed));
+        if (isWalkable(grid[Math.floor(p.subY)]?.[Math.floor(pushX)])) {
+          p.subX = pushX;
+          p.x = Math.floor(pushX);
+        }
+        if (isWalkable(grid[Math.floor(pushY)]?.[Math.floor(p.subX)])) {
+          p.subY = pushY;
+          p.y = Math.floor(pushY);
+        }
       }
 
       // High Performance Throttled Entity & Machine Updates (10 Ticks / sec)

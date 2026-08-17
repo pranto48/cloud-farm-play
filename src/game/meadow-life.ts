@@ -1996,6 +1996,26 @@ export function migrateState(raw: unknown): GameState {
 
 export function isWalkable(t: Tile): boolean {
   if (!t) return false;
+
+  // Factorio items that player CAN walk over (belts, paths, cables, ground items)
+  if (t.kind === "placed_item") {
+    const id = t.placedItemId;
+    if (
+      id === "transport_belt" ||
+      id === "fast_transport_belt" ||
+      id === "express_transport_belt" ||
+      id === "stone_path" ||
+      id === "concrete_path" ||
+      id === "chicken_egg" ||
+      id === "small_electric_pole" ||
+      t.cropId !== undefined
+    ) {
+      return true;
+    }
+    // Solid buildings (chests, assemblers, furnaces, drills, boilers) block walking
+    return false;
+  }
+
   return (
     t.kind !== "water" &&
     t.kind !== "tree" &&
@@ -2012,8 +2032,7 @@ export function isWalkable(t: Tile): boolean {
     t.kind !== "ore_silver" &&
     t.kind !== "ore_coal" &&
     t.kind !== "house_wall" &&
-    t.kind !== "house_bed" &&
-    t.kind !== "placed_item" // chests & sprinklers block movement
+    t.kind !== "house_bed"
   );
 }
 

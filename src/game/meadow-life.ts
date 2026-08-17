@@ -263,6 +263,31 @@ export interface GameState {
     accumulatorStorageMj: number;
     maxStorageMj: number;
   };
+  /** Factorio Pollution Grid (pollution per tile) */
+  pollutionGrid?: number[][];
+  /** Factorio Biter Evolution Factor (0.0 to 1.0) */
+  evolutionFactor?: number;
+  /** Factorio Factory Production Stats (P-key window) */
+  productionStats?: {
+    produced: Record<string, number>;
+    consumed: Record<string, number>;
+    powerProducedKw: number;
+    powerConsumedKw: number;
+    pollutionTotal: number;
+  };
+  /** Factorio Biters */
+  biters?: {
+    id: string;
+    x: number;
+    y: number;
+    subX: number;
+    subY: number;
+    hp: number;
+    maxHp: number;
+    type: "small" | "medium" | "big" | "behemoth";
+    targetX?: number;
+    targetY?: number;
+  }[];
   placementDirection?: "up" | "down" | "left" | "right";
   activeInspectorTile?: { x: number; y: number } | null;
 }
@@ -4010,35 +4035,91 @@ export function updateEntities(state: GameState, dt: number): void {
   }
 
   const satisfaction = totalDemandKw > 0 ? Math.min(1.0, Math.max(0.05, totalGenerationKw / totalDemandKw)) : 1.0;
-  state.powerGridStats = {
-    capacityKw: totalGenerationKw,
-    demandKw: totalDemandKw,
-    satisfaction,
-    accumulatorStorageMj: 5.0,
-    maxStorageMj: 10.0,
-  };
+  // Initialize Pollution Grid & Stats if missing
+  if (!state.pollutionGrid) {
+    state.pollutionGrid = Array.from({ length: ROWS }, () => Array(COLS).fill(0));
+  }
+  if (!state.evolutionFactor) state.evolutionFactor = 0.01;
+  if (!state.productionStats) {
+    state.productionStats = {
+      produced: {},
+      consumed: {},
+      powerProducedKw: totalGenerationKw,
+      powerConsumedKw: totalDemandKw,
+      pollutionTotal: 0,
+    };
+  } else {
+    state.productionStats.powerProducedKw = totalGenerationKw;
+    state.productionStats.powerConsumedKw = totalDemandKw;
+  }
 
-  // 2. Factorio Logistics & Machines Tick Pipeline
+  // 2. Factorio Logistics & Machines Tick Pipeline + Pollution Emission
+  let totalPollutionEmitted = 0;
   for (let y = 0; y < ROWS; y++) {
     for (let x = 0; x < COLS; x++) {
       const tile = state.tiles[y]?.[x];
       if (!tile || tile.kind !== "placed_item" || !tile.placedItemId) continue;
 
       const id = tile.placedItemId;
+      let pollutionEmission = 0;
+
       if (id.includes("belt") || id.includes("loader")) {
         updateTransportBelt(tile, state.tiles, x, y, dt);
       } else if (id.includes("drill")) {
         updateMiningDrill(tile, state.tiles, x, y, dt, satisfaction);
+        pollutionEmission = id.includes("burner") ? 10 * dt : 5 * dt;
       } else if (id.includes("inserter")) {
         updateInserter(tile, state.tiles, x, y, dt, satisfaction);
       } else if (id.includes("assembling_machine") || id.includes("chemical") || id.includes("refinery") || id.includes("centrifuge") || id.includes("electromagnetic") || id.includes("cryogenic") || id.includes("foundry") || id.includes("biochamber")) {
         updateAssemblingMachine(tile, state.tiles, x, y, dt, satisfaction);
+        pollutionEmission = 4 * dt;
       } else if (id.includes("furnace") || id === "furnace") {
         tickFurnace(tile, dt, satisfaction);
+        pollutionEmission = id.includes("stone") ? 8 * dt : 4 * dt;
       } else if (id.includes("lab")) {
         updateScienceLab(tile, state, dt, satisfaction);
+      } else if (id === "boiler" || id === "generator") {
+        pollutionEmission = 15 * dt;
+      }
+
+      if (pollutionEmission > 0) {
+        state.pollutionGrid[y][x] = Math.min(500, (state.pollutionGrid[y][x] || 0) + pollutionEmission);
+        totalPollutionEmitted += pollutionEmission;
       }
     }
+  }
+
+  state.productionStats.pollutionTotal = (state.productionStats.pollutionTotal || 0) + totalPollutionEmitted;
+  if (totalPollutionEmitted > 0) {
+    state.evolutionFactor = Math.min(1.0, (state.evolutionFactor || 0.01) + 0.00002 * dt);
+  }
+
+  // 3. Defense Turrets Auto-Targeting Biters
+  if (state.biters && state.biters.length > 0) {
+    for (let y = 0; y < ROWS; y++) {
+      for (let x = 0; x < COLS; x++) {
+        const tile = state.tiles[y]?.[x];
+        if (tile && tile.kind === "placed_item" && tile.placedItemId?.includes("turret")) {
+          // Find nearest biter within 7 tiles
+          let targetBiter = null;
+          let minDist = 7;
+          for (const biter of state.biters) {
+            const dist = Math.hypot(biter.x - x, biter.y - y);
+            if (dist < minDist) {
+              minDist = dist;
+              targetBiter = biter;
+            }
+          }
+
+          if (targetBiter) {
+            targetBiter.hp -= (tile.placedItemId.includes("laser") ? 45 : 25) * dt;
+          }
+        }
+      }
+    }
+
+    // Clean dead biters
+    state.biters = state.biters.filter(b => b.hp > 0);
   }
 
   // Research Center tick - workers assigned to research generate points
@@ -6719,6 +6800,41 @@ export function draw(
         }
       }
     }
+  }
+
+  // Factorio Pollution Cloud Density Overlay
+  if (state.pollutionGrid) {
+    for (let y = startRow; y < endRow; y++) {
+      for (let x = startCol; x < endCol; x++) {
+        const poll = state.pollutionGrid[y]?.[x] || 0;
+        if (poll > 5) {
+          ctx.fillStyle = `rgba(185, 45, 20, ${Math.min(0.38, poll / 500)})`;
+          ctx.fillRect(x * TILE, y * TILE, TILE, TILE);
+        }
+      }
+    }
+  }
+
+  // Render Factorio Biters
+  if (state.biters && state.biters.length > 0) {
+    state.biters.forEach((b) => {
+      const bx = (b.subX ?? b.x) * TILE + TILE / 2;
+      const by = (b.subY ?? b.y) * TILE + TILE / 2;
+      // Biter shadow
+      ctx.fillStyle = "rgba(0, 0, 0, 0.35)";
+      ctx.beginPath();
+      ctx.ellipse(bx, by + 4, 8, 3, 0, 0, Math.PI * 2);
+      ctx.fill();
+      // Biter chitin shell
+      ctx.fillStyle = b.type === "big" ? "#8e44ad" : b.type === "medium" ? "#d35400" : "#c0392b";
+      ctx.beginPath();
+      ctx.arc(bx, by, b.type === "big" ? 10 : 7, 0, Math.PI * 2);
+      ctx.fill();
+      // Mandibles & glowing eyes
+      ctx.fillStyle = "#f1c40f";
+      ctx.fillRect(bx - 3, by - 3, 2, 2);
+      ctx.fillRect(bx + 1, by - 3, 2, 2);
+    });
   }
 
   // ==========================================

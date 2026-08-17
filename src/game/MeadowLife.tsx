@@ -74,10 +74,12 @@ function FactorioCraftingIcon({
   iconSymbol,
   name,
   count,
+  craftableCount,
   canCraft = true,
   isTechLocked = false,
   isSelected = false,
   onClick,
+  onContextMenu,
   onMouseEnter,
   onMouseLeave,
   title,
@@ -85,10 +87,12 @@ function FactorioCraftingIcon({
   iconSymbol?: string;
   name?: string;
   count?: number;
+  craftableCount?: number;
   canCraft?: boolean;
   isTechLocked?: boolean;
   isSelected?: boolean;
   onClick?: (e: React.MouseEvent) => void;
+  onContextMenu?: (e: React.MouseEvent) => void;
   onMouseEnter?: () => void;
   onMouseLeave?: () => void;
   title?: string;
@@ -97,10 +101,14 @@ function FactorioCraftingIcon({
     <button
       type="button"
       onClick={onClick}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        onContextMenu?.(e);
+      }}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
-      title={title || name}
-      className={`relative flex flex-col items-center justify-between p-1.5 h-[68px] w-[68px] rounded-md border-2 transition-all duration-150 select-none font-mono cursor-pointer shadow-[0_2px_6px_rgba(0,0,0,0.6),_inset_0_1px_0_rgba(255,255,255,0.15)] ${isTechLocked
+      title={title || `${name}\nLeft-Click: Craft 1\nRight-Click: Craft 5\nShift-Click: Craft All`}
+      className={`relative flex flex-col items-center justify-between p-1.5 h-[72px] w-[72px] rounded-md border-2 transition-all duration-150 select-none font-mono cursor-pointer shadow-[0_2px_6px_rgba(0,0,0,0.6),_inset_0_1px_0_rgba(255,255,255,0.15)] ${isTechLocked
           ? "bg-[#1d1428] border-[#7e22ce] text-purple-300 opacity-70 hover:opacity-100 hover:border-[#c084fc] hover:shadow-[0_0_12px_rgba(192,132,252,0.4)]"
           : canCraft
             ? isSelected
@@ -123,6 +131,13 @@ function FactorioCraftingIcon({
       </div>
 
       <span className="text-3xl my-auto filter drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]">{iconSymbol || "⚙"}</span>
+
+      {/* Craftable Count Badge */}
+      {craftableCount !== undefined && craftableCount > 0 && (
+        <span className="absolute bottom-0.5 right-1 px-1 bg-black/85 border border-emerald-500/50 rounded text-[9px] font-extrabold text-emerald-300 shadow-sm">
+          {craftableCount}
+        </span>
+      )}
 
       {name && (
         <span className="text-[8px] font-bold truncate max-w-full text-stone-300 opacity-90 leading-tight px-0.5">
@@ -362,7 +377,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
   const [shippingBinOpen, setShippingBinOpen] = useState(false);
   const [furnaceOpenTile, setFurnaceOpenTile] = useState<{ x: number; y: number } | null>(null);
   const [craftingCategory, setCraftingCategory] = useState<"logistics" | "production" | "intermediates" | "space" | "combat">("logistics");
-  const [craftingQueue, setCraftingQueue] = useState<{ id: string; recipeId: string; name: string; iconSymbol: string; iconColor: string; progress: number; duration: number; remainingTime: number }[]>([]);
+  const [craftingQueue, setCraftingQueue] = useState<{ id: string; recipeId: string; name: string; iconSymbol: string; iconColor: string; progress: number; duration: number; remainingTime: number; refundInputs?: { itemId: string; count: number }[] }[]>([]);
   const [hoveredRecipe, setHoveredRecipe] = useState<Recipe | null>(null);
   const hoveredTileRef = useRef<{ x: number; y: number } | null>(null);
 
@@ -1985,7 +2000,105 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
     }
   };
 
-  const handleStartCrafting = (recipe: Recipe) => {
+  // Factorio Intermediate Auto-Crafting Resolver
+  const resolveFactorioCraftPlan = (
+    s: GameState,
+    targetRecipe: Recipe,
+    targetCount: number = 1
+  ): {
+    canCraft: boolean;
+    maxPossible: number;
+    steps: { recipe: Recipe; count: number; refundInputs: { itemId: string; count: number }[] }[];
+    missingItems: { itemId: string; need: number; has: number; canAutoCraft: boolean }[];
+  } => {
+    const isFree = s.freeCraft || s.godMode;
+    if (isFree) {
+      return {
+        canCraft: true,
+        maxPossible: 100,
+        steps: [{
+          recipe: targetRecipe,
+          count: targetCount,
+          refundInputs: []
+        }],
+        missingItems: []
+      };
+    }
+
+    // Clone available items pool
+    const pool: Record<string, number> = {};
+    for (const item of s.inventory) {
+      if (item) pool[item.id] = (pool[item.id] || 0) + item.count;
+    }
+    for (const row of s.tiles) {
+      for (const tile of row) {
+        if (tile.kind === "placed_item" && isChestBuilding(tile.placedItemId) && tile.chestInventory) {
+          for (const item of tile.chestInventory) {
+            if (item) pool[item.id] = (pool[item.id] || 0) + item.count;
+          }
+        }
+      }
+    }
+
+    const steps: { recipe: Recipe; count: number; refundInputs: { itemId: string; count: number }[] }[] = [];
+    const missing: { itemId: string; need: number; has: number; canAutoCraft: boolean }[] = [];
+
+    // Recursive helper
+    const resolveNeeds = (recipe: Recipe, multiplier: number, depth = 0): boolean => {
+      if (depth > 8) return false;
+      for (const input of recipe.inputs) {
+        const need = input.count * multiplier;
+        const have = pool[input.itemId] || 0;
+        if (have >= need) {
+          pool[input.itemId] = have - need;
+        } else {
+          const subRecipe = CRAFTING_RECIPES.find((r) => r.outputId === input.itemId);
+          if (!subRecipe) {
+            missing.push({ itemId: input.itemId, need, has: have, canAutoCraft: false });
+            return false;
+          }
+
+          if (subRecipe.techRequired && !(s.unlockedTechs || []).includes(subRecipe.techRequired)) {
+            missing.push({ itemId: input.itemId, need, has: have, canAutoCraft: false });
+            return false;
+          }
+
+          const stillNeed = need - have;
+          pool[input.itemId] = 0;
+          const subMultiplier = Math.ceil(stillNeed / (subRecipe.outputCount || 1));
+          const subSuccess = resolveNeeds(subRecipe, subMultiplier, depth + 1);
+          if (!subSuccess) {
+            missing.push({ itemId: input.itemId, need: stillNeed, has: have, canAutoCraft: true });
+            return false;
+          }
+          steps.push({
+            recipe: subRecipe,
+            count: subMultiplier,
+            refundInputs: subRecipe.inputs.map((inp) => ({ itemId: inp.itemId, count: inp.count * subMultiplier }))
+          });
+        }
+      }
+      return true;
+    };
+
+    const success = resolveNeeds(targetRecipe, targetCount, 0);
+    if (success) {
+      steps.push({
+        recipe: targetRecipe,
+        count: targetCount,
+        refundInputs: targetRecipe.inputs.map((inp) => ({ itemId: inp.itemId, count: inp.count * targetCount }))
+      });
+    }
+
+    return {
+      canCraft: success,
+      maxPossible: 1,
+      steps,
+      missingItems: missing
+    };
+  };
+
+  const handleStartCrafting = (recipe: Recipe, multiplier: number = 1, isShift: boolean = false) => {
     const isFree = state.freeCraft || state.godMode;
     if (!isFree && recipe.techRequired && !(state.unlockedTechs || []).includes(recipe.techRequired)) {
       const tech = TECHNOLOGIES.find((t) => t.id === recipe.techRequired);
@@ -1993,45 +2106,80 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
       return;
     }
 
-    let hasAll = true;
+    let craftCount = multiplier;
+    if (isShift) {
+      // Craft as many as possible
+      let maxCraft = 1;
+      for (let test = 2; test <= 50; test++) {
+        const testPlan = resolveFactorioCraftPlan(state, recipe, test);
+        if (testPlan.canCraft) maxCraft = test;
+        else break;
+      }
+      craftCount = maxCraft;
+    }
+
+    const plan = resolveFactorioCraftPlan(state, recipe, craftCount);
+    if (!plan.canCraft) {
+      const missingNames = plan.missingItems.map(m => `${ITEM_DEFS[m.itemId]?.name || m.itemId} (need ${m.need}, have ${m.has})`).join(", ");
+      toast.error(`Missing ingredients: ${missingNames}`);
+      return;
+    }
+
     setState((prev) => {
       const next = structuredClone(prev);
       if (!isFree) {
-        for (const input of recipe.inputs) {
-          if (!checkGlobalItems(next, input.itemId, input.count)) {
-            hasAll = false;
-            break;
+        // Deduct raw ingredients required by all steps in plan
+        for (const step of plan.steps) {
+          for (const refund of step.refundInputs) {
+            deductGlobalItems(next, refund.itemId, refund.count);
           }
-        }
-
-        if (!hasAll) {
-          toast.error(`Not enough ingredients to craft ${recipe.name}!`);
-          return prev;
-        }
-
-        for (const input of recipe.inputs) {
-          deductGlobalItems(next, input.itemId, input.count);
         }
       }
 
-      const itemDef = ITEM_DEFS[recipe.outputId];
-      const duration = isFree ? 0.2 : 1.5;
-      setCraftingQueue((prevQueue) => [
-        ...prevQueue,
-        {
-          id: `${recipe.id}_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-          recipeId: recipe.id,
-          name: recipe.name,
-          iconSymbol: itemDef?.iconSymbol || "⚙",
-          iconColor: itemDef?.iconColor || "#94a3b8",
-          progress: 0,
-          duration,
-          remainingTime: duration,
-        },
-      ]);
+      // Add steps to crafting queue
+      setCraftingQueue((prevQueue) => {
+        const newItems = [];
+        for (const step of plan.steps) {
+          const itemDef = ITEM_DEFS[step.recipe.outputId];
+          const duration = isFree ? 0.2 : (step.recipe.craftTimeSeconds || 0.5);
+          for (let c = 0; c < step.count; c++) {
+            newItems.push({
+              id: `${step.recipe.id}_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+              recipeId: step.recipe.id,
+              name: step.recipe.name,
+              iconSymbol: itemDef?.iconSymbol || "⚙",
+              iconColor: itemDef?.iconColor || "#94a3b8",
+              progress: 0,
+              duration,
+              remainingTime: duration,
+              refundInputs: isFree ? [] : step.recipe.inputs.map(inp => ({ itemId: inp.itemId, count: inp.count }))
+            });
+          }
+        }
+        return [...prevQueue, ...newItems];
+      });
 
-      toast.info(`Queued ${recipe.name} for crafting ${isFree ? "⚡ (FREE CRAFT)" : ""}...`);
+      const totalItemsQueued = plan.steps.reduce((sum, s) => sum + s.count, 0);
+      toast.info(`Queued ${craftCount}x ${recipe.name}${plan.steps.length > 1 ? ` (+${totalItemsQueued - craftCount} auto-chained intermediates)` : ""} ${isFree ? "⚡" : ""}!`);
       return next;
+    });
+  };
+
+  const handleCancelQueuedCraft = (idx: number) => {
+    setCraftingQueue((prev) => {
+      if (idx < 0 || idx >= prev.length) return prev;
+      const target = prev[idx];
+      setState((prevState) => {
+        const next = structuredClone(prevState);
+        if (target.refundInputs) {
+          for (const refund of target.refundInputs) {
+            addItem(next.inventory, createItem(refund.itemId, refund.count));
+          }
+          toast.info(`Cancelled ${target.name} craft — ingredients refunded! ↩️`);
+        }
+        return next;
+      });
+      return prev.filter((_, i) => i !== idx);
     });
   };
 
@@ -3410,38 +3558,51 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
           </div>
         </div>
 
-        {/* Crafting Queue HUD Overlay */}
+        {/* Factorio Crafting Queue HUD Bar (Bottom-Left) */}
         {craftingQueue.length > 0 && (
-          <div className="absolute bottom-16 left-3 z-20 flex flex-col gap-1.5 bg-zinc-950/90 border border-zinc-705 p-2 font-mono shadow-md text-zinc-100 min-w-[150px] rounded-sm">
-            <div className="text-[9px] text-zinc-400 font-bold uppercase tracking-wider border-b border-zinc-800 pb-1 flex justify-between items-center">
-              <span>Crafting Queue</span>
-              <span className="text-orange-400 bg-orange-950/50 px-1 rounded font-extrabold text-[8px]">
-                {craftingQueue.length} items
+          <div className="absolute bottom-14 left-3 z-20 flex flex-col gap-1 bg-[#141517]/95 border-2 border-slate-700 p-1.5 font-mono shadow-2xl text-zinc-100 rounded-sm">
+            <div className="text-[8px] text-zinc-400 font-bold uppercase tracking-wider flex justify-between items-center gap-2 border-b border-zinc-800 pb-0.5">
+              <span className="text-orange-400 font-extrabold flex items-center gap-1">
+                <span>🛠️</span> QUEUE ({craftingQueue.length})
               </span>
+              <span className="text-[7px] text-zinc-500">Click icon to cancel & refund</span>
             </div>
 
-            <div className="flex items-center gap-2">
-              <span className="text-xl bg-zinc-900 p-1 border border-zinc-800 rounded">
-                {craftingQueue[0].iconSymbol}
-              </span>
-              <div className="flex-1 min-w-0">
-                <div className="text-[10px] font-bold text-zinc-200 truncate">
-                  {craftingQueue[0].name}
-                </div>
-                <div className="w-full bg-zinc-800 h-1.5 border border-zinc-750 mt-1 rounded-none overflow-hidden relative">
-                  <div
-                    className="bg-orange-500 h-full transition-all duration-100"
-                    style={{ width: `${craftingQueue[0].progress}%` }}
-                  />
-                </div>
-              </div>
-            </div>
+            {/* Queue Item Icons Strip */}
+            <div className="flex items-center gap-1 overflow-x-auto max-w-[280px] sm:max-w-[360px] py-0.5">
+              {craftingQueue.map((item, idx) => {
+                const isActive = idx === 0;
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => handleCancelQueuedCraft(idx)}
+                    title={`Click to cancel crafting ${item.name} & refund ingredients`}
+                    className={`relative shrink-0 flex flex-col items-center justify-center w-9 h-9 rounded border transition-all cursor-pointer select-none group ${
+                      isActive
+                        ? "bg-[#28382b] border-[#ff9200] shadow-[0_0_8px_rgba(255,146,0,0.6)]"
+                        : "bg-[#181a1f] border-zinc-700 hover:border-red-500/80 hover:bg-red-950/30"
+                    }`}
+                  >
+                    <span className="text-lg group-hover:scale-95 transition-transform">{item.iconSymbol}</span>
 
-            {craftingQueue.length > 1 && (
-              <div className="text-[8px] text-zinc-500 font-bold text-right pt-0.5">
-                +{craftingQueue.length - 1} more queued
-              </div>
-            )}
+                    {/* Active Crafting Linear Progress Bar */}
+                    {isActive && (
+                      <div className="absolute bottom-0 left-0 right-0 h-1 bg-zinc-800 overflow-hidden">
+                        <div
+                          className="bg-orange-500 h-full transition-all duration-100"
+                          style={{ width: `${item.progress}%` }}
+                        />
+                      </div>
+                    )}
+
+                    {/* Cancel X Badge on hover */}
+                    <span className="absolute inset-0 bg-red-950/90 text-red-300 font-black text-xs hidden group-hover:flex items-center justify-center rounded">
+                      ✕
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
         )}
 
@@ -4629,9 +4790,21 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                         const itemDef = ITEM_DEFS[recipe.outputId];
                         const isFree = state.freeCraft || state.godMode;
                         const isTechLocked = !isFree && recipe.techRequired && !(state.unlockedTechs || []).includes(recipe.techRequired);
-                        const canCraft = isFree || (!isTechLocked && recipe.inputs.every((input) =>
-                          checkGlobalItems(state, input.itemId, input.count)
-                        ));
+                        const plan = resolveFactorioCraftPlan(state, recipe, 1);
+                        const canCraft = isFree || (!isTechLocked && plan.canCraft);
+
+                        // Calculate max craftable
+                        let maxCount = 0;
+                        if (canCraft) {
+                          if (isFree) maxCount = 100;
+                          else {
+                            for (let c = 1; c <= 50; c++) {
+                              const test = resolveFactorioCraftPlan(state, recipe, c);
+                              if (test.canCraft) maxCount = c;
+                              else break;
+                            }
+                          }
+                        }
 
                         return (
                           <FactorioCraftingIcon
@@ -4639,12 +4812,14 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                             iconSymbol={itemDef?.iconSymbol || "⚙"}
                             name={recipe.name}
                             count={recipe.outputCount}
+                            craftableCount={maxCount}
                             canCraft={canCraft}
                             isTechLocked={isTechLocked}
                             isSelected={hoveredRecipe?.id === recipe.id}
                             onMouseEnter={() => setHoveredRecipe(recipe)}
                             onMouseLeave={() => setHoveredRecipe(null)}
-                            onClick={() => handleStartCrafting(recipe)}
+                            onClick={(e) => handleStartCrafting(recipe, 1, e.shiftKey)}
+                            onContextMenu={() => handleStartCrafting(recipe, 5, false)}
                           />
                         );
                       })
@@ -4658,6 +4833,8 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                     const itemDef = ITEM_DEFS[hoveredRecipe.outputId];
                     const isTechLocked = hoveredRecipe.techRequired && !(state.unlockedTechs || []).includes(hoveredRecipe.techRequired);
                     const techDef = isTechLocked ? TECHNOLOGIES.find(t => t.id === hoveredRecipe.techRequired) : null;
+                    const plan = resolveFactorioCraftPlan(state, hoveredRecipe, 1);
+
                     return (
                       <div className="space-y-3 flex-1 flex flex-col justify-between font-mono">
                         <div className="space-y-2">
@@ -4731,24 +4908,37 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                             {hoveredRecipe.description}
                           </p>
 
-                          {/* Ingredient Checklist */}
+                          {/* Ingredient Checklist with Auto-Crafting Indicator */}
                           <div className="space-y-1 pt-1">
                             <span className="text-[9px] text-zinc-500 font-bold uppercase tracking-wider block mb-0.5">
                               Required Ingredients:
                             </span>
                             {hoveredRecipe.inputs.map((input) => {
                               const playerHas = getGlobalItemCount(state, input.itemId);
-                              const hasEnough = playerHas >= input.count;
+                              const hasDirect = playerHas >= input.count;
+                              const isMissing = plan.missingItems.some(m => m.itemId === input.itemId && !m.canAutoCraft);
+                              const isAutoCraftable = !hasDirect && !isMissing;
                               const inputDef = ITEM_DEFS[input.itemId];
+
                               return (
                                 <div
                                   key={input.itemId}
-                                  className={`text-[10px] flex justify-between items-center p-1 bg-zinc-900/40 rounded border font-mono ${hasEnough ? "border-green-950 text-green-400" : "border-red-950 text-red-400"
-                                    }`}
+                                  className={`text-[10px] flex justify-between items-center p-1 bg-zinc-900/40 rounded border font-mono ${
+                                    hasDirect
+                                      ? "border-green-950 text-green-400"
+                                      : isAutoCraftable
+                                        ? "border-amber-900/60 text-amber-400"
+                                        : "border-red-950 text-red-400"
+                                  }`}
                                 >
                                   <span className="flex items-center gap-1.5">
                                     <span>{inputDef?.iconSymbol || "📦"}</span>
                                     <span>{inputDef?.name || input.itemId.replace("_", " ")}</span>
+                                    {isAutoCraftable && (
+                                      <span className="text-[8px] bg-amber-950 px-1 py-0.2 rounded border border-amber-600/40 text-amber-300">
+                                        Auto-craftable
+                                      </span>
+                                    )}
                                   </span>
                                   <span className="font-bold">
                                     {playerHas}/{input.count}
@@ -4759,18 +4949,51 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                           </div>
                         </div>
 
-                        <div className="pt-2 border-t border-zinc-800 text-center">
+                        {/* Factorio 3-Tier Crafting Action Buttons */}
+                        <div className="pt-2 border-t border-zinc-800 space-y-1.5">
                           {isTechLocked ? (
-                            <span className="text-[10px] text-purple-400 font-bold">
+                            <div className="text-[10px] text-purple-400 font-bold text-center py-1">
                               🔒 RESEARCH REQUIRED IN LAB
-                            </span>
+                            </div>
                           ) : (
-                            <button
-                              onClick={() => handleStartCrafting(hoveredRecipe)}
-                              className="w-full py-1.5 bg-orange-600 hover:bg-orange-500 text-white rounded font-bold text-xs transition-all shadow"
-                            >
-                              ⚙ CRAFT {hoveredRecipe.name.toUpperCase()}
-                            </button>
+                            <div className="grid grid-cols-3 gap-1.5">
+                              <button
+                                onClick={() => handleStartCrafting(hoveredRecipe, 1, false)}
+                                disabled={!plan.canCraft}
+                                className={`py-1 rounded font-bold text-[10px] transition-all shadow ${
+                                  plan.canCraft
+                                    ? "bg-orange-600 hover:bg-orange-500 text-white"
+                                    : "bg-zinc-800 text-zinc-600 cursor-not-allowed"
+                                }`}
+                                title="Left-Click to craft 1 item"
+                              >
+                                Craft 1
+                              </button>
+                              <button
+                                onClick={() => handleStartCrafting(hoveredRecipe, 5, false)}
+                                disabled={!plan.canCraft}
+                                className={`py-1 rounded font-bold text-[10px] transition-all shadow ${
+                                  plan.canCraft
+                                    ? "bg-amber-600 hover:bg-amber-500 text-white"
+                                    : "bg-zinc-800 text-zinc-600 cursor-not-allowed"
+                                }`}
+                                title="Right-Click to craft 5 items"
+                              >
+                                Craft 5
+                              </button>
+                              <button
+                                onClick={() => handleStartCrafting(hoveredRecipe, 1, true)}
+                                disabled={!plan.canCraft}
+                                className={`py-1 rounded font-bold text-[10px] transition-all shadow ${
+                                  plan.canCraft
+                                    ? "bg-emerald-600 hover:bg-emerald-500 text-white"
+                                    : "bg-zinc-800 text-zinc-600 cursor-not-allowed"
+                                }`}
+                                title="Shift-Click to craft as many as possible"
+                              >
+                                Craft All
+                              </button>
+                            </div>
                           )}
                         </div>
                       </div>
@@ -4778,7 +5001,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                   })() : (
                     <div className="flex flex-col items-center justify-center text-center text-zinc-500 text-[10px] py-8 h-full flex-1">
                       <span>⚙ Hover over a recipe to view costs & recipe flow.</span>
-                      <span className="mt-1">Click to queue crafting.</span>
+                      <span className="mt-1">Left-Click: 1x | Right-Click: 5x | Shift-Click: All</span>
                     </div>
                   )}
                 </div>

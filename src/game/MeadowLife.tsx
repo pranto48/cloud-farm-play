@@ -286,10 +286,12 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
           "transport_belt", "fast_transport_belt", "express_transport_belt", "turbo_transport_belt",
           "underground_belt", "fast_underground_belt", "express_underground_belt", "turbo_underground_belt",
           "splitter", "fast_splitter", "express_splitter", "turbo_splitter",
+          "loader", "fast_loader", "express_loader", "turbo_loader",
           "burner_inserter", "inserter", "long_inserter", "fast_inserter", "filter_inserter", "stack_inserter", "stack_filter_inserter",
           "power_pole", "medium_power_pole", "big_electric_pole", "substation",
-          "pipe", "pipe_to_ground", "small_pump",
-          "rail", "rail_signal", "rail_chain_signal", "train_stop", "locomotive", "cargo_wagon", "fluid_wagon", "artillery_wagon",
+          "pipe", "pipe_to_ground", "small_pump", "valve",
+          "rail", "rail_ramp", "rail_support", "elevated_straight_rail", "elevated_curved_rail", "rail_signal", "rail_chain_signal", "train_stop",
+          "locomotive", "cargo_wagon", "fluid_wagon", "artillery_wagon",
           "car", "tank", "spidertron", "spidertron_remote",
           "construction_robot", "logistic_robot", "active_provider_chest", "passive_provider_chest", "storage_chest", "buffer_chest", "requester_chest", "logistics_chest", "roboport",
           "lamp", "red_wire", "green_wire", "arithmetic_combinator", "decider_combinator", "constant_combinator", "power_switch", "programmable_speaker", "display_panel",
@@ -322,6 +324,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
       ),
       space: CRAFTING_RECIPES.filter((r) =>
         [
+          "space_platform_starter_pack", "space_platform_hub", "cargo_bay", "cargo_landing_pad", "cargo_pod", "thruster", "asteroid_collector",
           "automation_science_pack", "logistic_science_pack", "military_science_pack", "chemical_science_pack", "production_science_pack", "utility_science_pack",
           "rocket_fuel", "rocket_part", "satellite", "rocket_silo"
         ].includes(r.id)
@@ -333,7 +336,9 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
           "shotgun_shells", "piercing_shotgun_shells", "cannon_shell", "explosive_cannon_shell", "uranium_cannon_shell",
           "rocket", "explosive_rocket", "atomic_bomb", "flamethrower_ammo", "artillery_shell",
           "grenade", "poison_capsule", "slowdown_capsule", "defender_capsule", "distractor_capsule", "destroyer_capsule",
-          "light_armor", "heavy_armor", "modular_armor", "power_armor", "power_armor_mk2", "exoskeleton_equipment",
+          "light_armor", "heavy_armor", "modular_armor", "power_armor", "power_armor_mk2",
+          "battery_equipment", "battery_mk2_equipment", "solar_panel_equipment", "personal_fusion_reactor_equipment",
+          "personal_roboport_mk2_equipment", "night_vision_equipment", "discharge_defense_equipment", "exoskeleton_equipment",
           "gun_turret", "laser_turret", "flamethrower_turret", "artillery_turret", "rocket_turret", "tesla_turret", "railgun_turret",
           "gate", "land_mine", "energy_shield", "energy_shield_mk2", "belt_immunity_equipment", "personal_roboport",
           "explosives", "cluster_grenade", "radar", "raw_fish"

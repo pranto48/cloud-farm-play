@@ -244,6 +244,7 @@ export interface GameState {
   houseGrid?: Tile[][];
   // Extended features
   godMode?: boolean;
+  freeCraft?: boolean;
   unlockedTechs?: string[];
   researchPoints?: number;
   activeResearchId?: string;

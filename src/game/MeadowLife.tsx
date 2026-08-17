@@ -1915,7 +1915,8 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
   };
 
   const handleStartCrafting = (recipe: Recipe) => {
-    if (recipe.techRequired && !(state.unlockedTechs || []).includes(recipe.techRequired)) {
+    const isFree = state.freeCraft || state.godMode;
+    if (!isFree && recipe.techRequired && !(state.unlockedTechs || []).includes(recipe.techRequired)) {
       const tech = TECHNOLOGIES.find((t) => t.id === recipe.techRequired);
       toast.error(`🔒 Research "${tech?.name || recipe.techRequired}" at the Research Center first!`);
       return;
@@ -1924,24 +1925,26 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
     let hasAll = true;
     setState((prev) => {
       const next = structuredClone(prev);
-      for (const input of recipe.inputs) {
-        if (!checkGlobalItems(next, input.itemId, input.count)) {
-          hasAll = false;
-          break;
+      if (!isFree) {
+        for (const input of recipe.inputs) {
+          if (!checkGlobalItems(next, input.itemId, input.count)) {
+            hasAll = false;
+            break;
+          }
+        }
+
+        if (!hasAll) {
+          toast.error(`Not enough ingredients to craft ${recipe.name}!`);
+          return prev;
+        }
+
+        for (const input of recipe.inputs) {
+          deductGlobalItems(next, input.itemId, input.count);
         }
       }
 
-      if (!hasAll) {
-        toast.error(`Not enough ingredients to craft ${recipe.name}!`);
-        return prev;
-      }
-
-      for (const input of recipe.inputs) {
-        deductGlobalItems(next, input.itemId, input.count);
-      }
-
       const itemDef = ITEM_DEFS[recipe.outputId];
-      const duration = 1.5;
+      const duration = isFree ? 0.2 : 1.5;
       setCraftingQueue((prevQueue) => [
         ...prevQueue,
         {
@@ -1956,7 +1959,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
         },
       ]);
 
-      toast.info(`Queued ${recipe.name} for crafting...`);
+      toast.info(`Queued ${recipe.name} for crafting ${isFree ? "⚡ (FREE CRAFT)" : ""}...`);
       return next;
     });
   };
@@ -2691,8 +2694,21 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
       setState(prev => {
         const next = structuredClone(prev);
         next.godMode = !next.godMode;
-        const msg = next.godMode ? "GOD MODE ENABLED ✨ (Infinite energy & invincibility)" : "God mode disabled";
+        if (next.godMode) {
+          next.freeCraft = true;
+          next.player.health = next.player.maxHealth;
+          next.energy = next.maxEnergy;
+        }
+        const msg = next.godMode ? "GOD MODE ENABLED ✨ (Infinite HP & Energy + Free Crafting + Invincibility)" : "God mode disabled";
         addHistory(msg, next.godMode ? "#fbbf24" : "#94a3b8");
+        return next;
+      });
+    } else if (command === "/freecraft" || command === "/free" || command === "/craftfree") {
+      setState(prev => {
+        const next = structuredClone(prev);
+        next.freeCraft = !next.freeCraft;
+        const msg = next.freeCraft ? "FREE CRAFTING ENABLED 🛠️ (Craft all items for 0 cost and instant speed!)" : "Free crafting disabled";
+        addHistory(msg, next.freeCraft ? "#38bdf8" : "#94a3b8");
         return next;
       });
     } else if (command === "/heal") {
@@ -2801,7 +2817,8 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
       });
     } else if (command === "/help") {
       addHistory("=== CHEAT CODES ===", "#fbbf24");
-      addHistory("/god — Toggle God Mode (infinite energy + invincibility)", "#e2e8f0");
+      addHistory("/god — Toggle God Mode (invincibility + infinite energy + free crafting)", "#e2e8f0");
+      addHistory("/freecraft — Toggle Free Instant Crafting (0 cost, 0 tech lock)", "#e2e8f0");
       addHistory("/heal — Restore full HP and energy", "#e2e8f0");
       addHistory("/gold <n> — Add gold coins", "#e2e8f0");
       addHistory("/item <id> [qty] — Spawn item", "#e2e8f0");
@@ -3102,6 +3119,52 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                   <div className="font-bold text-xs text-amber-300">Turbo Sprint</div>
                   <div className="text-[9px] text-slate-400">{mobileSprint ? "Speed: FAST (ON)" : "Speed: WALK (OFF)"}</div>
                 </div>
+              </button>
+            </div>
+
+            {/* Quick Cheats Row in Mobile Drawer */}
+            <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-800">
+              <button
+                onClick={() => {
+                  setState(prev => {
+                    const next = structuredClone(prev);
+                    next.godMode = !next.godMode;
+                    if (next.godMode) {
+                      next.freeCraft = true;
+                      next.player.health = next.player.maxHealth;
+                      next.energy = next.maxEnergy;
+                    }
+                    toast(next.godMode ? "⚡ God Mode Enabled (Infinite HP/NRG)" : "God Mode Disabled");
+                    return next;
+                  });
+                }}
+                className={`py-2 px-2.5 rounded-lg border text-[11px] font-bold flex items-center justify-between active:scale-95 transition-all ${
+                  state.godMode
+                    ? "bg-amber-500/25 border-amber-400 text-amber-300 shadow-[0_0_10px_rgba(245,158,11,0.3)] animate-pulse"
+                    : "bg-[#1e2530] border-slate-700 text-slate-300"
+                }`}
+              >
+                <span>⚡ God Mode</span>
+                <span className="text-[9px] font-mono px-1 py-0.5 rounded bg-black/50">{state.godMode ? "ON" : "OFF"}</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  setState(prev => {
+                    const next = structuredClone(prev);
+                    next.freeCraft = !next.freeCraft;
+                    toast(next.freeCraft ? "🛠️ Free Crafting Enabled (0 Cost)" : "Free Crafting Disabled");
+                    return next;
+                  });
+                }}
+                className={`py-2 px-2.5 rounded-lg border text-[11px] font-bold flex items-center justify-between active:scale-95 transition-all ${
+                  state.freeCraft
+                    ? "bg-cyan-500/25 border-cyan-400 text-cyan-300 shadow-[0_0_10px_rgba(6,182,212,0.3)]"
+                    : "bg-[#1e2530] border-slate-700 text-slate-300"
+                }`}
+              >
+                <span>🛠️ Free Craft</span>
+                <span className="text-[9px] font-mono px-1 py-0.5 rounded bg-black/50">{state.freeCraft ? "ON" : "OFF"}</span>
               </button>
             </div>
 
@@ -4380,10 +4443,11 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                     ) : (
                       (recipesByCategory[craftingCategory] || []).map((recipe) => {
                         const itemDef = ITEM_DEFS[recipe.outputId];
-                        const isTechLocked = recipe.techRequired && !(state.unlockedTechs || []).includes(recipe.techRequired);
-                        const canCraft = !isTechLocked && recipe.inputs.every((input) =>
+                        const isFree = state.freeCraft || state.godMode;
+                        const isTechLocked = !isFree && recipe.techRequired && !(state.unlockedTechs || []).includes(recipe.techRequired);
+                        const canCraft = isFree || (!isTechLocked && recipe.inputs.every((input) =>
                           checkGlobalItems(state, input.itemId, input.count)
-                        );
+                        ));
 
                         return (
                           <FactorioCraftingIcon

@@ -6317,31 +6317,107 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
       <Dialog open={aboutOpen} onOpenChange={setAboutOpen}>
         <DialogContent container={mainContainerRef.current} className="max-w-3xl max-h-[85vh] overflow-y-auto bg-[#0f1117] border-2 border-[#334155] text-slate-100 rounded-xl font-mono">
           <DialogHeader>
-            <DialogTitle className="text-2xl font-black flex items-center gap-3 text-emerald-400">
-              <span>🌿</span>
-              <span>Meadow Life — Game Guide</span>
+            <DialogTitle className="text-2xl font-black flex items-center gap-3 text-amber-400 font-mono">
+              <span>⚙️</span>
+              <span>Factorio Engineering Guide & Cheat Sheet</span>
             </DialogTitle>
-            <DialogDescription className="text-slate-400 text-xs">
-              A cozy farming RPG with automation, crafting, and research. Version 2.0
+            <DialogDescription className="text-slate-400 text-xs font-mono">
+              Official Factorio build ratios, belt throughputs, and power engineering metrics (factoriocheatsheet.com).
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-6 py-2 text-xs">
-            {/* Overview */}
-            <div className="p-3 bg-[#1e293b] border border-[#334155] rounded-lg space-y-1.5">
-              <h3 className="font-bold text-emerald-400 text-sm mb-2">📖 About the Game</h3>
-              <p className="text-slate-300 leading-relaxed">
-                Meadow Life is a cozy top-down farming game. Grow crops, raise animals, mine for ores,
-                craft tools, hire workers, and research advanced technology to automate your farm and
-                conquer the mines. Press <kbd className="bg-slate-700 px-1 rounded text-white">WASD</kbd> to move,
-                <kbd className="bg-slate-700 px-1 rounded text-white mx-1">E/Space</kbd> to interact, and
-                <kbd className="bg-slate-700 px-1 rounded text-white mx-1">/</kbd> for cheats!
-              </p>
+          <div className="space-y-6 py-2 text-xs font-mono">
+            {/* Factorio Cheat Sheet Golden Ratios Card */}
+            <div className="p-3 bg-[#181a1f] border-2 border-amber-500/50 rounded-lg space-y-3 shadow-md">
+              <div className="flex items-center justify-between border-b border-amber-500/30 pb-1.5">
+                <h3 className="font-extrabold text-amber-400 text-sm flex items-center gap-2">
+                  <span>📊</span> FACTORIO CHEAT SHEET — GOLDEN RATIOS
+                </h3>
+                <span className="text-[10px] text-zinc-400 font-mono bg-zinc-900 px-2 py-0.5 rounded border border-zinc-800">
+                  factoriocheatsheet.com
+                </span>
+              </div>
+
+              {/* 1. Belt Throughputs */}
+              <div className="space-y-1">
+                <span className="text-[11px] font-bold text-orange-300">🚜 Conveyor Belt Throughputs</span>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 text-[10px]">
+                  <div className="p-1.5 bg-zinc-900 rounded border border-yellow-500/40 text-yellow-300">
+                    <div className="font-bold">🟡 Yellow Belt</div>
+                    <div className="text-zinc-400">15 items/s (7.5/lane)</div>
+                  </div>
+                  <div className="p-1.5 bg-zinc-900 rounded border border-red-500/40 text-red-300">
+                    <div className="font-bold">🔴 Red Fast Belt</div>
+                    <div className="text-zinc-400">30 items/s (15/lane)</div>
+                  </div>
+                  <div className="p-1.5 bg-zinc-900 rounded border border-blue-500/40 text-blue-300">
+                    <div className="font-bold">🔵 Blue Express</div>
+                    <div className="text-zinc-400">45 items/s (22.5/lane)</div>
+                  </div>
+                  <div className="p-1.5 bg-zinc-900 rounded border border-emerald-500/40 text-emerald-300">
+                    <div className="font-bold">🟢 Turbo Green</div>
+                    <div className="text-zinc-400">60 items/s (30/lane)</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* 2. Power Grid Ratios */}
+              <div className="space-y-1 pt-1 border-t border-zinc-800">
+                <span className="text-[11px] font-bold text-amber-300">⚡ Power Generation Ratios</span>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5 text-[10px]">
+                  <div className="p-1.5 bg-zinc-900 rounded border border-zinc-800">
+                    <div className="font-bold text-amber-400">Steam Ratio (1:20:40)</div>
+                    <div className="text-zinc-400">1 Pump : 20 Boilers : 40 Engines = 36 MW</div>
+                  </div>
+                  <div className="p-1.5 bg-zinc-900 rounded border border-zinc-800">
+                    <div className="font-bold text-amber-400">Solar / Accumulator</div>
+                    <div className="text-zinc-400">0.84 (25 Solar Panels : 21 Accumulators)</div>
+                  </div>
+                  <div className="p-1.5 bg-zinc-900 rounded border border-zinc-800">
+                    <div className="font-bold text-amber-400">2x2 Nuclear (480 MW)</div>
+                    <div className="text-zinc-400">4 Reactors : 48 Exchangers : 83 Turbines</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* 3. Smelting & Mining Belt Saturation Ratios */}
+              <div className="space-y-1 pt-1 border-t border-zinc-800">
+                <span className="text-[11px] font-bold text-emerald-300">⛏️ Mining & Smelting (1 Full Yellow Belt = 15/s)</span>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5 text-[10px]">
+                  <div className="p-1.5 bg-zinc-900 rounded border border-zinc-800">
+                    <div className="font-bold text-stone-300">Stone Furnaces</div>
+                    <div className="text-zinc-400">48 Furnaces (24 per side)</div>
+                  </div>
+                  <div className="p-1.5 bg-zinc-900 rounded border border-zinc-800">
+                    <div className="font-bold text-stone-300">Steel / Electric Furnaces</div>
+                    <div className="text-zinc-400">24 Furnaces (12 per side)</div>
+                  </div>
+                  <div className="p-1.5 bg-zinc-900 rounded border border-zinc-800">
+                    <div className="font-bold text-stone-300">Electric Drills</div>
+                    <div className="text-zinc-400">30 Drills (15 per side)</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* 4. Manufacturing & Science Ratios */}
+              <div className="space-y-1 pt-1 border-t border-zinc-800">
+                <span className="text-[11px] font-bold text-purple-300">🔬 Production & Science Golden Ratios</span>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 text-[10px]">
+                  <div className="p-1.5 bg-zinc-900 rounded border border-zinc-800">
+                    <div className="font-bold text-green-400">Electronic Circuits (Green)</div>
+                    <div className="text-zinc-400">3 Copper Cable Assemblers $\rightarrow$ 2 Circuit Assemblers (Direct 3:2)</div>
+                  </div>
+                  <div className="p-1.5 bg-zinc-900 rounded border border-zinc-800">
+                    <div className="font-bold text-purple-400">Science Lab Ratio (5:6:5:12:7:7)</div>
+                    <div className="text-zinc-400">5 Red : 6 Green : 5 Gray : 12 Blue : 7 Purple : 7 Yellow</div>
+                  </div>
+                </div>
+              </div>
             </div>
 
             {/* Controls */}
             <div>
-              <h3 className="font-bold text-sky-400 text-sm mb-2">🎮 Controls</h3>
+              <h3 className="font-bold text-sky-400 text-sm mb-2">🎮 Factorio Controls & Shortcuts</h3>
               <div className="grid grid-cols-2 gap-2">
                 {[
                   ["WASD / Arrow Keys", "Move player"],

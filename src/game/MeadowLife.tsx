@@ -313,8 +313,9 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
         [
           "iron_bar", "copper_bar", "steel_plate", "iron_gear", "copper_wire", "iron_stick", "green_wire", "red_wire",
           "electronic_circuit", "advanced_circuit", "processing_unit",
-          "plastic_bar", "sulfur", "empty_barrel", "sulfuric_acid_barrel",
+          "plastic_bar", "sulfur", "empty_barrel", "crude_oil_barrel", "heavy_oil_barrel", "light_oil_barrel", "petroleum_gas_barrel", "sulfuric_acid_barrel", "lubricant_barrel", "water_barrel",
           "engine_unit", "electric_engine", "flying_robot_frame", "lubricant",
+          "low_density_structure", "rocket_control_unit", "nuclear_fuel",
           "uranium_fuel_cell", "uranium_bar", "uranium_235", "uranium_238",
           "arithmetic_combinator", "decider_combinator", "programmable_speaker"
         ].includes(r.id)
@@ -327,9 +328,14 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
       ),
       combat: CRAFTING_RECIPES.filter((r) =>
         [
-          "submachine_gun", "firearm_magazine", "piercing_rounds_magazine", "uranium_rounds_magazine",
-          "gun_turret", "laser_turret", "flamethrower_turret",
-          "energy_shield", "energy_shield_mk2", "belt_immunity_equipment", "personal_roboport",
+          "pistol", "submachine_gun", "shotgun", "combat_shotgun", "rocket_launcher", "flamethrower",
+          "firearm_magazine", "piercing_rounds_magazine", "uranium_rounds_magazine",
+          "shotgun_shells", "piercing_shotgun_shells", "cannon_shell", "explosive_cannon_shell", "uranium_cannon_shell",
+          "rocket", "explosive_rocket", "atomic_bomb", "flamethrower_ammo", "artillery_shell",
+          "grenade", "poison_capsule", "slowdown_capsule", "defender_capsule", "distractor_capsule", "destroyer_capsule",
+          "light_armor", "heavy_armor", "modular_armor", "power_armor", "power_armor_mk2", "exoskeleton_equipment",
+          "gun_turret", "laser_turret", "flamethrower_turret", "artillery_turret", "rocket_turret", "tesla_turret", "railgun_turret",
+          "gate", "land_mine", "energy_shield", "energy_shield_mk2", "belt_immunity_equipment", "personal_roboport",
           "explosives", "cluster_grenade", "radar", "raw_fish"
         ].includes(r.id)
       ),

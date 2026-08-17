@@ -6428,20 +6428,26 @@ export function draw(
         const id = t.placedItemId;
         const dir = t.direction || "right";
 
-        // 1. Factorio Transport Belts
-        if (id === "transport_belt" || id === "fast_transport_belt") {
-          const isFast = id === "fast_transport_belt";
-          const beltColor = isFast ? "#c0392b" : "#f39c12";
-          const arrowColor = isFast ? "#e74c3c" : "#f1c40f";
+        // 1. Factorio 4-Tier Transport Belts & Loaders
+        if (id.includes("belt") || id.includes("loader")) {
+          const isTurbo = id.includes("turbo");
+          const isExpress = id.includes("express");
+          const isFast = id.includes("fast");
+          const isLoader = id.includes("loader");
 
-          // Belt Track Frame
-          ctx.fillStyle = "#2c3e50";
-          ctx.fillRect(px + 2, py + 2, TILE - 4, TILE - 4);
+          const beltColor = isTurbo ? "#27ae60" : isExpress ? "#2980b9" : isFast ? "#c0392b" : "#d4ac0d";
+          const arrowColor = isTurbo ? "#2ecc71" : isExpress ? "#3498db" : isFast ? "#e74c3c" : "#f1c40f";
+
+          // Belt Housing / Metal Base
+          ctx.fillStyle = "#1e272c";
+          ctx.fillRect(px + 1, py + 1, TILE - 2, TILE - 2);
           ctx.fillStyle = beltColor;
-          ctx.fillRect(px + 4, py + 4, TILE - 8, TILE - 8);
+          ctx.fillRect(px + 3, py + 3, TILE - 6, TILE - 6);
 
-          // Moving directional Chevron arrows
-          const animOffset = (Date.now() / (isFast ? 150 : 300)) % 10;
+          // Moving directional Chevron arrows (Speed proportional to tier)
+          const animSpeed = isTurbo ? 90 : isExpress ? 140 : isFast ? 220 : 320;
+          const animOffset = (Date.now() / animSpeed) % 8;
+
           ctx.fillStyle = arrowColor;
           ctx.save();
           ctx.translate(px + TILE / 2, py + TILE / 2);
@@ -6449,30 +6455,37 @@ export function draw(
           else if (dir === "down") ctx.rotate(Math.PI / 2);
           else if (dir === "left") ctx.rotate(Math.PI);
 
-          for (let i = -12; i <= 12; i += 8) {
-            const arrX = i + animOffset - 5;
+          for (let i = -12; i <= 12; i += 6) {
+            const arrX = i + animOffset - 4;
             if (arrX >= -12 && arrX <= 12) {
               ctx.beginPath();
               ctx.moveTo(arrX + 3, 0);
-              ctx.lineTo(arrX - 3, -4);
-              ctx.lineTo(arrX - 1, 0);
-              ctx.lineTo(arrX - 3, 4);
+              ctx.lineTo(arrX - 2, -4);
+              ctx.lineTo(arrX - 0.5, 0);
+              ctx.lineTo(arrX - 2, 4);
               ctx.closePath();
               ctx.fill();
             }
           }
           ctx.restore();
 
-          // Render moving items on the belt
+          // Loader funnel chute
+          if (isLoader) {
+            ctx.fillStyle = "#34495e";
+            ctx.fillRect(px + 4, py + 4, TILE - 8, 5);
+            ctx.fillStyle = arrowColor;
+            ctx.fillRect(px + 8, py + 2, TILE - 16, 3);
+          }
+
+          // Dual-Lane Item rendering on belts
           if (t.beltItems && t.beltItems.length > 0) {
             const { dx, dy } = getDirectionVector(dir);
             t.beltItems.forEach((bItem) => {
               const startX = px + 4;
               const startY = py + 4;
-              const ix = startX + (dx !== 0 ? (bItem.offset * (TILE - 12)) * (dx > 0 ? 1 : -1) + (dx < 0 ? TILE - 12 : 0) : bItem.lane * 8 + 4);
-              const iy = startY + (dy !== 0 ? (bItem.offset * (TILE - 12)) * (dy > 0 ? 1 : -1) + (dy < 0 ? TILE - 12 : 0) : bItem.lane * 8 + 4);
+              const ix = startX + (dx !== 0 ? (bItem.offset * (TILE - 12)) * (dx > 0 ? 1 : -1) + (dx < 0 ? TILE - 12 : 0) : bItem.lane * 8 + 3);
+              const iy = startY + (dy !== 0 ? (bItem.offset * (TILE - 12)) * (dy > 0 ? 1 : -1) + (dy < 0 ? TILE - 12 : 0) : bItem.lane * 8 + 3);
 
-              // Draw item icon / gem
               ctx.fillStyle = bItem.id.includes("iron") ? "#3498db" : bItem.id.includes("copper") ? "#e67e22" : bItem.id.includes("coal") ? "#17202a" : bItem.id.includes("uranium") ? "#2ecc71" : "#f1c40f";
               ctx.beginPath();
               ctx.arc(ix + 4, iy + 4, 3.5, 0, Math.PI * 2);
@@ -6485,63 +6498,68 @@ export function draw(
         }
 
         // 2. Factorio Mining Drills (Burner & Electric)
-        else if (id === "burner_drill" || id === "electric_drill") {
-          const isElectric = id === "electric_drill";
+        else if (id.includes("drill")) {
+          const isElectric = id.includes("electric") || id.includes("big");
           const baseColor = isElectric ? "#16a085" : "#7f8c8d";
           const rimColor = isElectric ? "#1abc9c" : "#95a5a6";
 
-          // Drill Machine Body
-          ctx.fillStyle = "#2c3e50";
-          ctx.fillRect(px + 2, py + 2, TILE - 4, TILE - 4);
+          // Heavy Excavator Chassis
+          ctx.fillStyle = "#1e272c";
+          ctx.fillRect(px + 1, py + 1, TILE - 2, TILE - 2);
           ctx.fillStyle = baseColor;
-          ctx.fillRect(px + 4, py + 4, TILE - 8, TILE - 8);
+          ctx.fillRect(px + 3, py + 3, TILE - 6, TILE - 6);
           ctx.fillStyle = rimColor;
-          ctx.fillRect(px + 6, py + 6, TILE - 12, 3);
+          ctx.fillRect(px + 5, py + 5, TILE - 10, 3);
 
-          // Animated Mining Head / Gear
-          const drillVibe = Math.sin(Date.now() / 60) * 1.5;
+          // High-Torque Rotating Drill Head
+          const drillRot = Date.now() / 60;
           ctx.save();
           ctx.translate(px + TILE / 2, py + TILE / 2);
-          ctx.fillStyle = "#34495e";
-          ctx.beginPath();
-          ctx.arc(0, 0, 7, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.fillStyle = "#f39c12";
-          ctx.fillRect(-2 + drillVibe, -2, 4, 4);
+          ctx.rotate(drillRot);
+          ctx.fillStyle = "#2c3e50";
+          ctx.fillRect(-6, -6, 12, 12);
+          ctx.fillStyle = "#e67e22";
+          ctx.fillRect(-3, -3, 6, 6);
+          ctx.restore();
 
-          // Ejection Chute Indicator
+          // Chute Indicator
+          ctx.save();
+          ctx.translate(px + TILE / 2, py + TILE / 2);
           if (dir === "up") ctx.rotate(-Math.PI / 2);
           else if (dir === "down") ctx.rotate(Math.PI / 2);
           else if (dir === "left") ctx.rotate(Math.PI);
           ctx.fillStyle = "#e74c3c";
-          ctx.fillRect(8, -3, 4, 6);
+          ctx.fillRect(9, -3, 4, 6);
           ctx.restore();
         }
 
-        // 3. Factorio Robotic Inserters
-        else if (id === "inserter" || id === "fast_inserter" || id === "long_inserter" || id === "filter_inserter") {
-          const isFast = id === "fast_inserter";
-          const isLong = id === "long_inserter";
-          const isFilter = id === "filter_inserter";
-          const armColor = isFilter ? "#9b59b6" : isLong ? "#e74c3c" : isFast ? "#3498db" : "#f1c40f";
+        // 3. Factorio Robotic Inserters (All Tiers)
+        else if (id.includes("inserter")) {
+          const isStack = id.includes("stack");
+          const isFast = id.includes("fast");
+          const isLong = id.includes("long");
+          const isFilter = id.includes("filter");
+          const armColor = isStack ? "#2ecc71" : isFilter ? "#9b59b6" : isLong ? "#e74c3c" : isFast ? "#3498db" : "#f1c40f";
 
-          // Base Turret
-          ctx.fillStyle = "#34495e";
+          // Heavy Motor Base
+          ctx.fillStyle = "#2c3e50";
           ctx.beginPath();
           ctx.arc(px + TILE / 2, py + TILE / 2, 7, 0, Math.PI * 2);
           ctx.fill();
           ctx.fillStyle = armColor;
           ctx.beginPath();
-          ctx.arc(px + TILE / 2, py + TILE / 2, 4, 0, Math.PI * 2);
+          ctx.arc(px + TILE / 2, py + TILE / 2, 4.5, 0, Math.PI * 2);
           ctx.fill();
 
-          // Articulated Arm & Hand
+          // Multi-Segment Articulated Arm
           const armAngle = (t.inserterArmAngle !== undefined ? t.inserterArmAngle : 0);
           const { dx, dy } = getDirectionVector(dir);
           const baseAngle = Math.atan2(dy, dx);
           const totalAngle = baseAngle + armAngle;
 
-          const armLen = isLong ? 18 : 12;
+          const armLen = isLong ? 19 : 13;
+          const midX = px + TILE / 2 + Math.cos(totalAngle) * (armLen * 0.55);
+          const midY = py + TILE / 2 + Math.sin(totalAngle) * (armLen * 0.55) - 3;
           const endX = px + TILE / 2 + Math.cos(totalAngle) * armLen;
           const endY = py + TILE / 2 + Math.sin(totalAngle) * armLen;
 
@@ -6549,16 +6567,16 @@ export function draw(
           ctx.lineWidth = 3;
           ctx.beginPath();
           ctx.moveTo(px + TILE / 2, py + TILE / 2);
+          ctx.lineTo(midX, midY);
           ctx.lineTo(endX, endY);
           ctx.stroke();
 
-          // Hand Claw
+          // Robotic Hand Claw
           ctx.fillStyle = "#ecf0f1";
           ctx.beginPath();
-          ctx.arc(endX, endY, 3, 0, Math.PI * 2);
+          ctx.arc(endX, endY, isStack ? 4.5 : 3.2, 0, Math.PI * 2);
           ctx.fill();
 
-          // Held Item
           if (t.inserterHolding) {
             ctx.fillStyle = "#f39c12";
             ctx.beginPath();
@@ -6567,33 +6585,32 @@ export function draw(
           }
         }
 
-        // 4. Factorio Assembling Machines (Tier 1, 2, 3)
-        else if (id.startsWith("assembling_machine") || id === "chemical_plant") {
-          const isT2 = id === "assembling_machine_2";
-          const isT3 = id === "assembling_machine_3";
-          const isChem = id === "chemical_plant";
-          const bodyColor = isChem ? "#27ae60" : isT3 ? "#f1c40f" : isT2 ? "#2980b9" : "#7f8c8d";
+        // 4. Factorio Assembling Machines (Tiers 1-3 & Chemical Plants)
+        else if (id.includes("assembling_machine") || id.includes("chemical") || id.includes("refinery") || id.includes("foundry") || id.includes("electromagnetic")) {
+          const isT3 = id.includes("3") || id.includes("foundry");
+          const isT2 = id.includes("2") || id.includes("electromagnetic");
+          const isChem = id.includes("chemical") || id.includes("refinery");
+          const bodyColor = isChem ? "#16a085" : isT3 ? "#27ae60" : isT2 ? "#2980b9" : "#7f8c8d";
 
-          // Assembler Building Structure
-          ctx.fillStyle = "#1a252f";
+          ctx.fillStyle = "#1e272c";
           ctx.fillRect(px + 1, py + 1, TILE - 2, TILE - 2);
           ctx.fillStyle = bodyColor;
           ctx.fillRect(px + 3, py + 3, TILE - 6, TILE - 6);
 
-          // Spinning Industrial Cogs
+          // Spinning Heavy Machinery Cogs
           ctx.save();
           ctx.translate(px + TILE / 2, py + TILE / 2);
-          ctx.rotate(Date.now() / 250);
+          ctx.rotate(Date.now() / 200);
           ctx.fillStyle = "#34495e";
-          ctx.fillRect(-6, -2, 12, 4);
-          ctx.fillRect(-2, -6, 4, 12);
+          ctx.fillRect(-7, -2.5, 14, 5);
+          ctx.fillRect(-2.5, -7, 5, 14);
           ctx.fillStyle = "#ecf0f1";
           ctx.beginPath();
-          ctx.arc(0, 0, 3, 0, Math.PI * 2);
+          ctx.arc(0, 0, 3.5, 0, Math.PI * 2);
           ctx.fill();
           ctx.restore();
 
-          // Crafting Progress Mini-Bar
+          // Crafting Progress Indicator
           if (t.assemblerProgress !== undefined && t.assemblerProgress > 0) {
             ctx.fillStyle = "#000000";
             ctx.fillRect(px + 4, py + TILE - 6, TILE - 8, 3);
@@ -6602,15 +6619,79 @@ export function draw(
           }
         }
 
-        // 5. Factorio Science Research Lab
-        else if (id === "science_lab") {
-          ctx.fillStyle = "#1e272c";
+        // 5. Factorio Smelting Furnaces (Stone, Steel, Electric, Foundry)
+        else if (id.includes("furnace") || id.includes("foundry")) {
+          const isElec = id.includes("electric");
+          const isSteel = id.includes("steel");
+          ctx.fillStyle = isElec ? "#16a085" : isSteel ? "#34495e" : "#566573";
           ctx.fillRect(px + 2, py + 2, TILE - 4, TILE - 4);
-          ctx.fillStyle = "#3498db"; // glowing glass dome
+          ctx.fillStyle = "#1a252f";
+          ctx.fillRect(px + 6, py + 12, TILE - 12, TILE - 16);
+
+          // Pulsing Smelting Fire Glow
+          if (t.smeltActive) {
+            const glow = Math.sin(Date.now() / 90) * 0.3 + 0.7;
+            ctx.fillStyle = isElec ? `rgba(46, 204, 113, ${glow})` : `rgba(230, 126, 34, ${glow})`;
+            ctx.fillRect(px + 8, py + 14, TILE - 16, TILE - 20);
+          }
+        }
+
+        // 6. Factorio Electrical Power Grid Poles & Substations
+        else if (id.includes("power_pole") || id.includes("pole") || id.includes("substation")) {
+          const isSub = id.includes("substation");
+          const isMedium = id.includes("medium");
+          ctx.fillStyle = isSub ? "#2c3e50" : isMedium ? "#7f8c8d" : "#795548";
+          ctx.fillRect(px + 14, py + 4, 4, 24);
+          ctx.fillRect(px + 5, py + 7, 22, 3);
+          ctx.fillStyle = "#3498db"; // Ceramic insulators
+          ctx.fillRect(px + 6, py + 10, 3, 3);
+          ctx.fillRect(px + 23, py + 10, 3, 3);
+        }
+
+        // 7. Factorio Combat Defense Turrets (Gun, Laser, Flamethrower, Rocket, Tesla, Railgun)
+        else if (id.includes("turret")) {
+          const isLaser = id.includes("laser");
+          const isFlame = id.includes("flame");
+          const isRocket = id.includes("rocket");
+          const isTesla = id.includes("tesla");
+          const isRailgun = id.includes("railgun");
+
+          // Heavy armored base platform
+          ctx.fillStyle = "#2c3e50";
           ctx.beginPath();
           ctx.arc(px + TILE / 2, py + TILE / 2, 10, 0, Math.PI * 2);
           ctx.fill();
-          // Science Laser Beam Pulse
+
+          // Swiveling Turret Head (Auto-aims or rotates)
+          const turretAngle = Date.now() / 800;
+          ctx.save();
+          ctx.translate(px + TILE / 2, py + TILE / 2);
+          ctx.rotate(turretAngle);
+
+          ctx.fillStyle = isLaser ? "#e74c3c" : isFlame ? "#d35400" : isRocket ? "#f39c12" : isTesla ? "#00d2d3" : isRailgun ? "#2980b9" : "#7f8c8d";
+          ctx.fillRect(-4, -4, 8, 8);
+
+          // Twin Gun / Laser Barrels
+          ctx.fillStyle = "#1e272c";
+          ctx.fillRect(2, -3, 10, 2.5);
+          ctx.fillRect(2, 0.5, 10, 2.5);
+
+          // Laser sight dot
+          if (isLaser) {
+            ctx.fillStyle = "rgba(231, 76, 60, 0.8)";
+            ctx.fillRect(12, -1, 3, 2);
+          }
+          ctx.restore();
+        }
+
+        // 8. Factorio Science Lab
+        else if (id.includes("lab")) {
+          ctx.fillStyle = "#1e272c";
+          ctx.fillRect(px + 2, py + 2, TILE - 4, TILE - 4);
+          ctx.fillStyle = "#3498db";
+          ctx.beginPath();
+          ctx.arc(px + TILE / 2, py + TILE / 2, 10, 0, Math.PI * 2);
+          ctx.fill();
           const pulse = Math.sin(Date.now() / 150) * 0.4 + 0.6;
           ctx.fillStyle = `rgba(46, 204, 113, ${pulse})`;
           ctx.beginPath();
@@ -6618,516 +6699,173 @@ export function draw(
           ctx.fill();
         }
 
-        // 6. Factorio Electrical Power Poles & Substations
-        else if (id === "power_pole" || id === "medium_power_pole" || id === "substation") {
-          const isMedium = id === "medium_power_pole";
-          const isSub = id === "substation";
-          ctx.fillStyle = isSub ? "#2c3e50" : isMedium ? "#7f8c8d" : "#795548";
-          ctx.fillRect(px + 14, py + 6, 4, 22);
-          ctx.fillRect(px + 6, py + 8, 20, 3);
-          ctx.fillStyle = "#3498db"; // insulators
-          ctx.fillRect(px + 7, py + 11, 3, 3);
-          ctx.fillRect(px + 22, py + 11, 3, 3);
+        // 9. Storage Chests (Factorio 5-color Logistic & Steel Chests)
+        else if (id.includes("chest") || id.includes("storage")) {
+          const chestColor = id.includes("requester") ? "#2980b9" : id.includes("active") ? "#9b59b6" : id.includes("passive") ? "#e74c3c" : id.includes("buffer") ? "#27ae60" : id.includes("steel") ? "#7f8c8d" : id.includes("iron") ? "#3498db" : "#873600";
+          ctx.fillStyle = chestColor;
+          ctx.fillRect(px + 4, py + 8, TILE - 8, TILE - 11);
+          ctx.fillStyle = "#f4d03f";
+          ctx.fillRect(px + 12, py + 16, 8, 4);
         }
 
-        // 7. Factorio Power Generators & Boilers
-        else if (id === "generator" || id === "boiler") {
+        // 10. Radar Station
+        else if (id.includes("radar")) {
+          ctx.fillStyle = "#2c3e50";
+          ctx.fillRect(px + 4, py + 12, TILE - 8, TILE - 14);
+          ctx.save();
+          ctx.translate(px + TILE / 2, py + 12);
+          ctx.rotate(Date.now() / 600);
+          ctx.fillStyle = "#3498db";
+          ctx.beginPath();
+          ctx.ellipse(0, 0, 10, 3, 0, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+        }
+
+        // 11. Boilers & Generators
+        else if (id.includes("boiler") || id.includes("generator") || id.includes("engine")) {
           ctx.fillStyle = "#34495e";
           ctx.fillRect(px + 2, py + 4, TILE - 4, TILE - 8);
           ctx.fillStyle = "#e67e22";
           ctx.fillRect(px + 4, py + 6, 8, 8);
-          ctx.fillStyle = "#bdc3c7"; // turbine vent
+          ctx.fillStyle = "#bdc3c7";
           ctx.beginPath();
           ctx.arc(px + 22, py + 16, 6, 0, Math.PI * 2);
           ctx.fill();
         }
 
-        // 8. Factorio Rocket Launch Silo
-        else if (id === "rocket_silo") {
-          ctx.fillStyle = "#1a1d20";
-          ctx.fillRect(px + 1, py + 1, TILE - 2, TILE - 2);
-          ctx.fillStyle = "#e74c3c";
-          ctx.beginPath();
-          ctx.arc(px + TILE / 2, py + TILE / 2, 12, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.fillStyle = "#ecf0f1";
-          ctx.fillRect(px + 13, py + 6, 6, 20);
-        }
-
-        // 9. Storage Chests
-        else if (id === "chest" || id === "iron_chest" || id === "steel_chest" || id === "logistics_chest") {
-          const chestColor = id === "logistics_chest" ? "#e74c3c" : id === "steel_chest" ? "#7f8c8d" : id === "iron_chest" ? "#3498db" : "#873600";
-          ctx.fillStyle = chestColor;
-          ctx.fillRect(px + 5, py + 9, TILE - 10, TILE - 12);
-          ctx.fillStyle = "#f4d03f";
-          ctx.fillRect(px + 13, py + 17, 6, 4);
-        }
-
-        // Farm Decor / Tools
-        else if (id === "torch") {
-          ctx.fillStyle = "#5c3a21";
-          ctx.fillRect(px + 15, py + 14, 2, 14);
-          const f = 5 + Math.sin(Date.now() / 90) * 2;
-          ctx.fillStyle = "#e67e22";
-          ctx.beginPath();
-          ctx.arc(px + 16, py + 10, f, 0, Math.PI * 2);
-          ctx.fill();
-        } else if (id === "scarecrow") {
-          ctx.fillStyle = "#eb984e";
-          ctx.fillRect(px + 8, py + 12, 16, 12);
-          ctx.fillStyle = "#873600";
-          ctx.fillRect(px + 4, py + 8, 24, 4);
-          ctx.fillRect(px + 10, py + 2, 12, 6);
-          ctx.fillStyle = "#5c3a21";
-          ctx.fillRect(px + 15, py + 24, 2, 8);
-        } else if (id === "sprinkler_basic" || id === "sprinkler_quality") {
-          ctx.fillStyle = id === "sprinkler_basic" ? "#2980b9" : "#f1c40f";
-          ctx.fillRect(px + 10, py + 18, 12, 8);
-          ctx.fillStyle = "#7f8c8d";
-          ctx.fillRect(px + 15, py + 8, 2, 10);
-          ctx.save();
-          ctx.translate(px + 16, py + 8);
-          ctx.rotate(Date.now() / 150);
-          ctx.fillStyle = "#95a5a6";
-          ctx.fillRect(-6, -1, 12, 2);
-          ctx.restore();
-        } else if (id === "furnace" || id === "stone_furnace" || id === "steel_furnace" || id === "electric_furnace") {
-          const isSteel = id === "steel_furnace";
-          const isElec = id === "electric_furnace";
-          ctx.fillStyle = isElec ? "#16a085" : isSteel ? "#34495e" : "#566573";
-          ctx.fillRect(px + 4, py + 4, TILE - 8, TILE - 4);
-          ctx.fillStyle = "#1a252f";
-          ctx.fillRect(px + 8, py + 14, TILE - 16, TILE - 18);
-          if (t.smeltActive) {
-            const glow = Math.sin(Date.now() / 90) * 0.3 + 0.7;
-            ctx.fillStyle = isElec ? `rgba(46, 204, 113, ${glow})` : `rgba(230, 126, 34, ${glow})`;
-            ctx.fillRect(px + 10, py + 16, 12, 8);
-          }
-        } else if (id === "solar_panel") {
+        // 12. Solar Panels & Accumulators
+        else if (id.includes("solar_panel")) {
           ctx.fillStyle = "#2980b9";
           ctx.fillRect(px + 2, py + 6, TILE - 4, TILE - 10);
           ctx.fillStyle = "#ecf0f1";
           ctx.fillRect(px + 14, py + 6, 2, TILE - 10);
           ctx.fillRect(px + 2, py + 14, TILE - 4, 2);
-        } else if (id === "battery") {
+        } else if (id.includes("battery") || id.includes("accumulator")) {
           ctx.fillStyle = "#27ae60";
-          ctx.fillRect(px + 8, py + 8, TILE - 16, TILE - 8);
+          ctx.fillRect(px + 6, py + 6, TILE - 12, TILE - 10);
           ctx.fillStyle = "#f1c40f";
-          ctx.fillRect(px + 12, py + 14, 8, 4);
-        } else if (id === "mailbox") {
-          ctx.fillStyle = "#7f8c8d";
-          ctx.fillRect(px + 10, py + 16, 12, 12);
-          ctx.fillStyle = "#2c3e50";
-          ctx.fillRect(px + 14, py + 28, 4, 4);
-          if (state.hasUnreadMail) {
-            ctx.fillStyle = "#e74c3c";
-            ctx.fillRect(px + 20, py + 10, 4, 6);
-          }
-        } else if (id === "pet_house" || id === "animal_house" || id === "worker_cabin") {
-          ctx.fillStyle = "#8d6e63";
-          ctx.fillRect(px + 4, py + 12, TILE - 8, TILE - 12);
-          ctx.fillStyle = "#c62828";
-          ctx.beginPath();
-          ctx.moveTo(px + 16, py + 2);
-          ctx.lineTo(px, py + 12);
-          ctx.lineTo(px + TILE, py + 12);
-          ctx.closePath();
-          ctx.fill();
-        }
-      }
-
-      // Render Growing Crops
-      if (t.cropId) {
-        const def = CROPS[t.cropId];
-        const days = def.growDays;
-        const currentAge = t.age;
-        const isMature = currentAge >= days;
-
-        const cropPx = px + TILE / 2;
-        const cropPy = py + TILE - 6;
-
-        let cropSway = 0;
-        if (t.lastRustleTime) {
-          const elapsed = Date.now() - t.lastRustleTime;
-          if (elapsed < 400) {
-            cropSway = Math.sin(elapsed * 0.05) * 3 * (1 - elapsed / 400);
-          }
-        }
-        const windSway = Math.sin(Date.now() / 450 + x * 0.5) * 1.2;
-        const totalSway = cropSway + windSway;
-
-        ctx.save();
-        ctx.translate(cropPx, cropPy);
-
-        if (currentAge === 0) {
-          ctx.fillStyle = "#d2b48c";
-          ctx.fillRect(-2, -2, 4, 3);
-        } else if (!isMature) {
-          const progress = currentAge / days;
-          const size = Math.floor(progress * 12) + 4;
-          ctx.fillStyle = def.stem;
-          ctx.fillRect(-3 + totalSway, -size, 6, size);
-          ctx.fillRect(-6 + totalSway, -size + 2, 3, 3);
-          ctx.fillRect(3 + totalSway, -size + 2, 3, 3);
-        } else {
-          ctx.fillStyle = def.stem;
-          ctx.fillRect(-4 + totalSway, -14, 8, 14);
-          ctx.fillStyle = def.accent;
-          ctx.beginPath();
-          ctx.arc(0 + totalSway, -14, 6, 0, Math.PI * 2);
-          ctx.fill();
-        }
-
-        ctx.restore();
-
-        if (t.watered || state.weather === "rainy") {
-          const cropGlisten = Math.sin(Date.now() / 400 + (x * 13 + y * 7));
-          if (cropGlisten > 0.85) {
-            ctx.fillStyle = "#ffffff";
-            ctx.fillRect(cropPx - 3 + totalSway, cropPy - 10, 1.5, 1.5);
-          }
+          ctx.fillRect(px + 11, py + 12, 10, 5);
         }
       }
     }
   }
 
-  // 3. Draw Farm Animals
-  if (!state.inMine) {
-    if (!state.animals) state.animals = [];
-    state.animals.forEach((animal) => {
-      if (!animal) return;
-      const ax = animal.x * TILE;
-      const ay = animal.y * TILE;
-
-      // Draw shadow under animal feet
-      ctx.fillStyle = "rgba(0, 0, 0, 0.2)";
-      ctx.beginPath();
-      ctx.ellipse(ax + 16, ay + 24, animal.type === "chick" ? 5 : 8, 3, 0, 0, Math.PI * 2);
-      ctx.fill();
-
-      const squish = 1 + Math.sin(Date.now() / 120) * 0.08;
-
-      ctx.save();
-      ctx.translate(ax + 16, ay + 24);
-      ctx.scale(squish, 2 - squish);
-
-      if (animal.type === "chick") {
-        ctx.fillStyle = "#f1c40f";
-        ctx.beginPath();
-        ctx.arc(0, -6, 6, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = "#e67e22";
-        ctx.fillRect(3, -8, 3, 2);
-        ctx.fillRect(-4, 0, 2, 2);
-        ctx.fillRect(2, 0, 2, 2);
-      } else {
-        ctx.fillStyle = "#ba4a00";
-        ctx.fillRect(-8, -12, 16, 12);
-        ctx.fillStyle = "#fff";
-        ctx.fillRect(-4, -9, 4, 4);
-        ctx.fillRect(2, -5, 3, 3);
-        ctx.fillStyle = "#ba4a00";
-        ctx.fillRect(4, -15, 6, 6);
-      }
-
-      ctx.restore();
-
-      if (animal.hasProduce && animal.type === "calf") {
-        ctx.fillStyle = "#fff";
-        ctx.font = "bold 9px monospace";
-        ctx.fillText("🥛", ax + 12, ay - 4);
-      }
-    });
-  }
-
-  // 3b. Draw Farm Pets
-  if (!state.inMine && state.pets) {
-    state.pets.forEach((pet) => {
-      if (!pet) return;
-      const px = pet.subX * TILE;
-      const py = pet.subY * TILE;
-
-      // Draw shadow under pet feet
-      ctx.fillStyle = "rgba(0, 0, 0, 0.25)";
-      ctx.beginPath();
-      ctx.ellipse(px + 16, py + 23, 7, 3, 0, 0, Math.PI * 2);
-      ctx.fill();
-
-      const squish = 1 + Math.sin(Date.now() / 150 + pet.friendship) * 0.05;
-
-      ctx.save();
-      ctx.translate(px + 16, py + 24);
-      ctx.scale(squish, 2 - squish);
-
-      if (pet.type === "dog") {
-        ctx.fillStyle = "#ffb74d";
-        ctx.fillRect(-6, -10, 12, 10);
-        ctx.fillStyle = "#e65100";
-        ctx.fillRect(-8, -12, 4, 5);
-        ctx.fillRect(4, -12, 4, 5);
-
-        const tailAngle = Math.sin(Date.now() / 80) * 0.3;
-        ctx.save();
-        ctx.translate(-5, -3);
-        ctx.rotate(tailAngle);
-        ctx.fillStyle = "#ffb74d";
-        ctx.fillRect(-4, -2, 4, 3);
-        ctx.restore();
-      } else {
-        ctx.fillStyle = "#b0bec5";
-        ctx.fillRect(-5, -9, 10, 9);
-        ctx.fillStyle = "#37474f";
-        ctx.beginPath();
-        ctx.moveTo(-5, -9);
-        ctx.lineTo(-2, -13);
-        ctx.lineTo(-1, -9);
-        ctx.fill();
-        ctx.beginPath();
-        ctx.moveTo(5, -9);
-        ctx.lineTo(2, -13);
-        ctx.lineTo(1, -9);
-        ctx.fill();
-      }
-
-      ctx.restore();
-
-      if (pet.pettedToday) {
-        ctx.fillStyle = "#fff";
-        ctx.font = "8px monospace";
-        ctx.textAlign = "center";
-        ctx.fillText("❤️", px + 16, py - 4);
-      }
-    });
-  }
-
-    // 3c. Draw Hired Workers
-  if (!state.inMine && state.workers) {
-    state.workers.forEach((worker) => {
-      if (!worker) return;
-      
-      const bounce = (Math.abs(worker.x - worker.subX) > 0.01 || Math.abs(worker.y - worker.subY) > 0.01) ? Math.sin(Date.now() / 100) * 2 : 0;
-      
-      const wx = worker.subX * TILE;
-      const wy = worker.subY * TILE - Math.abs(bounce);
-
-      // Draw shadow under worker feet (static on ground)
-      ctx.fillStyle = "rgba(0, 0, 0, 0.25)";
-      ctx.beginPath();
-      ctx.ellipse(worker.subX * TILE + 16, worker.subY * TILE + 26, 8, 3.5, 0, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Shirt + overalls
-      const isMovingW = Math.abs(worker.x - worker.subX) > 0.01 || Math.abs(worker.y - worker.subY) > 0.01;
-      const walkTimeW = isMovingW ? Date.now() / 80 : 0;
-      const leftLegW = isMovingW ? Math.sin(walkTimeW) * 3 : 0;
-      const rightLegW = isMovingW ? -Math.sin(walkTimeW) * 3 : 0;
-      
-      let dirW = "down";
-      const dxW = worker.x - worker.subX;
-      const dyW = worker.y - worker.subY;
-      if (Math.abs(dxW) > Math.abs(dyW)) dirW = dxW < 0 ? "left" : "right";
-      else if (Math.abs(dyW) > 0) dirW = dyW < 0 ? "up" : "down";
-      
-      ctx.fillStyle = "#2c3e50"; // legs
-      ctx.fillRect(wx + 9, wy + 26 + leftLegW, 6, 8 - leftLegW);
-      ctx.fillRect(wx + 17, wy + 26 + rightLegW, 6, 8 - rightLegW);
-
-      ctx.fillStyle = "#2196f3"; // overalls
-      ctx.fillRect(wx + 8, wy + 12, 16, 14);
-
-      ctx.fillStyle = "#ffdbac"; // head
-      ctx.fillRect(wx + 10, wy + 2, 12, 10);
-
-      ctx.fillStyle = "#f4d03f"; // hat brim
-      ctx.fillRect(wx + 6, wy + 1, 20, 2);
-      ctx.fillRect(wx + 11, wy - 3, 10, 4); // hat top
-      
-      // Eyes
-      ctx.fillStyle = "#000";
-      if (dirW === "down") {
-        ctx.fillRect(wx + 13, wy + 7, 2, 2);
-        ctx.fillRect(wx + 17, wy + 7, 2, 2);
-      } else if (dirW === "left") {
-        ctx.fillRect(wx + 12, wy + 7, 2, 2);
-      } else if (dirW === "right") {
-        ctx.fillRect(wx + 18, wy + 7, 2, 2);
-      }
-
-      
-      // Determine AI Icon
-      let icon = "🚶";
-      if (worker.energy <= 0) icon = "💤";
-      else if (worker.inventory) icon = worker.inventory.iconSymbol || "📦";
-      else if (worker.actionTimer > 0) {
-        if (worker.role === "farming") icon = "💧";
-        else if (worker.role === "woodcutting") icon = "🪓";
-        else if (worker.role === "mining") icon = "⛏️";
-        else if (worker.role === "water") icon = "🪣";
-      } else if (worker.statusText.includes("Idle")) icon = "💤";
-      else if (worker.statusText.includes("Seeking")) icon = "🔍";
-
-      // Draw AI Status Icon floating above head
-      ctx.font = "12px serif";
-      ctx.textAlign = "center";
-      ctx.fillText(icon, wx + 16, wy - 14);
-
-      // Status text banner
-      ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
-      ctx.fillRect(wx - 24, wy - 10, TILE + 48, 11);
-      ctx.fillStyle = "#fff";
-      ctx.font = "bold 7px monospace";
-      ctx.fillText(`${worker.name}: ${worker.statusText}`, wx + TILE / 2, wy - 2);
-    });
-  }
-
-  // 4. Draw NPCs
-  if (!state.inMine) {
-    Object.keys(NPCS).forEach((id) => {
-      const npc = NPCS[id];
-      const target = getNPCDestination(id, state.time);
-      const nx = target.x * TILE;
-      const ny = target.y * TILE;
-
-      // Shadow under NPC
-      ctx.fillStyle = "rgba(0, 0, 0, 0.25)";
-      ctx.beginPath();
-      ctx.ellipse(nx + 16, ny + 22, 8, 3.5, 0, 0, Math.PI * 2);
-      ctx.fill();
-
-      ctx.fillStyle = npc.color;
-      ctx.fillRect(nx + 8, ny + 8, 16, 16);
-      ctx.fillStyle = "#f5d0a9";
-      ctx.fillRect(nx + 10, ny + 2, 12, 8);
-      ctx.fillStyle = npc.portraitColor;
-      ctx.fillRect(nx + 9, ny, 14, 4);
-
-      ctx.fillStyle = "rgba(0,0,0,0.5)";
-      ctx.fillRect(nx - 6, ny - 14, TILE + 12, 12);
-      ctx.fillStyle = "#fff";
-      ctx.font = "8px monospace";
-      ctx.textAlign = "center";
-      ctx.fillText(npc.name, nx + TILE / 2, ny - 5);
-    });
-  }
-
-  // 5. Draw Mine Enemies (Slimes)
-  if (state.inMine) {
-    state.mineEnemies.forEach((slime) => {
-      const sx = slime.x * TILE;
-      const sy = slime.y * TILE;
-
-      // Draw shadow under slime
-      ctx.fillStyle = "rgba(0, 0, 0, 0.3)";
-      ctx.beginPath();
-      ctx.ellipse(sx + 16, sy + 24, 9, 3.5, 0, 0, Math.PI * 2);
-      ctx.fill();
-
-      const squishX = 1 + Math.sin(Date.now() / 150) * 0.15;
-      const squishY = 1 - Math.sin(Date.now() / 150) * 0.15;
-
-      ctx.save();
-      ctx.translate(sx + 16, sy + 24);
-      ctx.scale(squishX, squishY);
-
-      ctx.fillStyle = slime.color;
-      ctx.beginPath();
-      ctx.arc(0, -6, 10, 0, Math.PI * 2);
-      ctx.fill();
-
-      ctx.fillStyle = "#000";
-      ctx.fillRect(-5, -9, 2, 2);
-      ctx.fillRect(3, -9, 2, 2);
-
-      ctx.restore();
-
-      if (slime.hp < slime.maxHp) {
-        ctx.fillStyle = "rgba(0,0,0,0.5)";
-        ctx.fillRect(sx + 4, sy - 8, 24, 4);
-        const percent = slime.hp / slime.maxHp;
-        ctx.fillStyle = "#e74c3c";
-        ctx.fillRect(sx + 4, sy - 8, 24 * percent, 4);
-      }
-    });
-  }
-
-
-  // Render Zones overlay
+  // ==========================================
+  // REAL-TIME POWER GRID COPPER TRANSMISSION WIRES
+  // ==========================================
+  const powerPoles: { x: number; y: number }[] = [];
   for (let y = startRow; y < endRow; y++) {
     for (let x = startCol; x < endCol; x++) {
-      const t = currentGrid[y][x];
-      if (t.zone) {
-         const px = x * TILE;
-         const py = y * TILE;
-         ctx.fillStyle = 
-           t.zone === "farming" ? "rgba(46, 204, 113, 0.3)" :
-           t.zone === "mining" ? "rgba(149, 165, 166, 0.3)" :
-           t.zone === "woodcutting" ? "rgba(211, 84, 0, 0.3)" :
-           "rgba(52, 152, 219, 0.3)";
-         ctx.fillRect(px, py, TILE, TILE);
+      const t = currentGrid[y]?.[x];
+      if (t && t.kind === "placed_item" && (t.placedItemId?.includes("power_pole") || t.placedItemId?.includes("substation") || t.placedItemId?.includes("pole"))) {
+        powerPoles.push({ x: x * TILE + 16, y: y * TILE + 8 });
       }
     }
   }
 
-  // 6. Draw Player
-  const isMoving = Math.abs(p.x - (p.subX ?? p.x)) > 0.01 || Math.abs(p.y - (p.subY ?? p.y)) > 0.01;
-  const walkTime = isMoving ? Date.now() / 80 : 0;
-  const walkBob = isMoving ? Math.sin(walkTime * 2) * 2 : 0;
-  const leftLegOffset = isMoving ? Math.sin(walkTime) * 3 : 0;
-  const rightLegOffset = isMoving ? -Math.sin(walkTime) * 3 : 0;
-
-  // Draw shadow under player
-  ctx.fillStyle = "rgba(0, 0, 0, 0.25)";
-  ctx.beginPath();
-  ctx.ellipse(playerPx, playerPy + 16, 9, 3.5, 0, 0, Math.PI * 2);
-  ctx.fill();
-
-  // Draw legs
-  ctx.fillStyle = "#2c3e50";
-  ctx.fillRect(playerPx - 7, playerPy + 10 + leftLegOffset, 6, 8 - leftLegOffset);
-  ctx.fillRect(playerPx + 1, playerPy + 10 + rightLegOffset, 6, 8 - rightLegOffset);
-
-  // Body / Shirt
-  ctx.fillStyle = "#e74c3c";
-  ctx.fillRect(playerPx - 8, playerPy - 4 + walkBob, 16, 14);
-
-  // Head / Skin
-  ctx.fillStyle = "#f5d0a9";
-  ctx.fillRect(playerPx - 6, playerPy - 14 + walkBob, 12, 10);
-
-  // Hair
-  ctx.fillStyle = "#5c3a21";
-  ctx.fillRect(playerPx - 6, playerPy - 12 + walkBob, 2, 8);
-  ctx.fillRect(playerPx + 4, playerPy - 12 + walkBob, 2, 8);
-
-  // Straw Hat
-  ctx.fillStyle = "#d2b48c";
-  ctx.fillRect(playerPx - 9, playerPy - 15 + walkBob, 18, 2);
-  ctx.fillStyle = "#a0522d";
-  ctx.fillRect(playerPx - 6, playerPy - 17 + walkBob, 12, 2);
-  ctx.fillStyle = "#d2b48c";
-  ctx.fillRect(playerPx - 5, playerPy - 21 + walkBob, 10, 4);
-
-  // Eyes
-  ctx.fillStyle = "#000";
-  if (p.dir === "down") {
-    ctx.fillRect(playerPx - 3, playerPy - 9 + walkBob, 2, 2);
-    ctx.fillRect(playerPx + 1, playerPy - 9 + walkBob, 2, 2);
-  } else if (p.dir === "up") {
-    ctx.fillStyle = "#5c3a21";
-    ctx.fillRect(playerPx - 6, playerPy - 14 + walkBob, 12, 8);
-  } else if (p.dir === "left") {
-    ctx.fillRect(playerPx - 4, playerPy - 9 + walkBob, 2, 2);
-  } else if (p.dir === "right") {
-    ctx.fillRect(playerPx + 2, playerPy - 9 + walkBob, 2, 2);
+  if (powerPoles.length > 1) {
+    ctx.strokeStyle = "#d35400";
+    ctx.lineWidth = 1.2;
+    for (let i = 0; i < powerPoles.length; i++) {
+      for (let j = i + 1; j < powerPoles.length; j++) {
+        const p1 = powerPoles[i];
+        const p2 = powerPoles[j];
+        const dist = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+        if (dist <= 9 * TILE) {
+          const midX = (p1.x + p2.x) / 2;
+          const midY = (p1.y + p2.y) / 2 + Math.min(dist * 0.15, 8); // realistic catenary sag
+          ctx.beginPath();
+          ctx.moveTo(p1.x, p1.y);
+          ctx.quadraticCurveTo(midX, midY, p2.x, p2.y);
+          ctx.stroke();
+        }
+      }
+    }
   }
 
-  // 7. Draw carry item above head
+  // ==========================================
+  // 6. DRAW FACTORIO ENGINEER CHARACTER
+  // ==========================================
+  const isMoving = Math.abs(p.x - (p.subX ?? p.x)) > 0.01 || Math.abs(p.y - (p.subY ?? p.y)) > 0.01;
+  const walkTime = isMoving ? Date.now() / 70 : 0;
+  const walkBob = isMoving ? Math.sin(walkTime * 2) * 1.8 : 0;
+  const leftLegOffset = isMoving ? Math.sin(walkTime) * 4 : 0;
+  const rightLegOffset = isMoving ? -Math.sin(walkTime) * 4 : 0;
+
+  // Character Shadow
+  ctx.fillStyle = "rgba(0, 0, 0, 0.35)";
+  ctx.beginPath();
+  ctx.ellipse(playerPx, playerPy + 16, 10, 4, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Mechanical Survival Backpack with Status LED
+  ctx.fillStyle = "#2c3e50";
+  ctx.fillRect(playerPx - 9, playerPy - 6 + walkBob, 18, 12);
+  ctx.fillStyle = "#2ecc71"; // green power active LED
+  ctx.fillRect(playerPx - 7, playerPy - 4 + walkBob, 3, 3);
+
+  // Armored Hazard Suit Legs & Steel Boots
+  ctx.fillStyle = "#34495e";
+  ctx.fillRect(playerPx - 7, playerPy + 9 + leftLegOffset, 5.5, 9 - leftLegOffset);
+  ctx.fillRect(playerPx + 1.5, playerPy + 9 + rightLegOffset, 5.5, 9 - rightLegOffset);
+  ctx.fillStyle = "#1b2631"; // steel toe caps
+  ctx.fillRect(playerPx - 8, playerPy + 16 + leftLegOffset, 6.5, 2.5);
+  ctx.fillRect(playerPx + 1.5, playerPy + 16 + rightLegOffset, 6.5, 2.5);
+
+  // Armored Hazard Suit Torso (Khaki/Olive Hazard Suit with Yellow Stripes)
+  ctx.fillStyle = "#4a5332";
+  ctx.fillRect(playerPx - 7.5, playerPy - 5 + walkBob, 15, 14);
+  ctx.fillStyle = "#f39c12"; // caution hazard harness
+  ctx.fillRect(playerPx - 5, playerPy - 3 + walkBob, 2, 10);
+  ctx.fillRect(playerPx + 3, playerPy - 3 + walkBob, 2, 10);
+
+  // Engineer Combat Helmet
+  ctx.fillStyle = "#34495e";
+  ctx.fillRect(playerPx - 6, playerPy - 15 + walkBob, 12, 10);
+
+  // Factorio Iconic Orange Reflective Visor
+  ctx.fillStyle = "#e67e22";
+  if (p.dir === "down") {
+    ctx.fillRect(playerPx - 4, playerPy - 12 + walkBob, 8, 4);
+    ctx.fillStyle = "#f39c12";
+    ctx.fillRect(playerPx - 3, playerPy - 11 + walkBob, 3, 2);
+  } else if (p.dir === "up") {
+    ctx.fillStyle = "#2c3e50";
+    ctx.fillRect(playerPx - 6, playerPy - 15 + walkBob, 12, 6);
+  } else if (p.dir === "left") {
+    ctx.fillRect(playerPx - 5.5, playerPy - 12 + walkBob, 5, 4);
+  } else if (p.dir === "right") {
+    ctx.fillRect(playerPx + 0.5, playerPy - 12 + walkBob, 5, 4);
+  }
+
+  // Weapon in Hands / Mining Laser targeting beam
+  const heldItem = state.inventory[state.hotbarIndex];
+  if (heldItem && (heldItem.type === "weapon" || heldItem.type === "tool")) {
+    const { dx, dy } = getDirectionVector(p.dir);
+    const weaponX = playerPx + dx * 10;
+    const weaponY = playerPy + dy * 10;
+
+    // Laser Sight Beam
+    ctx.strokeStyle = "rgba(231, 76, 60, 0.45)";
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.moveTo(weaponX, weaponY);
+    ctx.lineTo(weaponX + dx * 48, weaponY + dy * 48);
+    ctx.stroke();
+
+    // Weapon body
+    ctx.fillStyle = "#1e272c";
+    ctx.fillRect(weaponX - 2, weaponY - 2, 5, 5);
+  }
+
+  // 7. Carry Item above head
   if (state.harvestLiftingTimer > 0 && state.carryItem) {
     ctx.fillStyle = state.carryItem.iconColor;
     ctx.font = "20px monospace";
     ctx.textAlign = "center";
     ctx.fillText(
-      state.carryItem.iconSymbol || "🥬",
+      state.carryItem.iconSymbol || "⚙️",
       playerPx,
       playerPy - 24
     );

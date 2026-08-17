@@ -4005,7 +4005,7 @@ function updateScienceLab(tile: Tile, state: GameState, dt: number, powerSatisfa
 }
 
 export function updateEntities(state: GameState, dt: number): void {
-  // 1. Calculate Power Grid Metrics across the entire farm map
+  // 1. Calculate Power Grid Metrics across the entire factory map
   let totalGenerationKw = 0;
   let totalDemandKw = 0;
   const hours = state.time / 60;
@@ -4016,24 +4016,34 @@ export function updateEntities(state: GameState, dt: number): void {
       const tile = state.tiles[y]?.[x];
       if (tile && tile.kind === "placed_item" && tile.placedItemId) {
         const id = tile.placedItemId;
-        if (id === "generator") {
-          totalGenerationKw += 500;
+        if (id === "generator" || id === "steam_engine") {
+          totalGenerationKw += 900;
+        } else if (id === "steam_turbine") {
+          totalGenerationKw += 5800;
+        } else if (id === "nuclear_reactor") {
+          totalGenerationKw += 40000;
+        } else if (id === "fusion_generator" || id === "fusion_reactor") {
+          totalGenerationKw += 250000;
         } else if (id === "solar_panel" && isDay) {
           totalGenerationKw += 60;
-        } else if (id === "electric_drill") {
-          totalDemandKw += 90;
+        } else if (id.includes("drill")) {
+          totalDemandKw += id.includes("big") ? 300 : 90;
         } else if (id === "assembling_machine_1") {
           totalDemandKw += 75;
-        } else if (id === "assembling_machine_2") {
+        } else if (id === "assembling_machine_2" || id === "chemical_plant") {
           totalDemandKw += 150;
-        } else if (id === "assembling_machine_3") {
+        } else if (id === "assembling_machine_3" || id === "oil_refinery" || id === "centrifuge") {
           totalDemandKw += 375;
-        } else if (id === "electric_furnace") {
+        } else if (id === "electric_furnace" || id === "foundry") {
           totalDemandKw += 180;
-        } else if (id === "science_lab") {
+        } else if (id === "science_lab" || id === "biolab") {
           totalDemandKw += 60;
-        } else if (id === "inserter" || id === "fast_inserter" || id === "long_inserter" || id === "filter_inserter") {
-          totalDemandKw += 15;
+        } else if (id.includes("inserter")) {
+          totalDemandKw += id.includes("stack") ? 45 : id.includes("fast") ? 30 : 15;
+        } else if (id.includes("turret") && id.includes("laser")) {
+          totalDemandKw += 1200;
+        } else if (id.includes("radar")) {
+          totalDemandKw += 300;
         }
       }
     }
@@ -4055,17 +4065,17 @@ export function updateEntities(state: GameState, dt: number): void {
       if (!tile || tile.kind !== "placed_item" || !tile.placedItemId) continue;
 
       const id = tile.placedItemId;
-      if (id === "transport_belt" || id === "fast_transport_belt") {
+      if (id.includes("belt") || id.includes("loader")) {
         updateTransportBelt(tile, state.tiles, x, y, dt);
-      } else if (id === "burner_drill" || id === "electric_drill") {
+      } else if (id.includes("drill")) {
         updateMiningDrill(tile, state.tiles, x, y, dt, satisfaction);
-      } else if (id === "inserter" || id === "fast_inserter" || id === "long_inserter" || id === "filter_inserter") {
+      } else if (id.includes("inserter")) {
         updateInserter(tile, state.tiles, x, y, dt, satisfaction);
-      } else if (id.startsWith("assembling_machine") || id === "chemical_plant") {
+      } else if (id.includes("assembling_machine") || id.includes("chemical") || id.includes("refinery") || id.includes("centrifuge") || id.includes("electromagnetic") || id.includes("cryogenic") || id.includes("foundry") || id.includes("biochamber")) {
         updateAssemblingMachine(tile, state.tiles, x, y, dt, satisfaction);
-      } else if (id === "furnace" || id === "stone_furnace" || id === "steel_furnace" || id === "electric_furnace") {
+      } else if (id.includes("furnace") || id === "furnace") {
         tickFurnace(tile, dt, satisfaction);
-      } else if (id === "science_lab") {
+      } else if (id.includes("lab")) {
         updateScienceLab(tile, state, dt, satisfaction);
       }
     }

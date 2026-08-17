@@ -345,6 +345,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [showTouchControls, setShowTouchControls] = useState(false);
+  const [radarExpanded, setRadarExpanded] = useState(true);
   const [canvasSize, setCanvasSize] = useState({ width: 704, height: 480 });
   const mainContainerRef = useRef<HTMLDivElement | null>(null);
   // Zoning Mode
@@ -355,6 +356,29 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
   const [hoveredItem, setHoveredItem] = useState<Item | null>(null);
 
   const chargingToolRef = useRef<{ toolId: string; startTime: number; maxLevel: number } | null>(null);
+  const actionHoldIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  const startContinuousAction = () => {
+    if (actionHoldIntervalRef.current) clearInterval(actionHoldIntervalRef.current);
+    const doAction = () => {
+      setState((prev) => {
+        const next = structuredClone(prev);
+        const act = interact(next, 1);
+        if (act.particles.length > 0) particlesRef.current.push(...act.particles);
+        if (act.message) toast(act.message);
+        return next;
+      });
+    };
+    doAction();
+    actionHoldIntervalRef.current = setInterval(doAction, 180);
+  };
+
+  const stopContinuousAction = () => {
+    if (actionHoldIntervalRef.current) {
+      clearInterval(actionHoldIntervalRef.current);
+      actionHoldIntervalRef.current = null;
+    }
+  };
 
   // Detect mobile device on mount
   useEffect(() => {
@@ -362,6 +386,9 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
       const isTouch = typeof window !== "undefined" && ("ontouchstart" in window || navigator.maxTouchPoints > 0 || window.innerWidth < 768);
       setIsMobile(isTouch);
       setShowTouchControls(isTouch);
+      if (window.innerWidth < 640) {
+        setRadarExpanded(false); // compact radar by default on small mobile screens
+      }
     };
     checkMobile();
     window.addEventListener("resize", checkMobile);
@@ -2767,36 +2794,35 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
         )}
 
         {/* Floating Top-Right Radar / Minimap & Info Panel */}
-        <div className="absolute top-3 right-3 z-20 flex flex-col gap-1.5 w-[160px] bg-[#202224]/90 border border-slate-700 p-1 font-mono text-[9px] text-slate-200 shadow-xl select-none">
-          {/* Header Title */}
-          <div className="flex justify-between items-center px-1 text-slate-400 border-b border-slate-700/80 pb-0.5">
-            <span className="font-bold tracking-wider text-[#ff9200]">RADAR COMPASS</span>
+        <div className="absolute top-3 right-3 z-20 flex flex-col gap-1 w-[140px] sm:w-[160px] bg-[#202224]/90 border border-slate-700 p-1 font-mono text-[9px] text-slate-200 shadow-xl select-none">
+          {/* Header Title with collapse toggle */}
+          <div
+            onClick={() => setRadarExpanded(prev => !prev)}
+            className="flex justify-between items-center px-1 text-slate-400 border-b border-slate-700/80 pb-0.5 cursor-pointer hover:text-white"
+          >
+            <span className="font-bold tracking-wider text-[#ff9200]">RADAR {radarExpanded ? "▲" : "▼"}</span>
             <span>{state.weather === "rainy" ? "🌧" : "☀️"}</span>
           </div>
 
-          {/* Minimap Canvas Container */}
-          <div className="w-[150px] h-[150px] bg-[#141517] border border-slate-800 relative mx-auto flex items-center justify-center">
-            <canvas
-              ref={minimapRef}
-              width={148}
-              height={148}
-              className="block"
-              style={{ imageRendering: "pixelated" }}
-            />
-          </div>
+          {/* Minimap Canvas Container (collapsible) */}
+          {radarExpanded && (
+            <div className="w-[130px] h-[130px] sm:w-[150px] sm:h-[150px] bg-[#141517] border border-slate-800 relative mx-auto flex items-center justify-center">
+              <canvas
+                ref={minimapRef}
+                width={148}
+                height={148}
+                className="block w-full h-full"
+                style={{ imageRendering: "pixelated" }}
+              />
+            </div>
+          )}
 
           {/* Dashboard stats */}
           <div className="flex flex-col gap-0.5 px-1 py-0.5 leading-normal text-slate-300">
             <div className="flex justify-between">
               <span>LOC:</span>
-              <span className="font-bold text-slate-100 truncate max-w-[100px]">
+              <span className="font-bold text-slate-100 truncate max-w-[80px] sm:max-w-[100px]">
                 {state.inMine ? `MINES (L${state.mineDepth})` : "MEADOW FARM"}
-              </span>
-            </div>
-            <div className="flex justify-between">
-              <span>DATE:</span>
-              <span className="font-bold text-slate-100 capitalize">
-                {state.season} D{state.day}
               </span>
             </div>
             <div className="flex justify-between">
@@ -2811,8 +2837,8 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
         </div>
 
         {/* Bottom-Center Factorio Hotbar */}
-        <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-20 flex flex-col items-center gap-1">
-          <div className="flex items-center gap-1 bg-[#202224]/90 border border-slate-700 p-1 shadow-2xl">
+        <div className="absolute bottom-2 sm:bottom-3 left-1/2 -translate-x-1/2 z-20 flex flex-col items-center gap-1 max-w-[98%]">
+          <div className="flex items-center gap-0.5 sm:gap-1 bg-[#202224]/90 border border-slate-700 p-0.5 sm:p-1 shadow-2xl">
             {state.inventory.slice(0, 10).map((item, idx) => {
               const selected = state.hotbarIndex === idx;
               const slotKey = idx === 9 ? "0" : (idx + 1).toString();
@@ -2820,29 +2846,29 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                 <button
                   key={idx}
                   onClick={() => setState((prev) => ({ ...prev, hotbarIndex: idx }))}
-                  className={`relative flex flex-col items-center justify-center w-[46px] h-[46px] transition-all cursor-pointer select-none rounded-none ${selected
-                      ? "border-2 border-[#ff9200] bg-[#ff9200]/15 scale-[1.08] shadow-[0_0_8px_rgba(255,146,0,0.5)] z-10"
+                  className={`relative flex flex-col items-center justify-center w-[30px] h-[30px] sm:w-[44px] sm:h-[44px] transition-all cursor-pointer select-none rounded-none ${selected
+                      ? "border-2 border-[#ff9200] bg-[#ff9200]/20 scale-[1.06] shadow-[0_0_8px_rgba(255,146,0,0.5)] z-10"
                       : "border border-slate-700 bg-[#141517] hover:bg-slate-800"
                     }`}
                 >
                   {/* Slot numeric shortcut overlay */}
-                  <span className="absolute top-0.5 left-1 text-[8px] font-bold text-slate-500 leading-none">
+                  <span className="absolute top-0.5 left-0.5 text-[7px] sm:text-[8px] font-bold text-slate-500 leading-none">
                     {slotKey}
                   </span>
 
                   {item ? (
                     <>
-                      <span className="text-2xl mt-1 select-none" style={{ textShadow: "1px 1px 0px rgba(0,0,0,0.5)" }}>
+                      <span className="text-sm sm:text-2xl mt-0.5 sm:mt-1 select-none" style={{ textShadow: "1px 1px 0px rgba(0,0,0,0.5)" }}>
                         {item.iconSymbol || "🎁"}
                       </span>
                       {item.count > 1 && (
-                        <span className="absolute bottom-0.5 right-1 px-0.5 bg-black/75 text-[8px] font-bold text-white font-mono leading-none">
+                        <span className="absolute bottom-0 right-0.5 px-0.5 bg-black/85 text-[7px] sm:text-[8px] font-bold text-white font-mono leading-none">
                           {item.count}
                         </span>
                       )}
                     </>
                   ) : (
-                    <span className="text-[10px] opacity-10 text-white font-mono">-</span>
+                    <span className="text-[8px] sm:text-[10px] opacity-10 text-white font-mono">-</span>
                   )}
                 </button>
               );
@@ -2894,8 +2920,10 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
               <button
                 onTouchStart={(e) => { e.preventDefault(); pressedKeysRef.current.add("w"); }}
                 onTouchEnd={(e) => { e.preventDefault(); pressedKeysRef.current.delete("w"); }}
+                onTouchCancel={() => pressedKeysRef.current.delete("w")}
                 onMouseDown={() => pressedKeysRef.current.add("w")}
                 onMouseUp={() => pressedKeysRef.current.delete("w")}
+                onMouseLeave={() => pressedKeysRef.current.delete("w")}
                 className="w-11 h-11 bg-[#1a222d]/90 active:bg-[#ff9200]/70 border-2 border-[#3b4c63] active:border-[#ff9200] rounded-t-lg flex items-center justify-center text-white text-base shadow-xl active:scale-95 transition-transform"
               >
                 ▲
@@ -2905,8 +2933,10 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                 <button
                   onTouchStart={(e) => { e.preventDefault(); pressedKeysRef.current.add("a"); }}
                   onTouchEnd={(e) => { e.preventDefault(); pressedKeysRef.current.delete("a"); }}
+                  onTouchCancel={() => pressedKeysRef.current.delete("a")}
                   onMouseDown={() => pressedKeysRef.current.add("a")}
                   onMouseUp={() => pressedKeysRef.current.delete("a")}
+                  onMouseLeave={() => pressedKeysRef.current.delete("a")}
                   className="w-11 h-11 bg-[#1a222d]/90 active:bg-[#ff9200]/70 border-2 border-[#3b4c63] active:border-[#ff9200] rounded-l-lg flex items-center justify-center text-white text-base shadow-xl active:scale-95 transition-transform"
                 >
                   ◀
@@ -2919,8 +2949,10 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                 <button
                   onTouchStart={(e) => { e.preventDefault(); pressedKeysRef.current.add("d"); }}
                   onTouchEnd={(e) => { e.preventDefault(); pressedKeysRef.current.delete("d"); }}
+                  onTouchCancel={() => pressedKeysRef.current.delete("d")}
                   onMouseDown={() => pressedKeysRef.current.add("d")}
                   onMouseUp={() => pressedKeysRef.current.delete("d")}
+                  onMouseLeave={() => pressedKeysRef.current.delete("d")}
                   className="w-11 h-11 bg-[#1a222d]/90 active:bg-[#ff9200]/70 border-2 border-[#3b4c63] active:border-[#ff9200] rounded-r-lg flex items-center justify-center text-white text-base shadow-xl active:scale-95 transition-transform"
                 >
                   ▶
@@ -2930,8 +2962,10 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
               <button
                 onTouchStart={(e) => { e.preventDefault(); pressedKeysRef.current.add("s"); }}
                 onTouchEnd={(e) => { e.preventDefault(); pressedKeysRef.current.delete("s"); }}
+                onTouchCancel={() => pressedKeysRef.current.delete("s")}
                 onMouseDown={() => pressedKeysRef.current.add("s")}
                 onMouseUp={() => pressedKeysRef.current.delete("s")}
+                onMouseLeave={() => pressedKeysRef.current.delete("s")}
                 className="w-11 h-11 bg-[#1a222d]/90 active:bg-[#ff9200]/70 border-2 border-[#3b4c63] active:border-[#ff9200] rounded-b-lg flex items-center justify-center text-white text-base shadow-xl active:scale-95 transition-transform"
               >
                 ▼
@@ -2980,18 +3014,15 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                 </button>
               </div>
 
-              {/* Primary Action Button (USE / ACTION / PLACE) */}
+              {/* Primary Action Button (USE / ACTION / PLACE) - supports continuous tap & hold */}
               <button
-                onClick={() => {
-                  setState((prev) => {
-                    const next = structuredClone(prev);
-                    const act = interact(next, 1);
-                    if (act.particles.length > 0) particlesRef.current.push(...act.particles);
-                    if (act.message) toast(act.message);
-                    return next;
-                  });
-                }}
-                className="w-14 h-14 bg-gradient-to-br from-emerald-600 to-teal-700 active:from-emerald-500 active:to-teal-600 border-2 border-emerald-300 text-white rounded-full flex flex-col items-center justify-center shadow-2xl active:scale-95 transition-transform font-extrabold"
+                onTouchStart={(e) => { e.preventDefault(); startContinuousAction(); }}
+                onTouchEnd={(e) => { e.preventDefault(); stopContinuousAction(); }}
+                onTouchCancel={stopContinuousAction}
+                onMouseDown={startContinuousAction}
+                onMouseUp={stopContinuousAction}
+                onMouseLeave={stopContinuousAction}
+                className="w-14 h-14 bg-gradient-to-br from-emerald-600 to-teal-700 active:from-emerald-500 active:to-teal-600 border-2 border-emerald-300 text-white rounded-full flex flex-col items-center justify-center shadow-2xl active:scale-95 transition-transform font-extrabold cursor-pointer"
               >
                 <span className="text-xl">⚡</span>
                 <span className="text-[8px] uppercase tracking-wider font-mono">ACTION</span>
@@ -2999,16 +3030,16 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
             </div>
 
             {/* Quick Hotbar Slot Switchers for Mobile */}
-            <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-30 flex items-center justify-between w-[95%] max-w-[340px] pointer-events-none">
+            <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-30 flex items-center justify-between w-[95%] max-w-[340px] pointer-events-none">
               <button
                 onClick={() => setState((prev) => ({ ...prev, hotbarIndex: (prev.hotbarIndex - 1 + 10) % 10 }))}
-                className="pointer-events-auto w-8 h-8 bg-slate-900/90 border border-slate-600 active:bg-[#ff9200] text-white rounded-full flex items-center justify-center font-bold text-xs shadow-lg"
+                className="pointer-events-auto w-7 h-7 sm:w-8 sm:h-8 bg-slate-900/90 border border-slate-600 active:bg-[#ff9200] text-white rounded-full flex items-center justify-center font-bold text-xs shadow-lg"
               >
                 ◀
               </button>
               <button
                 onClick={() => setState((prev) => ({ ...prev, hotbarIndex: (prev.hotbarIndex + 1) % 10 }))}
-                className="pointer-events-auto w-8 h-8 bg-slate-900/90 border border-slate-600 active:bg-[#ff9200] text-white rounded-full flex items-center justify-center font-bold text-xs shadow-lg"
+                className="pointer-events-auto w-7 h-7 sm:w-8 sm:h-8 bg-slate-900/90 border border-slate-600 active:bg-[#ff9200] text-white rounded-full flex items-center justify-center font-bold text-xs shadow-lg"
               >
                 ▶
               </button>

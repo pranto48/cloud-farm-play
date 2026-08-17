@@ -348,6 +348,14 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
   const [showTouchControls, setShowTouchControls] = useState(false);
   const [radarExpanded, setRadarExpanded] = useState(true);
   const [canvasSize, setCanvasSize] = useState({ width: 704, height: 480 });
+  const [zoom, setZoom] = useState<number>(1.0);
+  const zoomRef = useRef<number>(1.0);
+  zoomRef.current = zoom;
+
+  const handleZoomIn = () => setZoom((z) => Math.min(2.0, parseFloat((z + 0.25).toFixed(2))));
+  const handleZoomOut = () => setZoom((z) => Math.max(0.5, parseFloat((z - 0.25).toFixed(2))));
+  const handleZoomReset = () => setZoom(1.0);
+
   const mainContainerRef = useRef<HTMLDivElement | null>(null);
   // Zoning Mode
   const [zoningMode, setZoningMode] = useState<"none" | "farming" | "mining" | "woodcutting" | "water" | "erase">("none");
@@ -554,33 +562,37 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
 
     const scaleX = canvasSize.width / rect.width;
     const scaleY = canvasSize.height / rect.height;
-    const canvasX = clickX * scaleX;
-    const canvasY = clickY * scaleY;
+    const z = zoomRef.current || 1.0;
+    const canvasX = (clickX * scaleX) / z;
+    const canvasY = (clickY * scaleY) / z;
 
     const p = stateRef.current.player;
     const pSubX = p.subX !== undefined ? p.subX : p.x;
     const pSubY = p.subY !== undefined ? p.subY : p.y;
 
+    const effectiveWidth = canvasSize.width / z;
+    const effectiveHeight = canvasSize.height / z;
+
     const gridCols = stateRef.current.inHouse ? 10 : (stateRef.current.inMine ? 24 : COLS);
     const gridRows = stateRef.current.inHouse ? 10 : (stateRef.current.inMine ? 24 : ROWS);
 
     let cameraX = 0;
-    if (gridCols * TILE < canvasSize.width) {
-      cameraX = -(canvasSize.width - gridCols * TILE) / 2;
+    if (gridCols * TILE < effectiveWidth) {
+      cameraX = -(effectiveWidth - gridCols * TILE) / 2;
     } else {
       cameraX = Math.max(
         0,
-        Math.min(gridCols * TILE - canvasSize.width, pSubX * TILE + 16 - canvasSize.width / 2)
+        Math.min(gridCols * TILE - effectiveWidth, pSubX * TILE + 16 - effectiveWidth / 2)
       );
     }
 
     let cameraY = 0;
-    if (gridRows * TILE < canvasSize.height) {
-      cameraY = -(canvasSize.height - gridRows * TILE) / 2;
+    if (gridRows * TILE < effectiveHeight) {
+      cameraY = -(effectiveHeight - gridRows * TILE) / 2;
     } else {
       cameraY = Math.max(
         0,
-        Math.min(gridRows * TILE - canvasSize.height, pSubY * TILE + 16 - canvasSize.height / 2)
+        Math.min(gridRows * TILE - effectiveHeight, pSubY * TILE + 16 - effectiveHeight / 2)
       );
     }
 
@@ -1025,10 +1037,15 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
       }
 
       // Draw game onto canvas
-      draw(ctx, stateRef.current, canvasSize.width, canvasSize.height, hoveredTileRef.current);
+      draw(ctx, stateRef.current, canvasSize.width, canvasSize.height, hoveredTileRef.current, zoomRef.current);
 
       // Draw particle overlay
       ctx.save();
+      const z = zoomRef.current || 1.0;
+      ctx.scale(z, z);
+      const effectiveW = canvasSize.width / z;
+      const effectiveH = canvasSize.height / z;
+
       const playerPos = stateRef.current.player;
       const pSubX = playerPos.subX !== undefined ? playerPos.subX : playerPos.x;
       const pSubY = playerPos.subY !== undefined ? playerPos.subY : playerPos.y;
@@ -1038,24 +1055,24 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
       const inBld = stateRef.current.inHouse || stateRef.current.inMine;
       let cameraX = 0;
       if (inBld) {
-        if (gridCols * TILE < canvasSize.width) {
-          cameraX = -(canvasSize.width - gridCols * TILE) / 2;
+        if (gridCols * TILE < effectiveW) {
+          cameraX = -(effectiveW - gridCols * TILE) / 2;
         } else {
-          cameraX = Math.max(0, Math.min(gridCols * TILE - canvasSize.width, pSubX * TILE + 16 - canvasSize.width / 2));
+          cameraX = Math.max(0, Math.min(gridCols * TILE - effectiveW, pSubX * TILE + 16 - effectiveW / 2));
         }
       } else {
-        cameraX = pSubX * TILE + 16 - canvasSize.width / 2;
+        cameraX = pSubX * TILE + 16 - effectiveW / 2;
       }
 
       let cameraY = 0;
       if (inBld) {
-        if (gridRows * TILE < canvasSize.height) {
-          cameraY = -(canvasSize.height - gridRows * TILE) / 2;
+        if (gridRows * TILE < effectiveH) {
+          cameraY = -(effectiveH - gridRows * TILE) / 2;
         } else {
-          cameraY = Math.max(0, Math.min(gridRows * TILE - canvasSize.height, pSubY * TILE + 16 - canvasSize.height / 2));
+          cameraY = Math.max(0, Math.min(gridRows * TILE - effectiveH, pSubY * TILE + 16 - effectiveH / 2));
         }
       } else {
-        cameraY = pSubY * TILE + 16 - canvasSize.height / 2;
+        cameraY = pSubY * TILE + 16 - effectiveH / 2;
       }
       ctx.translate(-cameraX, -cameraY);
 

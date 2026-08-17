@@ -4296,9 +4296,13 @@ export function draw(
   state: GameState,
   viewWidth: number,
   viewHeight: number,
-  hoveredTile?: { x: number; y: number } | null
+  hoveredTile?: { x: number; y: number } | null,
+  zoom: number = 1.0
 ) {
   ctx.imageSmoothingEnabled = false;
+
+  const effectiveWidth = viewWidth / zoom;
+  const effectiveHeight = viewHeight / zoom;
 
   const currentGrid = state.inHouse
     ? state.houseGrid!
@@ -4312,24 +4316,24 @@ export function draw(
 
   let cameraX = 0;
   if (state.inHouse || state.inMine) {
-    if (gridCols * TILE < viewWidth) {
-      cameraX = -(viewWidth - gridCols * TILE) / 2;
+    if (gridCols * TILE < effectiveWidth) {
+      cameraX = -(effectiveWidth - gridCols * TILE) / 2;
     } else {
-      cameraX = Math.max(0, Math.min(gridCols * TILE - viewWidth, playerPx - viewWidth / 2));
+      cameraX = Math.max(0, Math.min(gridCols * TILE - effectiveWidth, playerPx - effectiveWidth / 2));
     }
   } else {
-    cameraX = playerPx - viewWidth / 2;
+    cameraX = playerPx - effectiveWidth / 2;
   }
 
   let cameraY = 0;
   if (state.inHouse || state.inMine) {
-    if (gridRows * TILE < viewHeight) {
-      cameraY = -(viewHeight - gridRows * TILE) / 2;
+    if (gridRows * TILE < effectiveHeight) {
+      cameraY = -(effectiveHeight - gridRows * TILE) / 2;
     } else {
-      cameraY = Math.max(0, Math.min(gridRows * TILE - viewHeight, playerPy - viewHeight / 2));
+      cameraY = Math.max(0, Math.min(gridRows * TILE - effectiveHeight, playerPy - effectiveHeight / 2));
     }
   } else {
-    cameraY = playerPy - viewHeight / 2;
+    cameraY = playerPy - effectiveHeight / 2;
   }
 
   // Background
@@ -4337,12 +4341,13 @@ export function draw(
   ctx.fillRect(0, 0, viewWidth, viewHeight);
 
   ctx.save();
+  ctx.scale(zoom, zoom);
   ctx.translate(-cameraX, -cameraY);
 
   const startCol = Math.max(0, Math.floor(cameraX / TILE));
-  const endCol = Math.min(gridCols, Math.ceil((cameraX + viewWidth) / TILE));
+  const endCol = Math.min(gridCols, Math.ceil((cameraX + effectiveWidth) / TILE));
   const startRow = Math.max(0, Math.floor(cameraY / TILE));
-  const endRow = Math.min(gridRows, Math.ceil((cameraY + viewHeight) / TILE));
+  const endRow = Math.min(gridRows, Math.ceil((cameraY + effectiveHeight) / TILE));
 
   const phase = getTimePhase(state.time);
 
@@ -4431,29 +4436,34 @@ export function draw(
           ctx.fillRect(px + 8 + pathR * 12, py + 8 + pathR * 12, 2, 2);
         }
             } else if (t.kind === "water") {
-        // 1. Sandy beach shoreline
-        drawOrganicBlob(ctx, y, x, currentGrid, TILE, isWater, "#e5cbb3", 0.75);
-        // 2. Shallow water transition
-        drawOrganicBlob(ctx, y, x, currentGrid, TILE, isWater, "rgba(76, 129, 163, 0.8)", 0.6);
-        // 3. Deep water core
-        drawOrganicBlob(ctx, y, x, currentGrid, TILE, isWater, "rgba(41, 128, 185, 0.8)", 0.46);
+        // 1. Natural Organic Lake Sandy/Pebble Shore
+        drawOrganicBlob(ctx, y, x, currentGrid, TILE, isWater, "#c2a688", 0.85);
+        // 2. Lake Shelf Transition (Emerald / Turquoise)
+        drawOrganicBlob(ctx, y, x, currentGrid, TILE, isWater, "#136f63", 0.68);
+        // 3. Deep Crystal Lake Blue Core
+        drawOrganicBlob(ctx, y, x, currentGrid, TILE, isWater, "#032b43", 0.52);
 
-        // Animated wave ripples intersecting across the whole pond
-        const timeOffset = Date.now() / 600;
-        const waveX = Math.sin(timeOffset + y * 0.3) * 3;
-        const waveY = Math.cos(timeOffset + x * 0.3) * 3;
-        const alpha = Math.max(0, Math.sin(timeOffset * 2 + x + y)) * 0.3;
-        
-        ctx.fillStyle = `rgba(174, 214, 241, ${alpha})`;
-        ctx.fillRect(px + 8 + waveX, py + 12 + waveY, 12, 1.5);
-        ctx.fillRect(px + 14 - waveX, py + 22 - waveY, 8, 1.5);
+        // Animated Multi-Layer Water Caustics & Sun Shimmer
+        const timeOffset = Date.now() / 800;
+        const waveX1 = Math.sin(timeOffset + y * 0.4) * 4;
+        const waveY1 = Math.cos(timeOffset + x * 0.4) * 3;
+        const waveX2 = Math.cos(timeOffset * 1.5 + (x + y) * 0.3) * 3;
+        const waveY2 = Math.sin(timeOffset * 1.5 + (x - y) * 0.3) * 3;
+        const shimmerAlpha = Math.max(0.1, (Math.sin(timeOffset * 2.5 + x * 2 + y * 2) + 1) * 0.25);
 
-        // Animated foam edge where it touches non-water
-        if (y > 0 && currentGrid[y-1] && currentGrid[y-1][x].kind !== "water") {
-          const foamBob = Math.sin(Date.now() / 400 + x) * 1.5;
-          ctx.fillStyle = "rgba(255,255,255,0.4)";
+        // Soft Sun glint / Caustic Lines
+        ctx.fillStyle = `rgba(128, 255, 219, ${shimmerAlpha})`;
+        ctx.fillRect(px + 6 + waveX1, py + 10 + waveY1, 14, 1.8);
+        ctx.fillRect(px + 12 + waveX2, py + 20 + waveY2, 10, 1.6);
+        ctx.fillStyle = `rgba(255, 255, 255, ${shimmerAlpha * 0.8})`;
+        ctx.fillRect(px + 8 + waveX1, py + 10 + waveY1, 4, 1.8);
+
+        // Dynamic Edge Shore Foam with Gentle Bobbing
+        if (y > 0 && currentGrid[y - 1] && currentGrid[y - 1][x].kind !== "water") {
+          const foamBob = Math.sin(Date.now() / 450 + x * 1.5) * 1.8;
+          ctx.fillStyle = "rgba(224, 251, 252, 0.65)";
           ctx.beginPath();
-          ctx.ellipse(px + TILE/2, py + 4 + foamBob, TILE/2, 2, 0, 0, Math.PI * 2);
+          ctx.ellipse(px + TILE / 2, py + 4 + foamBob, TILE / 2, 2.5, 0, 0, Math.PI * 2);
           ctx.fill();
         }
 

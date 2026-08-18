@@ -6656,38 +6656,104 @@ export function draw(
           }
         }
 
-        // 4. Factorio Assembling Machines (Tiers 1-3 & Chemical Plants)
-        else if (id.includes("assembling_machine") || id.includes("chemical") || id.includes("refinery") || id.includes("foundry") || id.includes("electromagnetic")) {
+        // 4. Factorio Assembling Machines (Matching Attached Reference: 3 Interlocking Silver Cogs on Green Ribbed Base)
+        else if (id.includes("assembling_machine") || id.includes("foundry") || id.includes("electromagnetic")) {
           const isT3 = id.includes("3") || id.includes("foundry");
           const isT2 = id.includes("2") || id.includes("electromagnetic");
-          const isChem = id.includes("chemical") || id.includes("refinery");
-          const bodyColor = isChem ? "#16a085" : isT3 ? "#27ae60" : isT2 ? "#2980b9" : "#7f8c8d";
+          const baseColor = isT3 ? "#1e824c" : isT2 ? "#2980b9" : "#2e7d32";
+          const darkRibColor = isT3 ? "#145a32" : isT2 ? "#1b4f72" : "#1b5e20";
 
+          // Heavy Ground Chassis Base
           ctx.fillStyle = "#1e272c";
-          ctx.fillRect(px + 1, py + 1, TILE - 2, TILE - 2);
-          ctx.fillStyle = bodyColor;
+          ctx.fillRect(px + 2, py + 2, TILE - 4, TILE - 4);
+
+          // Olive Green Machine Housing
+          ctx.fillStyle = baseColor;
           ctx.fillRect(px + 3, py + 3, TILE - 6, TILE - 6);
 
-          // Spinning Heavy Machinery Cogs
-          ctx.save();
-          ctx.translate(px + TILE / 2, py + TILE / 2);
-          ctx.rotate(Date.now() / 200);
-          ctx.fillStyle = "#34495e";
-          ctx.fillRect(-7, -2.5, 14, 5);
-          ctx.fillRect(-2.5, -7, 5, 14);
-          ctx.fillStyle = "#ecf0f1";
-          ctx.beginPath();
-          ctx.arc(0, 0, 3.5, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.restore();
+          // 4 Vertical Ribs / Louvers on Lower Half
+          ctx.fillStyle = darkRibColor;
+          ctx.fillRect(px + 4, py + 18, 4, 9);
+          ctx.fillRect(px + 10, py + 18, 4, 9);
+          ctx.fillRect(px + 17, py + 18, 4, 9);
+          ctx.fillRect(px + 23, py + 18, 4, 9);
 
-          // Crafting Progress Indicator
+          // Recessed Upper Machinery Chamber (Rusty Bronze Interior)
+          ctx.fillStyle = "#8c531b";
+          ctx.fillRect(px + 5, py + 5, TILE - 10, 12);
+          ctx.fillStyle = "#b87333";
+          ctx.fillRect(px + 6, py + 6, TILE - 12, 10);
+
+          // 3 Interlocking Silver-White Gears / Cogs (Animated)
+          const cogRot = Date.now() / 150;
+          const drawCog = (cx: number, cy: number, radius: number, rot: number) => {
+            ctx.save();
+            ctx.translate(cx, cy);
+            ctx.rotate(rot);
+            ctx.fillStyle = "#ecf0f1";
+            ctx.beginPath();
+            ctx.arc(0, 0, radius, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = "#bdc3c7";
+            ctx.fillRect(-radius - 1, -1.5, (radius + 1) * 2, 3);
+            ctx.fillRect(-1.5, -radius - 1, 3, (radius + 1) * 2);
+            // Center axle hole
+            ctx.fillStyle = "#2c3e50";
+            ctx.beginPath();
+            ctx.arc(0, 0, 1.8, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+          };
+
+          // Gear 1 (Top Left)
+          drawCog(px + 10, py + 10, 4.2, cogRot);
+          // Gear 2 (Bottom Center)
+          drawCog(px + 15, py + 13, 3.8, -cogRot * 1.1);
+          // Gear 3 (Top Right)
+          drawCog(px + 20, py + 10, 4.2, cogRot);
+
+          // Crafting Progress Bar
           if (t.assemblerProgress !== undefined && t.assemblerProgress > 0) {
             ctx.fillStyle = "#000000";
-            ctx.fillRect(px + 4, py + TILE - 6, TILE - 8, 3);
+            ctx.fillRect(px + 4, py + TILE - 4, TILE - 8, 2.5);
             ctx.fillStyle = "#2ecc71";
-            ctx.fillRect(px + 4, py + TILE - 6, (TILE - 8) * t.assemblerProgress, 3);
+            ctx.fillRect(px + 4, py + TILE - 4, (TILE - 8) * t.assemblerProgress, 2.5);
           }
+        }
+
+        // 4b. Factorio Offshore Pump & Fluid In-Line Pumps (Matching Attached Reference: Dual Bronze Chambers & Pipes)
+        else if (id.includes("offshore_pump") || id.includes("pump") && !id.includes("jack")) {
+          // Machine Shadow & Metal Floor Base
+          ctx.fillStyle = "#1e272c";
+          ctx.fillRect(px + 2, py + 2, TILE - 4, TILE - 4);
+
+          // Interconnecting Grey Conduit Pipes with Joint Flanges
+          ctx.strokeStyle = "#7f8c8d";
+          ctx.lineWidth = 3.5;
+          ctx.beginPath();
+          ctx.arc(px + TILE / 2, py + TILE / 2, 10, 0, Math.PI * 2);
+          ctx.stroke();
+
+          // Left Main Bronze Distillation Chamber
+          ctx.fillStyle = "#d35400";
+          ctx.fillRect(px + 5, py + 8, 10, 16);
+          ctx.fillStyle = "#e67e22";
+          ctx.fillRect(px + 7, py + 10, 6, 12);
+          ctx.fillStyle = "#b84e12";
+          ctx.fillRect(px + 4, py + 6, 12, 3);
+
+          // Right Secondary Compression Chamber
+          ctx.fillStyle = "#d35400";
+          ctx.fillRect(px + 18, py + 5, 8, 12);
+          ctx.fillStyle = "#e67e22";
+          ctx.fillRect(px + 19, py + 6, 6, 9);
+          ctx.fillStyle = "#b84e12";
+          ctx.fillRect(px + 17, py + 4, 10, 2.5);
+
+          // Central Glass Fluid Sight Gauge
+          const waterFlow = (Math.sin(Date.now() / 120) + 1) * 0.5;
+          ctx.fillStyle = `rgba(52, 152, 219, ${0.5 + waterFlow * 0.4})`;
+          ctx.fillRect(px + 8, py + 12, 4, 7);
         }
 
         // 5. Factorio Smelting Furnaces (Stone, Steel, Electric, Foundry - Matching Attached Reference)

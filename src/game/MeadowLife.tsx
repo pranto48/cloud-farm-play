@@ -420,6 +420,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
   const [radarExpanded, setRadarExpanded] = useState(true);
   const [campaignWidgetOpen, setCampaignWidgetOpen] = useState(true);
   const [campaignMinimized, setCampaignMinimized] = useState(false);
+  const [campaignTab, setCampaignTab] = useState<"basics" | "advanced">("basics");
   const [canvasSize, setCanvasSize] = useState({ width: 704, height: 480 });
   const [zoom, setZoom] = useState<number>(1.0);
   const zoomRef = useRef<number>(1.0);
@@ -3191,13 +3192,23 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
           </div>
         )}
 
-        {/* Factorio Campaign / Starter Smelting Mission Widget */}
+        {/* Factorio Campaign / Starter & Advanced Mission Widget */}
         {campaignWidgetOpen && (
-          <div className="absolute top-14 left-3 z-20 max-w-[280px] bg-[#161a22]/95 border-2 border-orange-500/80 rounded-lg p-2.5 shadow-2xl backdrop-blur text-slate-100 font-mono text-xs select-none">
+          <div className="absolute top-14 left-3 z-20 max-w-[290px] bg-[#161a22]/95 border-2 border-orange-500/80 rounded-lg p-2.5 shadow-2xl backdrop-blur text-slate-100 font-mono text-xs select-none">
             <div className="flex items-center justify-between border-b border-orange-500/40 pb-1 mb-1.5">
-              <div className="font-black text-orange-400 flex items-center gap-1.5 text-[11px]">
-                <span>🚀</span>
-                <span>FACTORIO BASICS: SMELTING</span>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setCampaignTab("basics")}
+                  className={`text-[10px] font-bold px-1.5 py-0.5 rounded transition-all cursor-pointer ${campaignTab === "basics" ? "bg-orange-500 text-black" : "text-slate-400 hover:text-slate-200"}`}
+                >
+                  🚀 Basics
+                </button>
+                <button
+                  onClick={() => setCampaignTab("advanced")}
+                  className={`text-[10px] font-bold px-1.5 py-0.5 rounded transition-all cursor-pointer ${campaignTab === "advanced" ? "bg-orange-500 text-black" : "text-slate-400 hover:text-slate-200"}`}
+                >
+                  ⚙️ Advanced
+                </button>
               </div>
               <div className="flex items-center gap-1">
                 <button
@@ -3217,7 +3228,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
               </div>
             </div>
 
-            {!campaignMinimized && (
+            {!campaignMinimized && campaignTab === "basics" && (
               <>
                 <p className="text-[10px] text-amber-200/90 mb-1.5 leading-snug">
                   As an introduction to crafting, let's craft some simple iron plates.
@@ -3242,6 +3253,35 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                 </div>
                 <div className="mt-1.5 pt-1 border-t border-zinc-800 text-[9px] text-slate-400 italic">
                   💡 This entire process is referred to as 'smelting'. Copper ore must also be smelted.
+                </div>
+              </>
+            )}
+
+            {!campaignMinimized && campaignTab === "advanced" && (
+              <>
+                <p className="text-[10px] text-orange-300 mb-1.5 leading-snug">
+                  Crafting of items can be automated using Assembling machines.
+                </p>
+                <div className="space-y-1 text-[9.5px]">
+                  <div className="p-1 bg-zinc-900/80 rounded border border-zinc-800">
+                    <span className="text-orange-400 font-bold">1. </span>
+                    <span className="text-slate-200">Place an <b>Assembling machine</b> and select your desired recipe.</span>
+                  </div>
+                  <div className="p-1 bg-zinc-900/80 rounded border border-zinc-800">
+                    <span className="text-orange-400 font-bold">2. </span>
+                    <span className="text-slate-200">Supply ingredients continuously via <b>Belts & Inserters</b> into input slots.</span>
+                  </div>
+                  <div className="p-1 bg-zinc-900/80 rounded border border-zinc-800">
+                    <span className="text-orange-400 font-bold">3. </span>
+                    <span className="text-slate-200"><b>No Auto-Chain:</b> Each craft step needs a dedicated machine (e.g. Lamp needs Copper cable + Iron stick + Circuit assemblers).</span>
+                  </div>
+                  <div className="p-1 bg-zinc-900/80 rounded border border-zinc-800">
+                    <span className="text-orange-400 font-bold">4. </span>
+                    <span className="text-slate-200">Extract crafted items with <b>Output Inserters</b> for downstream usage.</span>
+                  </div>
+                </div>
+                <div className="mt-1.5 pt-1 border-t border-zinc-800 text-[9px] text-slate-400 italic">
+                  💡 Higher tiers of assembling machines are required for complex recipes & fluids.
                 </div>
               </>
             )}
@@ -6507,6 +6547,54 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
               </div>
               <div className="p-2 bg-orange-950/30 rounded border border-orange-500/20 text-[10px] text-orange-300/90 italic">
                 💡 This entire process is commonly referred to as 'smelting'. Copper ore must also be smelted.
+              </div>
+            </div>
+
+            {/* Factorio Advanced: Automated Assembly & Chain Crafting Card */}
+            <div className="p-3 bg-[#181a1f] border-2 border-emerald-500/70 rounded-lg space-y-2.5 shadow-md">
+              <div className="flex items-center justify-between border-b border-emerald-500/30 pb-1.5">
+                <h3 className="font-extrabold text-emerald-400 text-sm flex items-center gap-2">
+                  <span>⚙️</span> FACTORIO ADVANCED — AUTOMATED ASSEMBLY & CHAIN CRAFTING
+                </h3>
+                <span className="text-[10px] text-emerald-300 font-mono bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-500/30">
+                  wiki.factorio.com/Assembling_machine
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-200 leading-relaxed">
+                Crafting of items can be automated. Place an <b>Assembling machine</b>, select the recipe, and supply ingredients via belts and inserters.
+              </p>
+              <div className="space-y-1.5 text-[10px]">
+                <div className="p-2 bg-zinc-900 rounded border border-zinc-800 flex items-start gap-2">
+                  <span className="text-emerald-400 font-bold text-xs">1.</span>
+                  <div>
+                    <span className="font-bold text-slate-100">Recipe Selection & Machine Tiers: </span>
+                    <span className="text-zinc-300">Place an <b>Assembling machine</b> and select the recipe. Note that complex recipes & fluids require higher machine tiers (Assembling Machine 2/3).</span>
+                  </div>
+                </div>
+                <div className="p-2 bg-zinc-900 rounded border border-zinc-800 flex items-start gap-2">
+                  <span className="text-emerald-400 font-bold text-xs">2.</span>
+                  <div>
+                    <span className="font-bold text-slate-100">No Auto-Chain Crafting: </span>
+                    <span className="text-zinc-300">Unlike manual hand-crafting, each step requires its own dedicated assembly machine. For example, crafting a <b>Lamp</b> requires 1 machine for <b>Copper cable</b>, 1 for <b>Iron stick</b>, and 1 for <b>Electronic circuit</b>.</span>
+                  </div>
+                </div>
+                <div className="p-2 bg-zinc-900 rounded border border-zinc-800 flex items-start gap-2">
+                  <span className="text-emerald-400 font-bold text-xs">3.</span>
+                  <div>
+                    <span className="font-bold text-slate-100">Continuous Belt & Inserter Feeder: </span>
+                    <span className="text-zinc-300">To maintain non-stop production, feed ingredients continuously into input slots using <b>Transport Belts</b> and <b>Inserters</b>.</span>
+                  </div>
+                </div>
+                <div className="p-2 bg-zinc-900 rounded border border-zinc-800 flex items-start gap-2">
+                  <span className="text-emerald-400 font-bold text-xs">4.</span>
+                  <div>
+                    <span className="font-bold text-slate-100">Automated Extraction: </span>
+                    <span className="text-zinc-300">Manufactured items are extracted by <b>Output Inserters</b> and sent downstream for further factory usage or science labs.</span>
+                  </div>
+                </div>
+              </div>
+              <div className="p-2 bg-emerald-950/30 rounded border border-emerald-500/20 text-[10px] text-emerald-300/90 italic">
+                💡 Assembly machines cannot automatically chain-craft like the player avatar — build dedicated sub-assembly lines!
               </div>
             </div>
 

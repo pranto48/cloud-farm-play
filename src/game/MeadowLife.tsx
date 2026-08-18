@@ -5122,8 +5122,6 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
             </div>
           </div>
 
-          </div>
-
           <DialogFooter className="border-t border-[#2d3542] pt-2 mt-2 flex justify-end">
             <Button variant="outline" className="text-xs bg-[#161a20] border-slate-600 text-slate-300 hover:bg-[#202836] rounded-none font-mono" onClick={() => setInventoryOpen(false)}>
               Back to Game (E)

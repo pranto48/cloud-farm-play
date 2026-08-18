@@ -423,6 +423,123 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
   const handleZoomReset = () => setZoom(1.0);
 
   const mainContainerRef = useRef<HTMLDivElement | null>(null);
+  
+  // Factorio Save & Load Game Management State
+  const [saveLoadOpen, setSaveLoadOpen] = useState(false);
+  const [saveLoadTab, setSaveLoadTab] = useState<"load" | "save">("load");
+  const [saveNameInput, setSaveNameInput] = useState("");
+  const [saveSlots, setSaveSlots] = useState<{
+    id: string;
+    name: string;
+    timestamp: number;
+    day: number;
+    time: number;
+    season: string;
+    coins: number;
+    energy: number;
+    maxEnergy: number;
+    health: number;
+    maxHealth: number;
+    mineDepth: number;
+    machinesCount: number;
+    data: unknown;
+  }[]>([]);
+
+  const loadSavedSlotsFromStorage = () => {
+    try {
+      const raw = localStorage.getItem("meadow_life_factorio_saves");
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          setSaveSlots(parsed);
+          return;
+        }
+      }
+    } catch (e) {
+      console.error(e);
+    }
+    setSaveSlots([]);
+  };
+
+  useEffect(() => {
+    loadSavedSlotsFromStorage();
+  }, []);
+
+  const countPlacedMachines = (s: GameState) => {
+    let count = 0;
+    if (s.tiles) {
+      for (const row of s.tiles) {
+        for (const t of row) {
+          if (t && t.placedItemId) count++;
+        }
+      }
+    }
+    return count;
+  };
+
+  const handleSaveGame = (customName?: string, existingSlotId?: string) => {
+    const s = stateRef.current;
+    const name = customName?.trim() || saveNameInput.trim() || `Nauvis Factory - Day ${s.day}`;
+    const prepared = prepareStateForSave(s);
+    const newSlot = {
+      id: existingSlotId || `save_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      name,
+      timestamp: Date.now(),
+      day: s.day,
+      time: s.time,
+      season: s.season,
+      coins: s.coins,
+      energy: Math.round(s.energy),
+      maxEnergy: s.maxEnergy,
+      health: s.player.health,
+      maxHealth: s.player.maxHealth,
+      mineDepth: s.mineDepth,
+      machinesCount: countPlacedMachines(s),
+      data: prepared,
+    };
+
+    let updated = [];
+    if (existingSlotId) {
+      updated = saveSlots.map((slot) => (slot.id === existingSlotId ? newSlot : slot));
+    } else {
+      updated = [newSlot, ...saveSlots.filter((slot) => slot.id !== newSlot.id)];
+    }
+
+    try {
+      localStorage.setItem("meadow_life_factorio_saves", JSON.stringify(updated));
+      setSaveSlots(updated);
+      setSaveNameInput("");
+      setSaveLoadTab("load");
+      toast.success(`Game saved as "${name}" successfully!`);
+    } catch (err) {
+      toast.error("Failed to save game to storage.");
+    }
+  };
+
+  const handleLoadGame = (slot: (typeof saveSlots)[0]) => {
+    try {
+      const migrated = migrateState(slot.data);
+      setState(migrated);
+      stateRef.current = migrated;
+      setSaveLoadOpen(false);
+      toast.success(`Loaded "${slot.name}" successfully! (Day ${slot.day})`);
+    } catch (err) {
+      toast.error("Failed to load save data.");
+    }
+  };
+
+  const handleDeleteSaveSlot = (slotId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const updated = saveSlots.filter((s) => s.id !== slotId);
+    try {
+      localStorage.setItem("meadow_life_factorio_saves", JSON.stringify(updated));
+      setSaveSlots(updated);
+      toast.success("Save deleted.");
+    } catch (err) {
+      toast.error("Failed to delete save.");
+    }
+  };
+
   // Zoning Mode
   const [zoningMode, setZoningMode] = useState<"none" | "farming" | "mining" | "woodcutting" | "water" | "erase">("none");
   const isDraggingZone = useRef(false);
@@ -3333,6 +3450,16 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
               </span>
             </button>
 
+            {/* Factorio Save / Load Manager Button */}
+            <button
+              onClick={() => { setSaveLoadOpen(true); loadSavedSlotsFromStorage(); }}
+              title="Save & Load Games (Manage Chosen Saves)"
+              className="h-8 px-2 flex items-center justify-center gap-1 bg-[#2a2c2e] hover:bg-emerald-500/20 border border-slate-600 hover:border-emerald-500 text-slate-100 transition-all cursor-pointer font-bold text-xs"
+            >
+              <span className="text-emerald-400 text-xs">💾</span>
+              <span className="text-emerald-400 text-[10px]">Saves</span>
+            </button>
+
             {/* Sleep (Save & Grow) Button */}
             <button
               onClick={handleManualSleep}
@@ -3487,6 +3614,18 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                 <div>
                   <div className="font-bold text-xs text-cyan-400">Research Tree</div>
                   <div className="text-[9px] text-slate-400">Unlock Techs ({state.researchPoints || 0} RP)</div>
+                </div>
+              </button>
+
+              {/* Factorio Save & Load Games */}
+              <button
+                onClick={() => { setMobileQuickMenuOpen(false); setSaveLoadOpen(true); loadSavedSlotsFromStorage(); }}
+                className="p-3 bg-[#1e2530] hover:bg-emerald-500/20 border border-slate-700 hover:border-emerald-500 rounded-lg flex items-center gap-2.5 text-left active:scale-95 transition-all"
+              >
+                <span className="text-2xl">💾</span>
+                <div>
+                  <div className="font-bold text-xs text-emerald-400">Save & Load Games</div>
+                  <div className="text-[9px] text-slate-400">Manage Named Saves & Slots</div>
                 </div>
               </button>
 
@@ -6397,6 +6536,192 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                     {((state.evolutionFactor || 0.01) * 100).toFixed(2)}%
                   </div>
                   <span className="text-[9px] text-zinc-400">Higher evolution unlocks Medium and Big biters</span>
+                </div>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* === FACTORIO SAVE GAME & LOAD GAME CHOSEN LIST DIALOG === */}
+      <Dialog open={saveLoadOpen} onOpenChange={setSaveLoadOpen}>
+        <DialogContent container={mainContainerRef.current} className="w-[98vw] max-w-4xl max-h-[88vh] overflow-y-auto bg-[#14181f] border-[3px] border-[#3a4454] text-slate-100 rounded-sm font-mono shadow-2xl p-4 select-none">
+          <DialogHeader className="border-b border-[#2c3543] pb-2.5">
+            <DialogTitle className="text-base sm:text-lg font-black uppercase tracking-wider flex items-center justify-between text-[#ff9200]">
+              <div className="flex items-center gap-2">
+                <span className="text-xl">💾</span>
+                <span>FACTORIO SAVE & LOAD MANAGER</span>
+              </div>
+              <span className="text-[10px] text-amber-300 bg-amber-950/80 px-2 py-0.5 border border-amber-600/50 rounded">
+                LOCAL STORAGE SAVES
+              </span>
+            </DialogTitle>
+            <DialogDescription className="text-slate-400 text-xs font-mono mt-1">
+              Manage custom named game saves, inspect factory milestones, and choose a save state to load or overwrite.
+            </DialogDescription>
+          </DialogHeader>
+
+          {/* Tab Switcher (Load Game List vs Create New Save) */}
+          <div className="flex items-center gap-2 border-b border-[#2c3543] pt-2 pb-2 text-xs">
+            <button
+              onClick={() => setSaveLoadTab("load")}
+              className={`px-3 py-1.5 font-bold uppercase transition-all rounded-xs flex items-center gap-1.5 cursor-pointer ${
+                saveLoadTab === "load"
+                  ? "bg-[#ff9200] text-black font-black shadow-md"
+                  : "bg-[#1c222c] text-slate-300 hover:bg-[#252d3a] border border-[#2c3543]"
+              }`}
+            >
+              <span>📂</span>
+              <span>CHOOSE SAVED GAME ({saveSlots.length})</span>
+            </button>
+            <button
+              onClick={() => setSaveLoadTab("save")}
+              className={`px-3 py-1.5 font-bold uppercase transition-all rounded-xs flex items-center gap-1.5 cursor-pointer ${
+                saveLoadTab === "save"
+                  ? "bg-[#ff9200] text-black font-black shadow-md"
+                  : "bg-[#1c222c] text-slate-300 hover:bg-[#252d3a] border border-[#2c3543]"
+              }`}
+            >
+              <span>➕</span>
+              <span>CREATE NEW NAMED SAVE</span>
+            </button>
+          </div>
+
+          {/* TAB 1: CHOOSE SAVED GAME LIST */}
+          {saveLoadTab === "load" && (
+            <div className="space-y-3 py-2 text-xs">
+              {saveSlots.length === 0 ? (
+                <div className="p-8 text-center bg-[#101318] border-2 border-dashed border-[#2c3543] rounded-sm space-y-3">
+                  <span className="text-4xl block">📭</span>
+                  <div className="font-bold text-slate-200 text-sm">No Saved Games Found</div>
+                  <p className="text-slate-400 text-xs max-w-md mx-auto">
+                    You haven't created any custom named saves yet. Switch to the <b>"CREATE NEW NAMED SAVE"</b> tab above to save your current factory state!
+                  </p>
+                  <Button
+                    onClick={() => setSaveLoadTab("save")}
+                    className="bg-[#ff9200] hover:bg-amber-500 text-black font-extrabold px-4 py-1.5 text-xs rounded-none"
+                  >
+                    💾 Create First Save
+                  </Button>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 max-h-[55vh] overflow-y-auto pr-1">
+                  {saveSlots.map((slot) => {
+                    const saveDate = new Date(slot.timestamp);
+                    const dateStr = saveDate.toLocaleDateString() + " " + saveDate.toLocaleTimeString();
+
+                    return (
+                      <div
+                        key={slot.id}
+                        className="p-3 bg-[#161a22] border-2 border-[#2b3545] hover:border-[#ff9200]/80 rounded-sm flex flex-col justify-between space-y-2.5 shadow-md transition-all"
+                      >
+                        {/* Header: Save Name & Timestamp */}
+                        <div className="flex items-start justify-between border-b border-[#252f3e] pb-1.5">
+                          <div>
+                            <div className="font-extrabold text-[#ff9200] text-sm flex items-center gap-1.5">
+                              <span>🏭</span>
+                              <span>{slot.name}</span>
+                            </div>
+                            <div className="text-[10px] text-slate-400 mt-0.5">📅 {dateStr}</div>
+                          </div>
+                          <span className="text-[9px] font-bold bg-zinc-900 px-1.5 py-0.5 border border-zinc-800 text-emerald-400 rounded">
+                            DAY {slot.day}
+                          </span>
+                        </div>
+
+                        {/* Metrics Grid */}
+                        <div className="grid grid-cols-2 gap-1.5 p-2 bg-[#101318] rounded-sm text-[10px] text-slate-300">
+                          <div>⏰ <b>Time:</b> {formatTime(slot.time)}</div>
+                          <div>🍂 <b>Season:</b> {slot.season.toUpperCase()}</div>
+                          <div>🪙 <b>Gold:</b> {slot.coins}G</div>
+                          <div>⚡ <b>Energy:</b> {slot.energy}/{slot.maxEnergy}</div>
+                          <div>❤️ <b>Health:</b> {slot.health}/{slot.maxHealth}</div>
+                          <div>🏗️ <b>Machines:</b> {slot.machinesCount || 0} Placed</div>
+                        </div>
+
+                        {/* Actions: Play / Overwrite / Delete */}
+                        <div className="flex items-center gap-1.5 pt-1">
+                          <Button
+                            size="sm"
+                            onClick={() => handleLoadGame(slot)}
+                            className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-[11px] h-7 rounded-none flex items-center justify-center gap-1"
+                          >
+                            <span>▶</span>
+                            <span>LOAD / PLAY</span>
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleSaveGame(slot.name, slot.id)}
+                            title="Overwrite with current factory state"
+                            className="bg-[#202836] hover:bg-amber-600 hover:text-black border-slate-600 text-amber-300 font-bold text-[10px] h-7 px-2 rounded-none"
+                          >
+                            <span>💾 Overwrite</span>
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={(e) => handleDeleteSaveSlot(slot.id, e)}
+                            title="Delete this save slot"
+                            className="bg-[#202836] hover:bg-red-600 hover:text-white border-slate-600 text-red-400 font-bold text-[10px] h-7 px-2 rounded-none"
+                          >
+                            <span>🗑️</span>
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* TAB 2: CREATE NEW NAMED SAVE */}
+          {saveLoadTab === "save" && (
+            <div className="space-y-4 py-2 text-xs">
+              <div className="p-4 bg-[#161a22] border-2 border-[#2b3545] rounded-sm space-y-3">
+                <label className="block text-slate-200 font-bold text-xs uppercase tracking-wide">
+                  Save Name:
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={saveNameInput}
+                    onChange={(e) => setSaveNameInput(e.target.value)}
+                    placeholder={`e.g. Nauvis Main Base - Day ${state.day}`}
+                    className="flex-1 bg-[#101318] border border-slate-600 focus:border-[#ff9200] px-3 py-2 text-slate-100 text-xs font-mono outline-none rounded-none"
+                  />
+                  <Button
+                    onClick={() => handleSaveGame()}
+                    className="bg-[#ff9200] hover:bg-amber-500 text-black font-extrabold px-4 py-2 text-xs rounded-none h-auto"
+                  >
+                    💾 Save Now
+                  </Button>
+                </div>
+              </div>
+
+              {/* Current Factory Preview Card */}
+              <div className="p-3 bg-[#101318] border border-[#2b3545] rounded-sm space-y-2">
+                <span className="font-extrabold text-[#ff9200] text-xs block uppercase">
+                  📊 Current Factory State to Save:
+                </span>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] text-slate-300">
+                  <div className="p-2 bg-[#161a22] border border-zinc-800 rounded-sm">
+                    <span className="text-slate-400 text-[10px] block">Game Time</span>
+                    <span className="font-bold text-slate-100">Day {state.day}, {formatTime(state.time)}</span>
+                  </div>
+                  <div className="p-2 bg-[#161a22] border border-zinc-800 rounded-sm">
+                    <span className="text-slate-400 text-[10px] block">Coins & Tech</span>
+                    <span className="font-bold text-yellow-400">{state.coins}G ({state.unlockedTechs?.length || 0} Techs)</span>
+                  </div>
+                  <div className="p-2 bg-[#161a22] border border-zinc-800 rounded-sm">
+                    <span className="text-slate-400 text-[10px] block">Energy & Health</span>
+                    <span className="font-bold text-emerald-400">{Math.round(state.energy)}E / {state.player.health}HP</span>
+                  </div>
+                  <div className="p-2 bg-[#161a22] border border-zinc-800 rounded-sm">
+                    <span className="text-slate-400 text-[10px] block">Placed Machines</span>
+                    <span className="font-bold text-orange-400">{countPlacedMachines(state)} Machines</span>
+                  </div>
                 </div>
               </div>
             </div>

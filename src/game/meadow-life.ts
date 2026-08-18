@@ -6494,40 +6494,114 @@ export function draw(
           }
         }
 
-        // 2. Factorio Mining Drills (Burner & Electric)
-        else if (id.includes("drill")) {
+        // 2. Factorio Resource Extraction: Mining Drills & Pumpjacks (Matching Attached Reference)
+        else if (id.includes("drill") || id.includes("pumpjack")) {
           const isElectric = id.includes("electric") || id.includes("big");
-          const baseColor = isElectric ? "#16a085" : "#7f8c8d";
-          const rimColor = isElectric ? "#1abc9c" : "#95a5a6";
+          const isPumpjack = id.includes("pumpjack");
+          const drillTime = Date.now() / 60;
 
-          // Heavy Excavator Chassis
-          ctx.fillStyle = "#1e272c";
-          ctx.fillRect(px + 1, py + 1, TILE - 2, TILE - 2);
-          ctx.fillStyle = baseColor;
-          ctx.fillRect(px + 3, py + 3, TILE - 6, TILE - 6);
-          ctx.fillStyle = rimColor;
-          ctx.fillRect(px + 5, py + 5, TILE - 10, 3);
+          if (isPumpjack) {
+            // Factorio Pumpjack (Olive Green Nodding Donkey Walking Beam)
+            ctx.fillStyle = "#1e272c";
+            ctx.fillRect(px + 2, py + 2, TILE - 4, TILE - 4);
+            // Olive Green Base Frame
+            ctx.fillStyle = "#1e824c";
+            ctx.fillRect(px + 4, py + 16, TILE - 8, 12);
+            // Bobbing Walking Beam / Horse-Head Counterweight
+            const pumpBob = Math.sin(Date.now() / 250) * 4;
+            ctx.fillStyle = "#27ae60";
+            ctx.beginPath();
+            ctx.moveTo(px + 6, py + 12 + pumpBob);
+            ctx.lineTo(px + 22, py + 6 - pumpBob);
+            ctx.lineTo(px + 26, py + 10 - pumpBob);
+            ctx.lineTo(px + 10, py + 16 + pumpBob);
+            ctx.closePath();
+            ctx.fill();
+            // Piston Rod
+            ctx.strokeStyle = "#ecf0f1";
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(px + 7, py + 14 + pumpBob);
+            ctx.lineTo(px + 7, py + 26);
+            ctx.stroke();
+          } else if (isElectric) {
+            // Factorio Electric Mining Drill (Teal Housing, Yellow Trim & Heavy Dual Legs)
+            // Background Ground Shadow
+            ctx.fillStyle = "rgba(0, 0, 0, 0.4)";
+            ctx.fillRect(px + 3, py + 3, TILE - 6, TILE - 6);
 
-          // High-Torque Rotating Drill Head
-          const drillRot = Date.now() / 60;
-          ctx.save();
-          ctx.translate(px + TILE / 2, py + TILE / 2);
-          ctx.rotate(drillRot);
-          ctx.fillStyle = "#2c3e50";
-          ctx.fillRect(-6, -6, 12, 12);
-          ctx.fillStyle = "#e67e22";
-          ctx.fillRect(-3, -3, 6, 6);
-          ctx.restore();
+            // Heavy Dark Steel Tripod Strut Legs (Left & Right)
+            ctx.fillStyle = "#2d3436";
+            ctx.fillRect(px + 3, py + 6, 6, TILE - 10);
+            ctx.fillRect(px + TILE - 9, py + 6, 6, TILE - 10);
+            ctx.fillStyle = "#636e72";
+            ctx.fillRect(px + 5, py + 8, 2, TILE - 14);
+            ctx.fillRect(px + TILE - 7, py + 8, 2, TILE - 14);
 
-          // Chute Indicator
-          ctx.save();
-          ctx.translate(px + TILE / 2, py + TILE / 2);
-          if (dir === "up") ctx.rotate(-Math.PI / 2);
-          else if (dir === "down") ctx.rotate(Math.PI / 2);
-          else if (dir === "left") ctx.rotate(Math.PI);
-          ctx.fillStyle = "#e74c3c";
-          ctx.fillRect(9, -3, 4, 6);
-          ctx.restore();
+            // Iconic Cyan/Teal Upper Motor Housing
+            ctx.fillStyle = "#00cec9";
+            ctx.fillRect(px + 6, py + 3, TILE - 12, 10);
+            ctx.fillStyle = "#0984e3";
+            ctx.fillRect(px + 9, py + 5, TILE - 18, 6);
+            // Yellow Warning Top Bracket
+            ctx.fillStyle = "#f1c40f";
+            ctx.fillRect(px + 8, py + 2, TILE - 16, 2.5);
+
+            // Center Heavy Spiraling Auger Drill Bit (Animated)
+            const augerY = (drillTime % 6);
+            ctx.fillStyle = "#2d3436";
+            ctx.fillRect(px + 12, py + 12, 8, 14);
+            ctx.fillStyle = "#b2bec3";
+            for (let i = 0; i < 3; i++) {
+              const yOffset = (13 + i * 4 + augerY) % 13;
+              ctx.fillRect(px + 12, py + 13 + yOffset, 8, 2);
+            }
+
+            // Directional Discharge Chute Indicator
+            ctx.save();
+            ctx.translate(px + TILE / 2, py + TILE / 2);
+            if (dir === "up") ctx.rotate(-Math.PI / 2);
+            else if (dir === "down") ctx.rotate(Math.PI / 2);
+            else if (dir === "left") ctx.rotate(Math.PI);
+            ctx.fillStyle = "#e74c3c";
+            ctx.fillRect(10, -2.5, 4, 5);
+            ctx.restore();
+          } else {
+            // Factorio Burner Mining Drill (A-Frame Steel Struts, Exhaust & Fuel Hopper)
+            ctx.fillStyle = "rgba(0, 0, 0, 0.4)";
+            ctx.fillRect(px + 3, py + 3, TILE - 6, TILE - 6);
+
+            // A-Frame Dark Steel Struts
+            ctx.fillStyle = "#3d3d3d";
+            ctx.beginPath();
+            ctx.moveTo(px + 5, py + TILE - 4);
+            ctx.lineTo(px + 14, py + 5);
+            ctx.lineTo(px + 18, py + 5);
+            ctx.lineTo(px + TILE - 5, py + TILE - 4);
+            ctx.lineTo(px + TILE - 9, py + TILE - 4);
+            ctx.lineTo(px + 16, py + 8);
+            ctx.lineTo(px + 9, py + TILE - 4);
+            ctx.closePath();
+            ctx.fill();
+
+            // Left Chimney Exhaust
+            ctx.fillStyle = "#555555";
+            ctx.fillRect(px + 4, py + 2, 4, 10);
+            ctx.fillStyle = "#777777";
+            ctx.fillRect(px + 3, py + 1, 6, 2);
+
+            // Right Rusty Fuel Hopper
+            ctx.fillStyle = "#b87333";
+            ctx.fillRect(px + TILE - 10, py + 8, 7, 10);
+            ctx.fillStyle = "#8c531b";
+            ctx.fillRect(px + TILE - 9, py + 9, 5, 8);
+
+            // Central Heavy Rotating Auger
+            ctx.fillStyle = "#2d3436";
+            ctx.fillRect(px + 12, py + 11, 8, 15);
+            ctx.fillStyle = "#95a5a6";
+            ctx.fillRect(px + 12, py + 13 + ((drillTime * 0.8) % 8), 8, 2);
+          }
         }
 
         // 3. Factorio Robotic Inserters (All Tiers)
@@ -6616,20 +6690,73 @@ export function draw(
           }
         }
 
-        // 5. Factorio Smelting Furnaces (Stone, Steel, Electric, Foundry)
+        // 5. Factorio Smelting Furnaces (Stone, Steel, Electric, Foundry - Matching Attached Reference)
         else if (id.includes("furnace") || id.includes("foundry")) {
           const isElec = id.includes("electric");
           const isSteel = id.includes("steel");
-          ctx.fillStyle = isElec ? "#16a085" : isSteel ? "#34495e" : "#566573";
-          ctx.fillRect(px + 2, py + 2, TILE - 4, TILE - 4);
-          ctx.fillStyle = "#1a252f";
-          ctx.fillRect(px + 6, py + 12, TILE - 12, TILE - 16);
+          const isStone = id.includes("stone") || (!isElec && !isSteel);
 
-          // Pulsing Smelting Fire Glow
-          if (t.smeltActive) {
-            const glow = Math.sin(Date.now() / 90) * 0.3 + 0.7;
-            ctx.fillStyle = isElec ? `rgba(46, 204, 113, ${glow})` : `rgba(230, 126, 34, ${glow})`;
-            ctx.fillRect(px + 8, py + 14, TILE - 16, TILE - 20);
+          if (isStone) {
+            // Factorio Stone Furnace (Stepped Masonry Pyramid with Roaring Hearth Fire)
+            // Stepped Pyramid Base
+            ctx.fillStyle = "#5a4d3b";
+            ctx.fillRect(px + 3, py + 4, TILE - 6, TILE - 6);
+            ctx.fillStyle = "#8c7c64";
+            ctx.fillRect(px + 5, py + 6, TILE - 10, TILE - 9);
+            ctx.fillStyle = "#b59c79";
+            ctx.fillRect(px + 7, py + 7, TILE - 14, 6);
+            // Top Chimney Hole
+            ctx.fillStyle = "#2d241e";
+            ctx.fillRect(px + 10, py + 3, TILE - 20, 4);
+
+            // Arched Hearth Door with Roaring Flame
+            ctx.fillStyle = "#1e140d";
+            ctx.beginPath();
+            ctx.arc(px + TILE / 2, py + 22, 6, Math.PI, 0);
+            ctx.fillRect(px + TILE / 2 - 6, py + 22, 12, 5);
+            ctx.fill();
+
+            const fireGlow = t.smeltActive ? Math.sin(Date.now() / 80) * 0.3 + 0.7 : 0.4;
+            ctx.fillStyle = `rgba(230, 126, 34, ${fireGlow})`;
+            ctx.beginPath();
+            ctx.arc(px + TILE / 2, py + 22, 4.5, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = `rgba(241, 196, 15, ${fireGlow})`;
+            ctx.fillRect(px + TILE / 2 - 2, py + 20, 4, 4);
+          } else if (isSteel) {
+            // Factorio Steel Furnace (Heavy Steel Cylindrical Stack & Blast Furnace Hatch)
+            ctx.fillStyle = "#2d3436";
+            ctx.fillRect(px + 3, py + 4, TILE - 6, TILE - 6);
+            ctx.fillStyle = "#636e72";
+            ctx.fillRect(px + 4, py + 6, TILE - 8, TILE - 9);
+            ctx.fillStyle = "#b2bec3";
+            // Rivets and Piping
+            ctx.fillRect(px + 4, py + 6, TILE - 8, 2);
+            ctx.fillRect(px + 6, py + 2, 8, 4); // Steel Chimney
+            ctx.fillStyle = "#1e272c";
+            ctx.fillRect(px + 7, py + 1, 6, 3);
+
+            // Horizontal Blast Furnace Viewing Hatch
+            ctx.fillStyle = "#111827";
+            ctx.fillRect(px + 6, py + 18, TILE - 12, 8);
+            const blastGlow = t.smeltActive ? Math.sin(Date.now() / 60) * 0.3 + 0.7 : 0.5;
+            ctx.fillStyle = `rgba(238, 82, 83, ${blastGlow})`;
+            ctx.fillRect(px + 8, py + 19, TILE - 16, 6);
+            ctx.fillStyle = `rgba(254, 202, 87, ${blastGlow})`;
+            ctx.fillRect(px + 11, py + 20, TILE - 22, 4);
+          } else {
+            // Electric Furnace / Foundry
+            ctx.fillStyle = "#16a085";
+            ctx.fillRect(px + 2, py + 2, TILE - 4, TILE - 4);
+            ctx.fillStyle = "#1abc9c";
+            ctx.fillRect(px + 4, py + 4, TILE - 8, 4);
+            ctx.fillStyle = "#1a252f";
+            ctx.fillRect(px + 6, py + 12, TILE - 12, TILE - 16);
+            if (t.smeltActive) {
+              const glow = Math.sin(Date.now() / 90) * 0.3 + 0.7;
+              ctx.fillStyle = `rgba(46, 204, 113, ${glow})`;
+              ctx.fillRect(px + 8, py + 14, TILE - 16, TILE - 20);
+            }
           }
         }
 

@@ -6719,7 +6719,64 @@ export function draw(
           ctx.restore();
         }
 
-        // 11. Boilers & Generators
+        // 11. Nuclear Reactors & Fusion Generators
+        else if (id.includes("reactor") || id.includes("fusion")) {
+          ctx.fillStyle = "#1e272c";
+          ctx.fillRect(px + 1, py + 1, TILE - 2, TILE - 2);
+          ctx.fillStyle = "#2c3e50";
+          ctx.fillRect(px + 3, py + 3, TILE - 6, TILE - 6);
+          // Glowing Radioactive Core
+          const nucGlow = Math.sin(Date.now() / 120) * 0.3 + 0.7;
+          ctx.fillStyle = id.includes("fusion") ? `rgba(0, 210, 211, ${nucGlow})` : `rgba(46, 204, 113, ${nucGlow})`;
+          ctx.beginPath();
+          ctx.arc(px + TILE / 2, py + TILE / 2, 7, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        // 12. Oil Refineries & Chemical Plants
+        else if (id.includes("refinery") || id.includes("chemical")) {
+          ctx.fillStyle = "#1e272c";
+          ctx.fillRect(px + 1, py + 1, TILE - 2, TILE - 2);
+          ctx.fillStyle = "#16a085";
+          ctx.fillRect(px + 3, py + 3, TILE - 6, TILE - 6);
+          // Fractionation distillation columns
+          ctx.fillStyle = "#34495e";
+          ctx.fillRect(px + 4, py + 5, 6, TILE - 10);
+          ctx.fillRect(px + 14, py + 5, 6, TILE - 10);
+          ctx.fillRect(px + 23, py + 8, 5, TILE - 13);
+          ctx.fillStyle = "#f39c12"; // pressure indicators
+          ctx.fillRect(px + 6, py + 7, 2, 4);
+        }
+
+        // 13. Centrifuges (Isotope Separation)
+        else if (id.includes("centrifuge")) {
+          ctx.fillStyle = "#2c3e50";
+          ctx.fillRect(px + 2, py + 2, TILE - 4, TILE - 4);
+          ctx.save();
+          ctx.translate(px + TILE / 2, py + TILE / 2);
+          ctx.rotate(Date.now() / 80);
+          ctx.fillStyle = "#2ecc71";
+          ctx.fillRect(-8, -2, 16, 4);
+          ctx.fillRect(-2, -8, 4, 16);
+          ctx.restore();
+        }
+
+        // 14. Beacons (Transmitting broadcast waves)
+        else if (id.includes("beacon")) {
+          ctx.fillStyle = "#2c3e50";
+          ctx.fillRect(px + 4, py + 4, TILE - 8, TILE - 8);
+          ctx.fillStyle = "#e67e22";
+          ctx.fillRect(px + 8, py + 8, TILE - 16, TILE - 16);
+          // Radio broadcast wave
+          const waveRadius = (Date.now() / 40) % 12;
+          ctx.strokeStyle = "rgba(52, 152, 219, 0.7)";
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.arc(px + TILE / 2, py + TILE / 2, waveRadius, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+
+        // 15. Boilers & Generators
         else if (id.includes("boiler") || id.includes("generator") || id.includes("engine")) {
           ctx.fillStyle = "#34495e";
           ctx.fillRect(px + 2, py + 4, TILE - 4, TILE - 8);
@@ -6731,7 +6788,7 @@ export function draw(
           ctx.fill();
         }
 
-        // 12. Solar Panels & Accumulators
+        // 16. Solar Panels & Accumulators
         else if (id.includes("solar_panel")) {
           ctx.fillStyle = "#2980b9";
           ctx.fillRect(px + 2, py + 6, TILE - 4, TILE - 10);

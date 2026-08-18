@@ -7023,7 +7023,56 @@ export function draw(
           ctx.fill();
         }
 
-        // 16. Solar Panels & Accumulators
+        // 16. Factorio Rocket Silo (Iconic Climax from Official Trailer)
+        else if (id.includes("rocket_silo") || id.includes("silo")) {
+          // Circular Reinforced Launch Pad Base
+          ctx.fillStyle = "#1e272c";
+          ctx.fillRect(px + 1, py + 1, TILE - 2, TILE - 2);
+          ctx.fillStyle = "#34495e";
+          ctx.beginPath();
+          ctx.arc(px + TILE / 2, py + TILE / 2, 13, 0, Math.PI * 2);
+          ctx.fill();
+
+          // Yellow/Black Hazard Striped Launch Perimeter Rim
+          ctx.fillStyle = "#f1c40f";
+          for (let a = 0; a < Math.PI * 2; a += Math.PI / 4) {
+            ctx.fillRect(px + TILE / 2 + Math.cos(a) * 11 - 1.5, py + TILE / 2 + Math.sin(a) * 11 - 1.5, 3, 3);
+          }
+
+          // Center Orbital Rocket Fuselage
+          ctx.fillStyle = "#ecf0f1"; // White rocket body
+          ctx.fillRect(px + TILE / 2 - 3, py + 6, 6, 18);
+          // Red Aerodynamic Nose Cone
+          ctx.fillStyle = "#e74c3c";
+          ctx.beginPath();
+          ctx.moveTo(px + TILE / 2, py + 2);
+          ctx.lineTo(px + TILE / 2 - 3.5, py + 6);
+          ctx.lineTo(px + TILE / 2 + 3.5, py + 6);
+          ctx.closePath();
+          ctx.fill();
+          // Booster Engine Thruster Flare / Steam
+          const thrusterSteam = (Math.sin(Date.now() / 90) + 1) * 0.5;
+          ctx.fillStyle = `rgba(230, 126, 34, ${0.4 + thrusterSteam * 0.4})`;
+          ctx.fillRect(px + TILE / 2 - 2, py + 24, 4, 4);
+          ctx.fillStyle = `rgba(241, 196, 15, ${0.6 + thrusterSteam * 0.4})`;
+          ctx.fillRect(px + TILE / 2 - 1, py + 24, 2, 2);
+        }
+
+        // 17. Factorio Locomotives & Cargo Wagons
+        else if (id.includes("train") || id.includes("locomotive") || id.includes("wagon")) {
+          const isEngine = id.includes("locomotive") || id.includes("engine");
+          ctx.fillStyle = "#1e272c";
+          ctx.fillRect(px + 2, py + 4, TILE - 4, TILE - 8);
+          ctx.fillStyle = isEngine ? "#c0392b" : "#2980b9";
+          ctx.fillRect(px + 4, py + 6, TILE - 8, TILE - 12);
+          if (isEngine) {
+            // Cowcatcher and Headlight
+            ctx.fillStyle = "#f1c40f";
+            ctx.fillRect(px + TILE - 6, py + TILE / 2 - 2, 4, 4);
+          }
+        }
+
+        // 18. Solar Panels & Accumulators
         else if (id.includes("solar_panel")) {
           ctx.fillStyle = "#2980b9";
           ctx.fillRect(px + 2, py + 6, TILE - 4, TILE - 10);

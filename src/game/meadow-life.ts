@@ -5704,24 +5704,13 @@ class ImprovedNoise {
 
 const noiseBase = new ImprovedNoise();
 
-function getGrassColor(x: number, y: number, season: string): string {
-  const val = noiseBase.noise(x * 0.08, y * 0.08, 0);
+function getGrassColor(x: number, y: number, _season: string): string {
+  const val = noiseBase.noise(x * 0.07, y * 0.07, 0);
   const t = Math.max(0, Math.min(1, (val + 0.35) / 0.7));
   
-  let c1, c2;
-  if (season === "summer") {
-    c1 = {r: 130, g: 190, b: 60};
-    c2 = {r: 95, g: 160, b: 50};
-  } else if (season === "fall") {
-    c1 = {r: 210, g: 140, b: 60};
-    c2 = {r: 180, g: 110, b: 40};
-  } else if (season === "winter") {
-    c1 = {r: 220, g: 235, b: 240};
-    c2 = {r: 190, g: 210, b: 225};
-  } else { // spring
-    c1 = {r: 126, g: 199, b: 122};
-    c2 = {r: 93, g: 168, b: 89};
-  }
+  // Factorio Nauvis Surface: Arid Dirt, Red Desert & Mineral Dust
+  const c1 = { r: 122, g: 102, b: 74 }; // Nauvis Dry Dirt
+  const c2 = { r: 92, g: 74, b: 52 };   // Nauvis Red Soil
   
   const rCol = Math.round(c1.r - (c1.r - c2.r) * t);
   const gCol = Math.round(c1.g - (c1.g - c2.g) * t);
@@ -6060,144 +6049,75 @@ export function draw(
           ctx.fillRect(px + 4, py + 2, TILE - 8, 3);
         }
       } else if (t.kind === "house") {
-        // Determine whether this house tile belongs to the Farm House or the Shop storefront
         if (x >= 12 && x <= 17 && y >= 24 && y <= 28) {
-          // Farm House building (6x5, rx: 0..5, ry: 0..4)
+          // Factorio Crashed Spaceship Hull & Escape Pod Wreckage (6x5, rx: 0..5, ry: 0..4)
           const rx = x - 12;
           const ry = y - 24;
 
-          if (ry === 0 || ry === 1) {
-            // Dark red brick shingles
-            ctx.fillStyle = "#7b241c";
-            ctx.fillRect(px, py, TILE, TILE);
-            ctx.fillStyle = "#511812";
-            ctx.fillRect(px, py + TILE - 2, TILE, 2);
-            for (let i = (ry === 0 ? 0 : 4); i < TILE; i += 8) {
-              ctx.fillRect(px + i, py, 2, TILE);
-            }
-            if (ry === 1) {
-              ctx.fillStyle = "#4a2306"; // eaves under roof
-              ctx.fillRect(px, py + TILE - 4, TILE, 4);
-            }
-            // Draw chimney stack on the roof (rx = 4, ry = 0)
-            if (rx === 4 && ry === 0) {
-              ctx.fillStyle = "#5d6d7e"; // gray stone chimney
-              ctx.fillRect(px + 8, py - 10, 12, 20);
-              ctx.fillStyle = "#2c3e50"; // rim
-              ctx.fillRect(px + 6, py - 12, 16, 4);
-            }
-          } else {
-            // Wall log siding
-            ctx.fillStyle = "#a0522d";
-            ctx.fillRect(px, py, TILE, TILE);
-            ctx.fillStyle = "#5c2d16";
-            for (let i = 6; i < TILE; i += 8) {
-              ctx.fillRect(px, py + i, TILE, 2);
-            }
+          // Titanium Alloy Hull Plates with Heat Shield Scorching
+          ctx.fillStyle = ry <= 1 ? "#2c3e50" : "#34495e";
+          ctx.fillRect(px, py, TILE, TILE);
+          ctx.fillStyle = "#1b2631";
+          ctx.fillRect(px, py + TILE - 2, TILE, 2);
 
-            // Window frames + glowing glass
-            if ((rx === 1 || rx === 4) && ry === 2) {
-              ctx.fillStyle = "#3e2723";
-              ctx.fillRect(px + 4, py + 6, TILE - 8, TILE - 12);
-              const glow = (phase === "night" || phase === "evening") ? "#f1c40f" : "#85c1e9";
-              ctx.fillStyle = glow;
-              ctx.fillRect(px + 6, py + 8, TILE - 12, TILE - 16);
-              ctx.fillStyle = "#3e2723";
-              ctx.fillRect(px + TILE / 2 - 1, py + 8, 2, TILE - 16);
-              ctx.fillRect(px + 6, py + TILE / 2 - 1, TILE - 12, 2);
-            }
-
-            // Doorway at the bottom center
-            if (rx === 3 && ry === 4) {
-              ctx.fillStyle = "#3e2723"; // frame
-              ctx.fillRect(px + 4, py, TILE - 8, TILE);
-              ctx.fillStyle = "#795548"; // brown door
-              ctx.fillRect(px + 6, py + 2, TILE - 12, TILE - 2);
-              ctx.fillStyle = "#d4ac0d"; // knob
-              ctx.beginPath();
-              ctx.arc(px + TILE - 10, py + TILE / 2, 2, 0, Math.PI * 2);
-              ctx.fill();
+          // Yellow/Black Hazard Stripes on wing panels
+          if (ry === 0 || ry === 4) {
+            ctx.fillStyle = "#f39c12";
+            for (let i = 0; i < TILE; i += 8) {
+              ctx.fillRect(px + i, py, 4, 3);
             }
           }
+
+          // Cockpit Computer & Radar Array
+          if (rx === 3 && ry === 1) {
+            ctx.fillStyle = "#1abc9c";
+            ctx.fillRect(px + 4, py + 4, TILE - 8, TILE - 8);
+            ctx.fillStyle = "#e67e22";
+            ctx.fillRect(px + 8, py + 8, 4, 4);
+          }
+
+          // Airship Hatchway Air-Lock Door
+          if (rx === 3 && ry === 4) {
+            ctx.fillStyle = "#1b2631";
+            ctx.fillRect(px + 4, py, TILE - 8, TILE);
+            ctx.fillStyle = "#f1c40f";
+            ctx.fillRect(px + 6, py + 2, TILE - 12, 3);
+            ctx.fillStyle = "#2ecc71"; // green active status light
+            ctx.fillRect(px + 6, py + 8, 3, 3);
+          }
         } else if (x >= 64 && x <= 74 && y >= 32 && y <= 40) {
-          // Shop building (11x9, rx: 0..10, ry: 0..8)
+          // Factorio Orbital Logistics Depot & Exchange Post
           const rx = x - 64;
           const ry = y - 32;
 
-          if (ry >= 0 && ry <= 2) {
-            // Slate blue roof shingles
-            ctx.fillStyle = "#2e4053";
-            ctx.fillRect(px, py, TILE, TILE);
-            ctx.fillStyle = "#1b2631";
-            ctx.fillRect(px, py + TILE - 2, TILE, 2);
-            for (let i = (ry % 2 === 0 ? 0 : 4); i < TILE; i += 8) {
-              ctx.fillRect(px + i, py, 2, TILE);
-            }
-            if (ry === 2) {
-              ctx.fillStyle = "#2c3e50"; // eaves
-              ctx.fillRect(px, py + TILE - 4, TILE, 4);
-            }
-            // Shop Chimney stack (rx = 8, ry = 0)
-            if (rx === 8 && ry === 0) {
-              ctx.fillStyle = "#5d6d7e";
-              ctx.fillRect(px + 8, py - 10, 12, 20);
-              ctx.fillStyle = "#2c3e50";
-              ctx.fillRect(px + 6, py - 12, 16, 4);
-            }
-          } else {
-            // Tan siding walls
-            ctx.fillStyle = "#ceb48a";
-            ctx.fillRect(px, py, TILE, TILE);
-            ctx.fillStyle = "#9c8259";
-            for (let i = 6; i < TILE; i += 8) {
-              ctx.fillRect(px, py + i, TILE, 2);
-            }
+          // Reinforced Industrial Steel Container Plating
+          ctx.fillStyle = ry <= 2 ? "#2c3e50" : "#475569";
+          ctx.fillRect(px, py, TILE, TILE);
+          ctx.fillStyle = "#1e293b";
+          ctx.fillRect(px, py + TILE - 2, TILE, 2);
 
-            // Display Sign
-            if ((rx === 5 || rx === 6) && ry === 3) {
-              ctx.fillStyle = "#784212";
-              ctx.fillRect(px, py + 8, TILE, TILE - 16);
-              ctx.fillStyle = "#f5c542";
-              ctx.fillRect(px + 2, py + 10, TILE - 4, TILE - 20);
-              ctx.fillStyle = "#784212";
-              ctx.font = "bold 8px sans-serif";
-              ctx.textAlign = "center";
-              ctx.fillText(rx === 5 ? "SH" : "OP", px + TILE / 2, py + TILE / 2 + 2);
-            }
+          // Yellow Crane Girders & Hazard Edge
+          if (ry === 0) {
+            ctx.fillStyle = "#f59e0b";
+            ctx.fillRect(px, py, TILE, 4);
+          }
 
-            // Large Shop Windows
-            if ((rx === 2 || rx === 8) && ry === 4) {
-              ctx.fillStyle = "#3e2723";
-              ctx.fillRect(px + 2, py + 4, TILE - 4, TILE - 8);
-              const glow = (phase === "night" || phase === "evening") ? "#f1c40f" : "#85c1e9";
-              ctx.fillStyle = glow;
-              ctx.fillRect(px + 4, py + 6, TILE - 8, TILE - 12);
-              ctx.fillStyle = "rgba(255, 255, 255, 0.35)";
-              ctx.beginPath();
-              ctx.moveTo(px + 6, py + 6);
-              ctx.lineTo(px + TILE - 6, py + TILE - 6);
-              ctx.lineTo(px + TILE - 9, py + TILE - 6);
-              ctx.lineTo(px + 6, py + 9);
-              ctx.fill();
-            }
-
-            // Storefront Entry Door
-            if (rx === 5 && ry === 8) {
-              ctx.fillStyle = "#3e2723";
-              ctx.fillRect(px + 4, py, TILE - 8, TILE);
-              ctx.fillStyle = "#795548";
-              ctx.fillRect(px + 6, py + 2, TILE - 12, TILE - 2);
-              ctx.fillStyle = "#d4ac0d";
-              ctx.beginPath();
-              ctx.arc(px + TILE - 10, py + TILE / 2, 2, 0, Math.PI * 2);
-              ctx.fill();
-            }
+          // Glowing Neon Logistics Depot Sign
+          if ((rx === 5 || rx === 6) && ry === 3) {
+            ctx.fillStyle = "#0f172a";
+            ctx.fillRect(px, py + 8, TILE, TILE - 16);
+            ctx.fillStyle = "#f59e0b";
+            ctx.fillRect(px + 2, py + 10, TILE - 4, TILE - 20);
+            ctx.fillStyle = "#000000";
+            ctx.font = "bold 8px monospace";
+            ctx.textAlign = "center";
+            ctx.fillText(rx === 5 ? "DE" : "POT", px + TILE / 2, py + TILE / 2 + 2);
           }
         } else {
-          // Fallback simple house
-          ctx.fillStyle = "#935116";
+          // Fallback industrial outpost
+          ctx.fillStyle = "#334155";
           ctx.fillRect(px, py, TILE, TILE);
-          ctx.fillStyle = "#5c330e";
+          ctx.fillStyle = "#1e293b";
           for (let i = 6; i < TILE; i += 8) {
             ctx.fillRect(px, py + i, TILE, 2);
           }

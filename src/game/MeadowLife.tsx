@@ -107,41 +107,33 @@ function FactorioCraftingIcon({
       }}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
-      title={title || `${name}\nLeft-Click: Craft 1\nRight-Click: Craft 5\nShift-Click: Craft All`}
-      className={`relative flex flex-col items-center justify-between p-1.5 h-[72px] w-[72px] rounded-md border-2 transition-all duration-150 select-none font-mono cursor-pointer shadow-[0_2px_6px_rgba(0,0,0,0.6),_inset_0_1px_0_rgba(255,255,255,0.15)] ${isTechLocked
-          ? "bg-[#1d1428] border-[#7e22ce] text-purple-300 opacity-70 hover:opacity-100 hover:border-[#c084fc] hover:shadow-[0_0_12px_rgba(192,132,252,0.4)]"
+      title={title || `${name}\nLeft-Click: Craft 1 | Right-Click: Craft 5 | Shift-Click: Craft All`}
+      className={`relative flex items-center justify-center h-10 w-10 sm:h-11 sm:w-11 rounded-sm border transition-all duration-150 select-none font-mono cursor-pointer shadow-[inset_0_1px_2px_rgba(0,0,0,0.6)] ${isTechLocked
+          ? "bg-[#181220] border-[#6b21a8] text-purple-400 opacity-60 hover:opacity-100 hover:border-[#a855f7]"
           : canCraft
             ? isSelected
-              ? "bg-[#28382b] border-[#ff9200] text-amber-200 shadow-[0_0_14px_rgba(255,146,0,0.8),_inset_0_1px_0_rgba(255,255,255,0.25)] scale-105 z-10"
-              : "bg-[#1f2921] border-[#3f5745] hover:border-[#ff9200] hover:bg-[#2a382d] text-emerald-100 hover:scale-105 hover:shadow-[0_0_10px_rgba(255,146,0,0.4)]"
-            : "bg-[#181a1f] border-[#2c3442] opacity-50 desaturate-50 text-stone-500 hover:opacity-80 cursor-not-allowed"
+              ? "bg-[#253528] border-[#ff9200] text-amber-200 shadow-[0_0_8px_rgba(255,146,0,0.8)] scale-105 z-10"
+              : "bg-[#1c241e] border-[#2e4033] hover:border-[#ff9200] hover:bg-[#263329] text-emerald-100"
+            : "bg-[#14161a] border-[#222730] opacity-40 text-stone-500 hover:opacity-70 cursor-not-allowed"
         }`}
     >
-      {/* Corner Factorio Status Dot */}
-      <div className="w-full flex justify-between items-center px-0.5">
-        <span
-          className={`h-2 w-2 rounded-full ${isTechLocked
-              ? "bg-purple-500 shadow-[0_0_4px_#a855f7]"
-              : canCraft
-                ? "bg-emerald-400 shadow-[0_0_5px_#2ecc71]"
-                : "bg-red-500/70"
-            }`}
-        />
-        {isTechLocked && <span className="text-[10px] animate-pulse leading-none">🔒</span>}
-      </div>
+      {/* Corner Status Indicator */}
+      <span
+        className={`absolute top-1 left-1 h-1.5 w-1.5 rounded-full ${isTechLocked
+            ? "bg-purple-500"
+            : canCraft
+              ? "bg-emerald-400 shadow-[0_0_3px_#2ecc71]"
+              : "bg-transparent"
+          }`}
+      />
+      {isTechLocked && <span className="absolute top-0.5 right-0.5 text-[8px]">🔒</span>}
 
-      <span className="text-3xl my-auto filter drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]">{iconSymbol || "⚙"}</span>
+      <span className="text-xl filter drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">{iconSymbol || "⚙"}</span>
 
       {/* Craftable Count Badge */}
       {craftableCount !== undefined && craftableCount > 0 && (
-        <span className="absolute bottom-0.5 right-1 px-1 bg-black/85 border border-emerald-500/50 rounded text-[9px] font-extrabold text-emerald-300 shadow-sm">
+        <span className="absolute bottom-0.5 right-0.5 px-0.5 bg-black/90 border border-emerald-500/40 rounded-[2px] text-[7.5px] font-extrabold text-emerald-300 leading-none">
           {craftableCount}
-        </span>
-      )}
-
-      {name && (
-        <span className="text-[8px] font-bold truncate max-w-full text-stone-300 opacity-90 leading-tight px-0.5">
-          {name}
         </span>
       )}
 
@@ -4666,8 +4658,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                     </span>
                   </div>
                   <span className="font-bold text-amber-400">+{line.earnings}g</span>
-                </div>
-              ))}
+              </div>
 
               <div className="flex justify-between items-center border-t border-[#5d4037] pt-3 font-bold text-sm">
                 <span>Overnight Net Profits:</span>
@@ -4686,13 +4677,14 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
 
       {/* D. FACTORIO CHARACTER & LOGISTICS JOURNAL GUI */}
       <Dialog open={inventoryOpen} onOpenChange={setInventoryOpen}>
-        <DialogContent container={mainContainerRef.current} className="w-[98vw] max-w-4xl max-h-[92dvh] bg-[#12151a] border-[3px] border-[#3b4759] text-slate-100 rounded-lg font-mono shadow-[0_0_30px_rgba(0,0,0,0.9)] overflow-y-auto p-3 sm:p-5">
-          <DialogHeader>
-            <DialogTitle className="text-sm sm:text-base font-black uppercase tracking-wider flex items-center justify-between text-[#ff9200] border-b border-[#3b4759] pb-2.5 bg-[#1a202c] -mt-3 -mx-3 sm:-mt-5 sm:-mx-5 px-3 sm:px-5 pt-3 sm:pt-4">
+        <DialogContent container={mainContainerRef.current} className="w-[98vw] max-w-5xl max-h-[92dvh] bg-[#1d2127] border-[3px] border-[#3a4454] text-slate-100 rounded-sm font-mono shadow-[0_10px_35px_rgba(0,0,0,0.95)] overflow-hidden p-3 sm:p-4 select-none">
+          {/* Factorio Steel Bevel Header Bar */}
+          <DialogHeader className="m-0 p-0">
+            <DialogTitle className="text-xs sm:text-sm font-black uppercase tracking-wider flex items-center justify-between text-[#ff9200] border-b-2 border-[#2d3542] pb-2 bg-[#161a20] -mt-3 -mx-3 sm:-mt-4 sm:-mx-4 px-3 sm:px-4 pt-2.5">
               <div className="flex items-center gap-2">
-                <span className="text-xl">🏭</span>
-                <span className="text-white">FACTORIO CHARACTER GUI</span>
-                <span className="text-[10px] text-amber-400 bg-amber-950/80 px-2 py-0.5 border border-amber-600/60 rounded">LOGISTICS & INVENTORY</span>
+                <span className="text-base">🏭</span>
+                <span className="text-slate-100 font-extrabold">CHARACTER & CRAFTING</span>
+                <span className="text-[10px] text-amber-400 bg-amber-950/80 px-2 py-0.5 border border-amber-600/60 rounded">FACTORIO GUI</span>
               </div>
               <div className="flex items-center gap-3 text-xs">
                 <span className="text-yellow-400 font-bold">🪙 {state.coins}G</span>
@@ -4702,280 +4694,204 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
             </DialogTitle>
           </DialogHeader>
 
-          {/* Factorio Navigation Category Tabs */}
-          <div className="flex border-b border-[#2d3748] gap-1 my-1 overflow-x-auto pb-1">
-            {([
-              { id: "inventory", label: "🎒 Character & Inventory", icon: "🎒" },
-              { id: "crafting", label: "⚙️ Factorio Crafting", icon: "⚙️" },
-              { id: "workers", label: "👷 Automation Workers", icon: "👷" },
-              { id: "social", label: "👥 Social & NPCs", icon: "👥" },
-              { id: "skills", label: "📊 Skills & Upgrades", icon: "📊" },
-            ] as const).map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id as any)}
-                className={`px-3 py-1.5 text-xs font-bold uppercase transition-all rounded-none whitespace-nowrap flex items-center gap-1.5 ${activeTab === tab.id
-                    ? "bg-[#253041] text-[#ff9200] border-t-2 border-[#ff9200] shadow-inner font-black"
-                    : "bg-[#181d26] text-slate-400 hover:text-slate-200 border-t-2 border-transparent"
-                  }`}
-              >
-                <span>{tab.icon}</span>
-                <span>{tab.label}</span>
-              </button>
-            ))}
-          </div>
-
-          <div className="py-2 min-h-[360px] max-h-[72vh] overflow-y-auto">
-            {activeTab === "inventory" && (
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 font-mono">
-                {/* ======================================================== */}
-                {/* LEFT PANEL: CHARACTER EQUIPMENT & INVENTORY              */}
-                {/* ======================================================== */}
-                <div className="space-y-3 bg-[#161a22] p-3 border-2 border-[#2b3545] rounded-sm flex flex-col justify-between">
-                  <div>
-                    {/* Character Equipment Bar */}
-                    <div className="flex flex-wrap items-center justify-between gap-1.5 p-2 bg-[#12161e] border border-[#2b3545] rounded mb-2.5">
-                      <div className="flex items-center gap-1">
-                        {/* Armor Slot */}
-                        <div className="flex flex-col items-center" title="Equipped Armor Suit">
-                          <span className="text-[7px] font-bold text-zinc-500 uppercase">Armor</span>
-                          <div className="w-8 h-8 bg-[#1a212d] border border-slate-600 rounded flex items-center justify-center text-base">
-                            🛡️
-                          </div>
-                        </div>
-                        {/* Weapon 1 + Ammo */}
-                        <div className="flex flex-col items-center" title="Primary Weapon & Ammo">
-                          <span className="text-[7px] font-bold text-zinc-500 uppercase">Gun</span>
-                          <div className="flex gap-0.5">
-                            <div className="w-8 h-8 bg-[#1a212d] border border-amber-500/80 rounded flex items-center justify-center text-sm">
-                              🔫
-                            </div>
-                            <div className="w-6 h-8 bg-[#121720] border border-zinc-700 rounded flex items-center justify-center text-xs">
-                              🧰
-                            </div>
-                          </div>
-                        </div>
-                        {/* Weapon 2 */}
-                        <div className="flex flex-col items-center" title="Secondary Weapon & Rockets">
-                          <span className="text-[7px] font-bold text-zinc-500 uppercase">Heavy</span>
-                          <div className="flex gap-0.5">
-                            <div className="w-8 h-8 bg-[#1a212d] border border-zinc-700 rounded flex items-center justify-center text-sm">
-                              💥
-                            </div>
-                            <div className="w-6 h-8 bg-[#121720] border border-zinc-700 rounded flex items-center justify-center text-xs">
-                              🚀
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Right action controls */}
-                      <div className="flex items-center gap-1">
-                        {heldItem && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="text-[9px] h-6 px-1.5 bg-amber-950/80 border-amber-500 text-amber-300 hover:bg-amber-900 rounded font-mono"
-                            onClick={() => setHeldItem(null)}
-                          >
-                            Clear (Q)
-                          </Button>
-                        )}
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="text-[9px] h-6 px-2 bg-[#253041] border-slate-600 text-slate-200 hover:bg-[#ff9200]/25 hover:border-[#ff9200] rounded font-mono"
-                          onClick={handleSortInventory}
-                        >
-                          🔄 Sort
-                        </Button>
+          {/* Factorio Main Character GUI (Dual Panel: Inventory Left + Crafting Right) */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mt-2 font-mono">
+            {/* ======================================================== */}
+            {/* LEFT PANEL: CHARACTER EQUIPMENT & 40-SLOT INVENTORY      */}
+            {/* ======================================================== */}
+            <div className="bg-[#16191f] p-2.5 border-2 border-[#2c3543] rounded-sm flex flex-col justify-between space-y-2">
+              <div>
+                {/* Character Equipment Bar */}
+                <div className="flex flex-wrap items-center justify-between gap-1.5 p-1.5 bg-[#12151a] border border-[#27303d] rounded-sm mb-2">
+                  <div className="flex items-center gap-1.5">
+                    {/* Armor Slot */}
+                    <div className="flex flex-col items-center" title="Equipped Armor Suit">
+                      <span className="text-[7px] font-bold text-zinc-400 uppercase">Armor</span>
+                      <div className="w-8 h-8 bg-[#1d222b] border border-slate-600 rounded-sm flex items-center justify-center text-sm shadow-inner">
+                        🛡️
                       </div>
                     </div>
-
-                    {/* Factorio 40-Slot Character Grid */}
-                    <div className="bg-[#10141a] p-2 border border-[#2b3545] rounded-sm">
-                      <div className="grid grid-cols-5 sm:grid-cols-8 md:grid-cols-10 gap-1">
-                        {state.inventory.map((item, idx) => (
-                          <button
-                            key={idx}
-                            onClick={(e) => handleSlotClick(idx, "inventory", e)}
-                            onContextMenu={(e) => handleSlotRightClick(e, idx, "inventory")}
-                            onMouseEnter={() => item && setHoveredItem(item)}
-                            onMouseLeave={() => setHoveredItem(null)}
-                            className={`relative flex items-center justify-center h-[42px] transition-all rounded ${
-                              idx === state.hotbarIndex ? "ring-2 ring-amber-400 ring-offset-1 ring-offset-[#10141a]" : ""
-                            } ${item
-                                ? "bg-[#202836] hover:bg-[#2b3648] border-2 border-[#3d4d65] hover:border-[#ff9200] shadow-[inset_0_2px_4px_rgba(0,0,0,0.5)] text-slate-100"
-                                : "bg-[#141922] border-2 border-[#202734] shadow-[inset_0_2px_4px_rgba(0,0,0,0.7)] text-slate-700 hover:border-slate-600"
-                              }`}
-                          >
-                            {idx < 10 && (
-                              <span className="absolute top-0.5 left-1 text-[7px] font-bold text-amber-500/80 leading-none">
-                                {idx === 9 ? "0" : idx + 1}
-                              </span>
-                            )}
-                            {item ? (
-                              <>
-                                <span className="text-xl select-none">{item.iconSymbol || "🎁"}</span>
-                                {item.count > 1 && (
-                                  <span className="absolute bottom-0.5 right-0.5 px-0.5 bg-black/85 rounded text-[8px] font-bold text-amber-400 font-mono border border-black leading-none">
-                                    {item.count}
-                                  </span>
-                                )}
-                              </>
-                            ) : (
-                              <span className="text-xs opacity-10 text-stone-100">-</span>
-                            )}
-                          </button>
-                        ))}
+                    {/* Weapon 1 + Ammo */}
+                    <div className="flex flex-col items-center" title="Primary Weapon & Ammo">
+                      <span className="text-[7px] font-bold text-zinc-400 uppercase">Gun</span>
+                      <div className="flex gap-0.5">
+                        <div className="w-8 h-8 bg-[#1d222b] border border-amber-500/80 rounded-sm flex items-center justify-center text-xs shadow-inner">
+                          🔫
+                        </div>
+                        <div className="w-6 h-8 bg-[#14181f] border border-zinc-700 rounded-sm flex items-center justify-center text-[10px] shadow-inner">
+                          🧰
+                        </div>
+                      </div>
+                    </div>
+                    {/* Weapon 2 */}
+                    <div className="flex flex-col items-center" title="Secondary Weapon & Ammo">
+                      <span className="text-[7px] font-bold text-zinc-400 uppercase">Heavy</span>
+                      <div className="flex gap-0.5">
+                        <div className="w-8 h-8 bg-[#1d222b] border border-zinc-700 rounded-sm flex items-center justify-center text-xs shadow-inner">
+                          💥
+                        </div>
+                        <div className="w-6 h-8 bg-[#14181f] border border-zinc-700 rounded-sm flex items-center justify-center text-[10px] shadow-inner">
+                          🚀
+                        </div>
                       </div>
                     </div>
                   </div>
 
-                  {/* Hover Details Card */}
-                  <div className="mt-2">
-                    {hoveredItem ? (
-                      <div className="p-2 bg-[#12161e] border border-[#2b3545] rounded flex items-start gap-2 text-[10px]">
-                        <span className="text-2xl bg-[#1a212d] p-1 rounded border border-[#2b3545]">{hoveredItem.iconSymbol || "🎁"}</span>
-                        <div className="flex-1">
-                          <div className="flex justify-between font-bold">
-                            <span className="text-[#ff9200] text-xs">{hoveredItem.name}</span>
-                            {hoveredItem.price > 0 && <span className="text-yellow-400">{hoveredItem.price}g</span>}
-                          </div>
-                          <p className="text-zinc-400 text-[10px] mt-0.5 leading-tight">{hoveredItem.description}</p>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="p-2 bg-[#12161e]/50 border border-dashed border-[#2b3545] rounded text-center text-zinc-500 text-[10px]">
-                        Hover over items to inspect stats. Left-click move, Right-click split.
-                      </div>
+                  {/* Right action controls */}
+                  <div className="flex items-center gap-1">
+                    {heldItem && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="text-[9px] h-6 px-1.5 bg-amber-950/80 border-amber-500 text-amber-300 hover:bg-amber-900 rounded-none font-mono"
+                        onClick={() => setHeldItem(null)}
+                      >
+                        Clear (Q)
+                      </Button>
                     )}
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="text-[9px] h-6 px-2 bg-[#253041] border-slate-600 text-slate-200 hover:bg-[#ff9200]/25 hover:border-[#ff9200] rounded-none font-mono"
+                      onClick={handleSortInventory}
+                    >
+                      🔄 Sort
+                    </Button>
                   </div>
                 </div>
 
-                {/* ======================================================== */}
-                {/* RIGHT PANEL: FACTORIO CRAFTING & RECIPES                 */}
-                {/* ======================================================== */}
-                <div className="space-y-2 bg-[#161a22] p-3 border-2 border-[#2b3545] rounded-sm flex flex-col justify-between">
-                  <div className="space-y-2">
-                    {/* Category Buttons Strip */}
-                    <div className="flex flex-wrap gap-1 border-b border-zinc-700 pb-1.5">
-                      {([
-                        { id: "logistics", label: "Logistics", icon: "🚜" },
-                        { id: "production", label: "Production", icon: "🏭" },
-                        { id: "intermediates", label: "Intermediates", icon: "⚙️" },
-                        { id: "space", label: "Space", icon: "🚀" },
-                        { id: "combat", label: "Combat", icon: "⚔️" },
-                        { id: "cheats", label: "Cheats", icon: "⚡" },
-                      ] as const).map((cat) => (
-                        <button
-                          key={cat.id}
-                          onClick={() => setCraftingCategory(cat.id as any)}
-                          className={`flex items-center gap-1 px-2 py-1 text-[10px] border font-bold transition-all ${
-                            craftingCategory === cat.id
-                              ? "bg-zinc-800 border-amber-500 text-amber-300 font-extrabold shadow-sm"
-                              : "bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:bg-zinc-800"
+                {/* Factorio 40-Slot Character Grid (10 columns x 4 rows) */}
+                <div className="bg-[#101318] p-1.5 border border-[#27303d] rounded-sm">
+                  <div className="grid grid-cols-10 gap-1">
+                    {state.inventory.slice(0, 40).map((item, idx) => (
+                      <button
+                        key={idx}
+                        onClick={(e) => handleSlotClick(idx, "inventory", e)}
+                        onContextMenu={(e) => handleSlotRightClick(e, idx, "inventory")}
+                        onMouseEnter={() => item && setHoveredItem(item)}
+                        onMouseLeave={() => setHoveredItem(null)}
+                        className={`relative flex items-center justify-center h-9 w-full transition-all rounded-xs ${
+                          idx === state.hotbarIndex ? "ring-2 ring-amber-400 ring-offset-1 ring-offset-[#101318]" : ""
+                        } ${item
+                            ? "bg-[#1f2633] hover:bg-[#283244] border border-[#3b4759] hover:border-[#ff9200] shadow-[inset_0_1px_3px_rgba(0,0,0,0.6)] text-slate-100"
+                            : "bg-[#13161c] border border-[#222833] shadow-[inset_0_1px_3px_rgba(0,0,0,0.7)] text-slate-700 hover:border-slate-600"
                           }`}
-                        >
-                          <span>{cat.icon}</span>
-                          <span>{cat.label}</span>
-                        </button>
-                      ))}
-                    </div>
+                      >
+                        {idx < 10 && (
+                          <span className="absolute top-0.5 left-0.5 text-[6.5px] font-bold text-amber-500/90 leading-none">
+                            {idx === 9 ? "0" : idx + 1}
+                          </span>
+                        )}
+                        {item ? (
+                          <>
+                            <span className="text-lg select-none filter drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">{item.iconSymbol || "🎁"}</span>
+                            {item.count > 1 && (
+                              <span className="absolute bottom-0.5 right-0.5 px-0.5 bg-black/90 rounded-[2px] text-[7.5px] font-bold text-amber-300 font-mono border border-black leading-none">
+                                {item.count}
+                              </span>
+                            )}
+                          </>
+                        ) : (
+                          <span className="text-[10px] opacity-10 text-stone-300">-</span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
 
-                    {/* Recipe Grid */}
-                    <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 gap-1 p-1.5 bg-zinc-950/90 rounded border border-zinc-800 max-h-[220px] overflow-y-auto">
-                      {(craftingCategory as any) === "cheats" ? (
-                        Object.values(ITEM_DEFS).map((itemDef) => (
-                          <button
-                            key={itemDef.id}
-                            onClick={() => {
-                              setState((prev) => {
-                                const next = structuredClone(prev);
-                                addItem(next.inventory, createItem(itemDef.id, 50));
-                                return next;
-                              });
-                            }}
-                            title={`Spawn 50x ${itemDef.name}`}
-                            className="relative flex flex-col items-center justify-center h-12 w-12 rounded border bg-purple-950/40 border-amber-500/60 hover:bg-amber-950/60 text-amber-200"
-                          >
-                            <span className="text-xl">{itemDef.iconSymbol || "📦"}</span>
-                            <span className="absolute bottom-0 right-0.5 text-[8px] font-bold text-amber-300">+50</span>
-                          </button>
-                        ))
-                      ) : (
-                        (recipesByCategory[craftingCategory] || []).map((recipe) => {
-                          const itemDef = ITEM_DEFS[recipe.outputId];
-                          const isFree = state.freeCraft || state.godMode;
-                          const isTechLocked = !isFree && recipe.techRequired && !(state.unlockedTechs || []).includes(recipe.techRequired);
-                          const plan = resolveFactorioCraftPlan(state, recipe, 1);
-                          const canCraft = isFree || (!isTechLocked && plan.canCraft);
-
-                          let maxCount = 0;
-                          if (canCraft) {
-                            if (isFree) maxCount = 100;
-                            else {
-                              for (let c = 1; c <= 50; c++) {
-                                const test = resolveFactorioCraftPlan(state, recipe, c);
-                                if (test.canCraft) maxCount = c;
-                                else break;
-                              }
-                            }
-                          }
-
-                          return (
-                            <FactorioCraftingIcon
-                              key={recipe.id}
-                              iconSymbol={itemDef?.iconSymbol || "⚙"}
-                              name={recipe.name}
-                              count={recipe.outputCount}
-                              craftableCount={maxCount}
-                              canCraft={canCraft}
-                              isTechLocked={isTechLocked}
-                              isSelected={hoveredRecipe?.id === recipe.id}
-                              onMouseEnter={() => setHoveredRecipe(recipe)}
-                              onMouseLeave={() => setHoveredRecipe(null)}
-                              onClick={(e) => handleStartCrafting(recipe, 1, e.shiftKey)}
-                              onContextMenu={() => handleStartCrafting(recipe, 5, false)}
-                            />
-                          );
-                        })
-                      )}
+              {/* Hover Details Card */}
+              <div className="mt-1">
+                {hoveredItem ? (
+                  <div className="p-2 bg-[#12151a] border border-[#27303d] rounded-sm flex items-start gap-2 text-[10px]">
+                    <span className="text-2xl bg-[#1d222b] p-1 rounded-sm border border-[#27303d]">{hoveredItem.iconSymbol || "🎁"}</span>
+                    <div className="flex-1">
+                      <div className="flex justify-between font-bold">
+                        <span className="text-[#ff9200] text-xs">{hoveredItem.name}</span>
+                        {hoveredItem.price > 0 && <span className="text-yellow-400">{hoveredItem.price}g</span>}
+                      </div>
+                      <p className="text-zinc-400 text-[10px] mt-0.5 leading-tight">{hoveredItem.description}</p>
                     </div>
                   </div>
+                ) : (
+                  <div className="p-2 bg-[#12151a]/50 border border-dashed border-[#27303d] rounded-sm text-center text-zinc-500 text-[10px]">
+                    Hover over items to inspect stats. Left-click move, Right-click split.
+                  </div>
+                )}
+              </div>
+            </div>
 
-                  {/* Recipe Flow Card Inspector */}
-                  <div className="bg-[#12161e] p-2 rounded border border-zinc-800 text-[10px]">
-                    {hoveredRecipe ? (() => {
-                      const itemDef = ITEM_DEFS[hoveredRecipe.outputId];
-                      const isTechLocked = hoveredRecipe.techRequired && !(state.unlockedTechs || []).includes(hoveredRecipe.techRequired);
-                      const plan = resolveFactorioCraftPlan(state, hoveredRecipe, 1);
+            {/* ======================================================== */}
+            {/* RIGHT PANEL: FACTORIO CRAFTING & RECIPES                 */}
+            {/* ======================================================== */}
+            <div className="bg-[#16191f] p-2.5 border-2 border-[#2c3543] rounded-sm flex flex-col justify-between space-y-2">
+              <div className="space-y-1.5">
+                {/* Category Buttons Strip */}
+                <div className="flex flex-wrap gap-1 border-b border-[#2d3542] pb-1.5">
+                  {([
+                    { id: "logistics", label: "Logistics", icon: "🚜" },
+                    { id: "production", label: "Production", icon: "🏭" },
+                    { id: "intermediates", label: "Intermediates", icon: "⚙️" },
+                    { id: "space", label: "Space", icon: "🚀" },
+                    { id: "combat", label: "Combat", icon: "⚔️" },
+                    { id: "cheats", label: "Cheats", icon: "⚡" },
+                  ] as const).map((cat) => (
+                    <button
+                      key={cat.id}
+                      onClick={() => setCraftingCategory(cat.id as any)}
+                      className={`flex items-center gap-1 px-2 py-1 text-[10px] border font-bold transition-all rounded-xs cursor-pointer ${
+                        craftingCategory === cat.id
+                          ? "bg-[#253041] border-[#ff9200] text-amber-300 font-extrabold shadow-sm"
+                          : "bg-[#12151a] border-[#27303d] text-zinc-400 hover:bg-[#1d222b] hover:text-slate-200"
+                      }`}
+                    >
+                      <span>{cat.icon}</span>
+                      <span>{cat.label}</span>
+                    </button>
+                  ))}
+                </div>
+
+                {/* Compact Factorio 8-Column Recipe Grid */}
+                <div className="grid grid-cols-6 sm:grid-cols-8 gap-1 p-1 bg-[#101318] rounded-sm border border-[#27303d] max-h-[220px] overflow-y-auto">
+                  {(craftingCategory as any) === "cheats" ? (
+                    Object.values(ITEM_DEFS).map((itemDef) => (
+                      <button
+                        key={itemDef.id}
+                        onClick={() => {
+                          setState((prev) => {
+                            const next = structuredClone(prev);
+                            addItem(next.inventory, createItem(itemDef.id, 50));
+                            return next;
+                          });
+                        }}
+                        title={`Spawn 50x ${itemDef.name}`}
+                        className="relative flex flex-col items-center justify-center h-10 w-10 rounded-sm border bg-purple-950/40 border-amber-500/60 hover:bg-amber-950/60 text-amber-200 cursor-pointer"
+                      >
+                        <span className="text-lg">{itemDef.iconSymbol || "📦"}</span>
+                        <span className="absolute bottom-0 right-0.5 text-[7.5px] font-bold text-amber-300">+50</span>
+                      </button>
+                    ))
+                  ) : (
+                    (recipesByCategory[craftingCategory] || []).map((recipe) => {
+                      const itemDef = ITEM_DEFS[recipe.outputId];
+                      const isFree = state.freeCraft || state.godMode;
+                      const isTechLocked = !isFree && recipe.techRequired && !(state.unlockedTechs || []).includes(recipe.techRequired);
+                      const plan = resolveFactorioCraftPlan(state, recipe, 1);
+                      const canCraft = isFree || (!isTechLocked && plan.canCraft);
+
+                      let maxCount = 0;
+                      if (canCraft) {
+                        if (isFree) maxCount = 100;
+                        else {
+                          for (let c = 1; c <= 50; c++) {
+                            const test = resolveFactorioCraftPlan(state, recipe, c);
+                            if (test.canCraft) maxCount = c;
+                            else break;
+                          }
+                        }
+                      }
 
                       return (
-                        <div className="space-y-1.5">
-                          <div className="flex justify-between items-center border-b border-zinc-800 pb-1">
-                            <span className="font-bold text-orange-400 text-xs flex items-center gap-1">
-                              {hoveredRecipe.name} {isTechLocked && "🔒"}
-                            </span>
-                            <span className="text-[9px] text-amber-400">⏱️ {hoveredRecipe.craftTimeSeconds || 0.5}s</span>
-                          </div>
-
-                          {/* Ingredient Flow Diagram */}
-                          <div className="flex items-center gap-1 overflow-x-auto py-1">
-                            {hoveredRecipe.inputs.map((inp) => {
-                              const playerHas = getGlobalItemCount(state, inp.itemId);
-                              const hasDirect = playerHas >= inp.count;
-                              return (
-                                <div key={inp.itemId} className={`p-1 rounded border flex items-center gap-1 ${hasDirect ? "border-green-800 bg-green-950/30 text-green-300" : "border-amber-800 bg-amber-950/30 text-amber-300"}`}>
-                                  <span>{ITEM_DEFS[inp.itemId]?.iconSymbol || "📦"}</span>
-                                  <span className="font-bold">{inp.count}x</span>
-                                </div>
-                              );
-                            })}
-                            <span className="text-orange-400 font-bold">➔</span>
-                            <div className="p-1 bg-orange-950/50 border border-orange-600 rounded text-orange-300 font-bold flex items-center gap-1">
-                              <span>{itemDef?.iconSymbol || "⚙️"}</span>
-                              <span>{hoveredRecipe.outputCount}x</span>
                             </div>
                           </div>
 

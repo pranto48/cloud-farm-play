@@ -4911,7 +4911,7 @@ export function interact(
             state.quest.currentCount += 1;
             if (state.quest.currentCount >= state.quest.targetCount) {
               state.coins += state.quest.rewardCoins;
-              result.message = `Quest Complete! Shipped Parsnip. +${state.quest.rewardCoins}g`;
+              result.message = `Quest Complete! Harvested ${cropDef.name}. +${state.quest.rewardCoins}g`;
               state.quest = null;
             }
           }

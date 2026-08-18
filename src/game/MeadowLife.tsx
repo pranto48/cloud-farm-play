@@ -418,6 +418,8 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
   const [isMobile, setIsMobile] = useState(false);
   const [showTouchControls, setShowTouchControls] = useState(false);
   const [radarExpanded, setRadarExpanded] = useState(true);
+  const [campaignWidgetOpen, setCampaignWidgetOpen] = useState(true);
+  const [campaignMinimized, setCampaignMinimized] = useState(false);
   const [canvasSize, setCanvasSize] = useState({ width: 704, height: 480 });
   const [zoom, setZoom] = useState<number>(1.0);
   const zoomRef = useRef<number>(1.0);
@@ -3186,6 +3188,63 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
             >
               Exit (X)
             </Button>
+          </div>
+        )}
+
+        {/* Factorio Campaign / Starter Smelting Mission Widget */}
+        {campaignWidgetOpen && (
+          <div className="absolute top-14 left-3 z-20 max-w-[280px] bg-[#161a22]/95 border-2 border-orange-500/80 rounded-lg p-2.5 shadow-2xl backdrop-blur text-slate-100 font-mono text-xs select-none">
+            <div className="flex items-center justify-between border-b border-orange-500/40 pb-1 mb-1.5">
+              <div className="font-black text-orange-400 flex items-center gap-1.5 text-[11px]">
+                <span>🚀</span>
+                <span>FACTORIO BASICS: SMELTING</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setCampaignMinimized(prev => !prev)}
+                  title={campaignMinimized ? "Expand" : "Minimize"}
+                  className="text-slate-400 hover:text-slate-100 px-1 text-[10px] cursor-pointer"
+                >
+                  {campaignMinimized ? "➕" : "➖"}
+                </button>
+                <button
+                  onClick={() => setCampaignWidgetOpen(false)}
+                  title="Close Widget"
+                  className="text-slate-400 hover:text-red-400 px-1 text-[10px] cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+
+            {!campaignMinimized && (
+              <>
+                <p className="text-[10px] text-amber-200/90 mb-1.5 leading-snug">
+                  As an introduction to crafting, let's craft some simple iron plates.
+                </p>
+                <div className="space-y-1 text-[9.5px]">
+                  <div className="p-1 bg-zinc-900/80 rounded border border-zinc-800">
+                    <span className="text-orange-400 font-bold">1. </span>
+                    <span className="text-slate-200">Place a <b>Burner mining drill</b> onto an <b>Iron ore</b> field.</span>
+                  </div>
+                  <div className="p-1 bg-zinc-900/80 rounded border border-zinc-800">
+                    <span className="text-orange-400 font-bold">2. </span>
+                    <span className="text-slate-200">Place a <b>Stone furnace</b> directly in front of the drill output.</span>
+                  </div>
+                  <div className="p-1 bg-zinc-900/80 rounded border border-zinc-800">
+                    <span className="text-orange-400 font-bold">3. </span>
+                    <span className="text-slate-200">Fill both the drill and furnace with <b>Fuel (Coal or Logs)</b>.</span>
+                  </div>
+                  <div className="p-1 bg-zinc-900/80 rounded border border-zinc-800">
+                    <span className="text-orange-400 font-bold">4. </span>
+                    <span className="text-slate-200">Collect smelted <b>Iron plates</b> manually (<kbd className="bg-zinc-800 px-1 rounded text-orange-300">F</kbd>) or with an <b>Inserter</b>.</span>
+                  </div>
+                </div>
+                <div className="mt-1.5 pt-1 border-t border-zinc-800 text-[9px] text-slate-400 italic">
+                  💡 This entire process is referred to as 'smelting'. Copper ore must also be smelted.
+                </div>
+              </>
+            )}
           </div>
         )}
 
@@ -6403,6 +6462,54 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
           </DialogHeader>
 
           <div className="space-y-6 py-2 text-xs font-mono">
+            {/* Factorio Basics: Introduction to Smelting Card */}
+            <div className="p-3 bg-[#181a1f] border-2 border-orange-500/70 rounded-lg space-y-2.5 shadow-md">
+              <div className="flex items-center justify-between border-b border-orange-500/30 pb-1.5">
+                <h3 className="font-extrabold text-orange-400 text-sm flex items-center gap-2">
+                  <span>🚀</span> FACTORIO BASICS — INTRODUCTION TO CRAFTING & SMELTING
+                </h3>
+                <span className="text-[10px] text-orange-300 font-mono bg-orange-950/60 px-2 py-0.5 rounded border border-orange-500/30">
+                  wiki.factorio.com/Crafting
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-200 leading-relaxed">
+                As an introduction to crafting, let's craft some simple iron plates.
+              </p>
+              <div className="space-y-1.5 text-[10px]">
+                <div className="p-2 bg-zinc-900 rounded border border-zinc-800 flex items-start gap-2">
+                  <span className="text-orange-400 font-bold text-xs">1.</span>
+                  <div>
+                    <span className="font-bold text-slate-100">Place Burner Mining Drill: </span>
+                    <span className="text-zinc-300">Place a <b>Burner mining drill</b> onto an <b>Iron ore</b> resource field. This is a silvery-blue crystalline patch.</span>
+                  </div>
+                </div>
+                <div className="p-2 bg-zinc-900 rounded border border-zinc-800 flex items-start gap-2">
+                  <span className="text-orange-400 font-bold text-xs">2.</span>
+                  <div>
+                    <span className="font-bold text-slate-100">Place Stone Furnace: </span>
+                    <span className="text-zinc-300">Place a <b>Stone Furnace</b> directly in front of the output arrow, so that the miner outputs the ore directly into the furnace.</span>
+                  </div>
+                </div>
+                <div className="p-2 bg-zinc-900 rounded border border-zinc-800 flex items-start gap-2">
+                  <span className="text-orange-400 font-bold text-xs">3.</span>
+                  <div>
+                    <span className="font-bold text-slate-100">Supply Fuel: </span>
+                    <span className="text-zinc-300">Fill both the miner and the furnace with <b>Fuel (Coal or Wood logs)</b>.</span>
+                  </div>
+                </div>
+                <div className="p-2 bg-zinc-900 rounded border border-zinc-800 flex items-start gap-2">
+                  <span className="text-orange-400 font-bold text-xs">4.</span>
+                  <div>
+                    <span className="font-bold text-slate-100">Collect Smelted Iron Plates: </span>
+                    <span className="text-zinc-300">Wait a few seconds. The first piece of <b>Iron plate</b> is smelted and available for collection (<kbd className="bg-zinc-800 px-1 rounded text-orange-300">F</kbd> key) or via an <b>Inserter</b>.</span>
+                  </div>
+                </div>
+              </div>
+              <div className="p-2 bg-orange-950/30 rounded border border-orange-500/20 text-[10px] text-orange-300/90 italic">
+                💡 This entire process is commonly referred to as 'smelting'. Copper ore must also be smelted.
+              </div>
+            </div>
+
             {/* Factorio Cheat Sheet Golden Ratios Card */}
             <div className="p-3 bg-[#181a1f] border-2 border-amber-500/50 rounded-lg space-y-3 shadow-md">
               <div className="flex items-center justify-between border-b border-amber-500/30 pb-1.5">

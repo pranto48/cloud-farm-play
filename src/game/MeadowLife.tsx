@@ -742,8 +742,65 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
           return { ...prev, placementDirection: nextDir };
         });
       } else if (key === "f") {
-        const f = frontTile(stateRef.current);
-        if (f) handleTileInteraction(f);
+        // Factorio Item Pickup Vacuum: Collect all items on belts/ground within 2.5 tiles radius
+        setState((prev) => {
+          const next = structuredClone(prev);
+          const px = Math.round(next.player.subX ?? next.player.x);
+          const py = Math.round(next.player.subY ?? next.player.y);
+          const grid = next.inHouse ? next.houseGrid! : (next.inMine ? next.mineGrid : next.tiles);
+          let pickedCount = 0;
+          let lastPickedName = "";
+
+          for (let dy = -2; dy <= 2; dy++) {
+            for (let dx = -2; dx <= 2; dx++) {
+              const tx = px + dx;
+              const ty = py + dy;
+              const t = grid[ty]?.[tx];
+              if (!t) continue;
+
+              // 1. Vacuum items off conveyor belts
+              if (t.beltItems && t.beltItems.length > 0) {
+                while (t.beltItems.length > 0) {
+                  const bItem = t.beltItems.shift();
+                  if (bItem) {
+                    addItem(next.inventory, createItem(bItem.id, 1));
+                    pickedCount++;
+                    lastPickedName = ITEM_DEFS[bItem.id]?.name || bItem.id;
+                  }
+                }
+              }
+            }
+          }
+
+          if (pickedCount > 0) {
+            toast(`+${pickedCount}x ${lastPickedName} collected (F) 🧲`);
+          } else {
+            const f = frontTile(next);
+            if (f) handleTileInteraction(f);
+          }
+          return next;
+        });
+      } else if (key === "z") {
+        // Factorio Drop Item: Drop 1 item from active hotbar onto front conveyor belt / ground
+        setState((prev) => {
+          const next = structuredClone(prev);
+          const f = frontTile(next);
+          const activeItem = next.inventory[next.hotbarIndex];
+          if (f && activeItem && activeItem.count > 0) {
+            const grid = next.inHouse ? next.houseGrid! : (next.inMine ? next.mineGrid : next.tiles);
+            const targetTile = grid[f.y]?.[f.x];
+            if (targetTile && targetTile.kind === "placed_item" && targetTile.placedItemId?.includes("belt")) {
+              if (!targetTile.beltItems) targetTile.beltItems = [];
+              if (targetTile.beltItems.length < 6) {
+                targetTile.beltItems.push({ id: activeItem.id, offset: 0, lane: Math.random() < 0.5 ? 0 : 1 });
+                activeItem.count -= 1;
+                if (activeItem.count <= 0) next.inventory[next.hotbarIndex] = null;
+                toast(`Dropped 1x ${activeItem.name} onto belt (Z) 🔽`);
+              }
+            }
+          }
+          return next;
+        });
       } else if (key >= "1" && key <= "9") {
         const slot = parseInt(key) - 1;
         setState((prev) => ({ ...prev, hotbarIndex: slot }));

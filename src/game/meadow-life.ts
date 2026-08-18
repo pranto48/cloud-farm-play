@@ -302,6 +302,8 @@ export interface GameState {
   }[];
   placementDirection?: "up" | "down" | "left" | "right";
   activeInspectorTile?: { x: number; y: number } | null;
+  /** Factorio Alt-Mode info overlay toggle */
+  altMode?: boolean;
 }
 
 export interface RemotePlayer {
@@ -3596,13 +3598,16 @@ export function tickFurnace(tile: Tile, dt: number, powerSatisfaction = 1.0): vo
   }
 }
 
-// Factorio Transport Belt Simulation
+// Factorio Transport Belt, Underground Belt, and Splitter Simulation
 function updateTransportBelt(tile: Tile, grid: Tile[][], x: number, y: number, dt: number) {
   if (!tile.beltItems) tile.beltItems = [];
   if (tile.beltItems.length === 0) return;
 
-  const isFast = tile.placedItemId === "fast_transport_belt";
-  const speed = (isFast ? 3.6 : 1.8); // tiles per sec
+  const id = tile.placedItemId || "transport_belt";
+  const isTurbo = id.includes("turbo");
+  const isExpress = id.includes("express");
+  const isFast = id.includes("fast");
+  const speed = isTurbo ? 7.2 : isExpress ? 5.4 : isFast ? 3.6 : 1.8; // tiles per sec
   const { dx, dy } = getDirectionVector(tile.direction);
 
   for (let i = 0; i < tile.beltItems.length; i++) {
@@ -3615,11 +3620,13 @@ function updateTransportBelt(tile: Tile, grid: Tile[][], x: number, y: number, d
 
       if (targetX >= 0 && targetX < COLS && targetY >= 0 && targetY < ROWS) {
         const nextTile = grid[targetY]?.[targetX];
-        if (nextTile) {
-          // Next tile is another belt
-          if (nextTile.kind === "placed_item" && (nextTile.placedItemId === "transport_belt" || nextTile.placedItemId === "fast_transport_belt")) {
+        if (nextTile && nextTile.kind === "placed_item") {
+          const nextId = nextTile.placedItemId || "";
+
+          // 1. Next tile is standard or tiered belt
+          if (nextId.includes("belt") && !nextId.includes("underground")) {
             if (!nextTile.beltItems) nextTile.beltItems = [];
-            if (nextTile.beltItems.length < 6) {
+            if (nextTile.beltItems.length < 8) {
               nextTile.beltItems.push({
                 id: item.id,
                 offset: item.offset - 1.0,
@@ -3630,8 +3637,53 @@ function updateTransportBelt(tile: Tile, grid: Tile[][], x: number, y: number, d
               continue;
             }
           }
-          // Next tile is a chest
-          else if (nextTile.kind === "placed_item" && isChestBuilding(nextTile.placedItemId) && nextTile.chestInventory) {
+          // 2. Next tile is Underground Belt Entrance
+          else if (nextId.includes("underground")) {
+            const maxReach = nextId.includes("express") ? 10 : nextId.includes("fast") ? 8 : 5;
+            let exitFound = false;
+
+            // Search ahead in forward direction for matching exit
+            for (let d = 2; d <= maxReach; d++) {
+              const uX = x + dx * d;
+              const uY = y + dy * d;
+              if (uX >= 0 && uX < COLS && uY >= 0 && uY < ROWS) {
+                const uTile = grid[uY]?.[uX];
+                if (uTile && uTile.kind === "placed_item" && uTile.placedItemId?.includes("underground")) {
+                  if (!uTile.beltItems) uTile.beltItems = [];
+                  if (uTile.beltItems.length < 8) {
+                    uTile.beltItems.push({
+                      id: item.id,
+                      offset: 0.1,
+                      lane: item.lane,
+                    });
+                    tile.beltItems.splice(i, 1);
+                    i--;
+                    exitFound = true;
+                    break;
+                  }
+                }
+              }
+            }
+            if (exitFound) continue;
+          }
+          // 3. Next tile is Conveyor Splitter
+          else if (nextId.includes("splitter")) {
+            // Splitter sends alternating items forward or to side
+            const altLane = item.lane === 0 ? 1 : 0;
+            if (!nextTile.beltItems) nextTile.beltItems = [];
+            if (nextTile.beltItems.length < 8) {
+              nextTile.beltItems.push({
+                id: item.id,
+                offset: item.offset - 1.0,
+                lane: altLane,
+              });
+              tile.beltItems.splice(i, 1);
+              i--;
+              continue;
+            }
+          }
+          // 4. Next tile is a Chest / Storage Container
+          else if (isChestBuilding(nextId) && nextTile.chestInventory) {
             const added = addItem(nextTile.chestInventory, createItem(item.id, 1));
             if (added) {
               tile.beltItems.splice(i, 1);
@@ -3639,8 +3691,8 @@ function updateTransportBelt(tile: Tile, grid: Tile[][], x: number, y: number, d
               continue;
             }
           }
-          // Next tile is a furnace
-          else if (nextTile.kind === "placed_item" && (nextTile.placedItemId === "furnace" || nextTile.placedItemId === "stone_furnace" || nextTile.placedItemId === "steel_furnace" || nextTile.placedItemId === "electric_furnace") && nextTile.chestInventory) {
+          // 5. Next tile is a Furnace
+          else if ((nextId === "furnace" || nextId === "stone_furnace" || nextId === "steel_furnace" || nextId === "electric_furnace") && nextTile.chestInventory) {
             const itemObj = createItem(item.id, 1);
             if (item.id === "coal" || item.id === "wood") {
               if (nextTile.chestInventory[1] === null) {
@@ -3660,8 +3712,8 @@ function updateTransportBelt(tile: Tile, grid: Tile[][], x: number, y: number, d
               }
             }
           }
-          // Next tile is an assembling machine
-          else if (nextTile.kind === "placed_item" && nextTile.placedItemId?.startsWith("assembling_machine") && nextTile.chestInventory) {
+          // 6. Next tile is an Assembling Machine / Chemical Plant / Refinery
+          else if ((nextId.startsWith("assembling_machine") || nextId === "chemical_plant" || nextId === "oil_refinery" || nextId === "foundry") && nextTile.chestInventory) {
             let placedInAssembler = false;
             for (let slot = 0; slot < 4; slot++) {
               if (nextTile.chestInventory[slot] === null) {
@@ -3676,6 +3728,39 @@ function updateTransportBelt(tile: Tile, grid: Tile[][], x: number, y: number, d
               tile.beltItems.splice(i, 1);
               i--;
               continue;
+            }
+          }
+          // 7. Next tile is a Science Lab
+          else if (nextId.includes("lab") && nextTile.chestInventory) {
+            if (item.id.includes("science_pack") || item.id.includes("science")) {
+              const added = addItem(nextTile.chestInventory, createItem(item.id, 1));
+              if (added) {
+                tile.beltItems.splice(i, 1);
+                i--;
+                continue;
+              }
+            }
+          }
+          // 8. Next tile is a Turret (Auto-feed ammo)
+          else if (nextId.includes("turret") && nextTile.chestInventory) {
+            if (item.id.includes("magazine") || item.id.includes("ammo") || item.id.includes("bullet")) {
+              const added = addItem(nextTile.chestInventory, createItem(item.id, 1));
+              if (added) {
+                tile.beltItems.splice(i, 1);
+                i--;
+                continue;
+              }
+            }
+          }
+          // 9. Next tile is a Boiler (Auto-feed fuel)
+          else if (nextId === "boiler" && nextTile.chestInventory) {
+            if (item.id === "coal" || item.id === "wood" || item.id === "solid_fuel") {
+              const added = addItem(nextTile.chestInventory, createItem(item.id, 1));
+              if (added) {
+                tile.beltItems.splice(i, 1);
+                i--;
+                continue;
+              }
             }
           }
         }
@@ -7076,6 +7161,149 @@ export function draw(
           ctx.fillRect(px + 6, py + 6, TILE - 12, TILE - 10);
           ctx.fillStyle = "#f1c40f";
           ctx.fillRect(px + 11, py + 12, 10, 5);
+        }
+      }
+    }
+  }
+
+  // ==========================================
+  // FACTORIO ALT-MODE (ALT) RECIPE & INFO OVERLAYS
+  // ==========================================
+  if (state.altMode) {
+    for (let y = startRow; y < endRow; y++) {
+      for (let x = startCol; x < endCol; x++) {
+        const t = currentGrid[y]?.[x];
+        if (!t || t.kind !== "placed_item" || !t.placedItemId) continue;
+
+        const px = x * TILE;
+        const py = y * TILE;
+        const id = t.placedItemId;
+
+        // 1. Assembling Machines & Chemical Plants -> Center Recipe Badge
+        if (id.includes("assembling_machine") || id.includes("chemical") || id.includes("refinery") || id.includes("centrifuge") || id.includes("foundry")) {
+          const recipeId = t.assemblerRecipeId || "iron_gear";
+          const recipe = CRAFTING_RECIPES.find((r) => r.id === recipeId);
+          const icon = ITEM_DEFS[recipe?.outputId || recipeId]?.iconSymbol || "⚙️";
+
+          ctx.fillStyle = "rgba(18, 24, 34, 0.88)";
+          ctx.beginPath();
+          ctx.arc(px + TILE / 2, py + TILE / 2, 8, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.strokeStyle = "#ff9200";
+          ctx.lineWidth = 1;
+          ctx.stroke();
+
+          ctx.font = "10px sans-serif";
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText(icon, px + TILE / 2, py + TILE / 2 + 1);
+
+          // Mini progress bar if active crafting
+          if (t.assemblerProgress && t.assemblerProgress > 0) {
+            ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
+            ctx.fillRect(px + 4, py + TILE - 5, TILE - 8, 3);
+            ctx.fillStyle = "#2ecc71";
+            ctx.fillRect(px + 4, py + TILE - 5, (TILE - 8) * t.assemblerProgress, 3);
+          }
+        }
+        // 2. Furnaces -> Center Smelting Item Badge + Flame
+        else if (id.includes("furnace") || id === "furnace") {
+          const smeltOutput = t.smeltOutputId || "iron_bar";
+          const icon = ITEM_DEFS[smeltOutput]?.iconSymbol || "🔩";
+
+          ctx.fillStyle = "rgba(24, 20, 18, 0.88)";
+          ctx.beginPath();
+          ctx.arc(px + TILE / 2, py + TILE / 2 - 2, 7.5, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.strokeStyle = "#e67e22";
+          ctx.lineWidth = 1;
+          ctx.stroke();
+
+          ctx.font = "9px sans-serif";
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText(icon, px + TILE / 2, py + TILE / 2 - 1);
+
+          // Fuel / Flame status
+          if (t.smeltTimer && t.smeltTimer > 0) {
+            ctx.fillStyle = "#f39c12";
+            ctx.font = "8px sans-serif";
+            ctx.fillText("🔥", px + TILE / 2, py + TILE - 5);
+          }
+        }
+        // 3. Mining Drills -> Output Direction Arrow & Ore Badge
+        else if (id.includes("drill")) {
+          const ore = t.drillTargetOre || "iron_ore";
+          const oreIcon = ITEM_DEFS[ore]?.iconSymbol || "⛏️";
+
+          ctx.fillStyle = "rgba(10, 20, 25, 0.85)";
+          ctx.beginPath();
+          ctx.arc(px + TILE / 2, py + 8, 6, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.strokeStyle = "#00cec9";
+          ctx.lineWidth = 1;
+          ctx.stroke();
+
+          ctx.font = "7.5px sans-serif";
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText(oreIcon, px + TILE / 2, py + 8.5);
+
+          // Output Arrow
+          const { dx, dy } = getDirectionVector(t.direction);
+          const arrowX = px + TILE / 2 + dx * 10;
+          const arrowY = py + TILE / 2 + dy * 10;
+          ctx.fillStyle = "#f1c40f";
+          ctx.beginPath();
+          ctx.arc(arrowX, arrowY, 2.5, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        // 4. Inserters -> Drop Direction Pointer
+        else if (id.includes("inserter")) {
+          const { dx, dy } = getDirectionVector(t.direction);
+          const reach = id.includes("long") ? 2 : 1;
+          const dropX = px + TILE / 2 + dx * (reach * TILE * 0.7);
+          const dropY = py + TILE / 2 + dy * (reach * TILE * 0.7);
+
+          ctx.fillStyle = "rgba(241, 196, 15, 0.9)";
+          ctx.beginPath();
+          ctx.arc(dropX, dropY, 2.5, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        // 5. Chests -> Stored Items Count Badge
+        else if (isChestBuilding(id) && t.chestInventory) {
+          const firstItem = t.chestInventory.find((i) => i && i.count > 0);
+          if (firstItem) {
+            ctx.fillStyle = "rgba(15, 18, 24, 0.85)";
+            ctx.fillRect(px + 4, py + 4, TILE - 8, 14);
+            ctx.strokeStyle = "#4a5568";
+            ctx.lineWidth = 1;
+            ctx.strokeRect(px + 4, py + 4, TILE - 8, 14);
+
+            ctx.font = "9px sans-serif";
+            ctx.textAlign = "left";
+            ctx.textBaseline = "middle";
+            ctx.fillText(firstItem.iconSymbol || "📦", px + 5, py + 11);
+
+            ctx.fillStyle = "#f1c40f";
+            ctx.font = "bold 7px monospace";
+            ctx.fillText(firstItem.count > 999 ? `${(firstItem.count / 1000).toFixed(1)}k` : `${firstItem.count}`, px + 15, py + 11);
+          }
+        }
+        // 6. Science Labs -> Active Flask Badge
+        else if (id.includes("lab")) {
+          ctx.fillStyle = "rgba(10, 15, 30, 0.9)";
+          ctx.beginPath();
+          ctx.arc(px + TILE / 2, py + TILE / 2, 8, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.strokeStyle = "#3498db";
+          ctx.lineWidth = 1;
+          ctx.stroke();
+
+          ctx.font = "10px sans-serif";
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText("🧪", px + TILE / 2, py + TILE / 2 + 1);
         }
       }
     }

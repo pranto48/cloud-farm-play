@@ -913,6 +913,13 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
           }
           return next;
         });
+      } else if (key === "alt") {
+        e.preventDefault();
+        setState((prev) => {
+          const nextAlt = !prev.altMode;
+          toast(`Factorio Alt-Mode: ${nextAlt ? "ENABLED (Recipe & Info Overlay On) 🔍" : "DISABLED ❌"}`);
+          return { ...prev, altMode: nextAlt };
+        });
       } else if (key >= "1" && key <= "9") {
         const slot = parseInt(key) - 1;
         setState((prev) => ({ ...prev, hotbarIndex: slot }));
@@ -3448,6 +3455,22 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
               <span className="text-[#38b2ac] text-[10px]">
                 {state.currentRoomCode ? `[${state.currentRoomCode}]` : "Rooms"}
               </span>
+            </button>
+
+            {/* Factorio Alt-Mode Toggle Button */}
+            <button
+              onClick={() => {
+                setState((prev) => {
+                  const nextAlt = !prev.altMode;
+                  toast(`Factorio Alt-Mode: ${nextAlt ? "ENABLED (Info Overlay On) 🔍" : "DISABLED ❌"}`);
+                  return { ...prev, altMode: nextAlt };
+                });
+              }}
+              title="Factorio Alt-Mode (Alt): Toggle Machine Recipes & Info Overlay"
+              className={`h-8 px-2 flex items-center justify-center gap-1 bg-[#2a2c2e] hover:bg-yellow-500/20 border transition-all cursor-pointer font-bold text-xs ${state.altMode ? "border-yellow-500 text-yellow-400 bg-yellow-500/10 shadow-[0_0_10px_rgba(234,179,8,0.3)]" : "border-slate-600 text-slate-300 hover:border-yellow-500"}`}
+            >
+              <span className="text-yellow-400 text-xs">🔍</span>
+              <span className="text-yellow-400 text-[10px]">Alt</span>
             </button>
 
             {/* Factorio Save / Load Manager Button */}

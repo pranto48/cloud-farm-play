@@ -6917,58 +6917,127 @@ export function draw(
   }
 
   // ==========================================
-  // 6. DRAW FACTORIO ENGINEER CHARACTER
+  // ==========================================
+  // 6. DRAW FACTORIO ENGINEER (MATCHING OFFICIAL MODEL)
   // ==========================================
   const isMoving = Math.abs(p.x - (p.subX ?? p.x)) > 0.01 || Math.abs(p.y - (p.subY ?? p.y)) > 0.01;
   const walkTime = isMoving ? Date.now() / 70 : 0;
-  const walkBob = isMoving ? Math.sin(walkTime * 2) * 1.8 : 0;
-  const leftLegOffset = isMoving ? Math.sin(walkTime) * 4 : 0;
-  const rightLegOffset = isMoving ? -Math.sin(walkTime) * 4 : 0;
+  const walkBob = isMoving ? Math.sin(walkTime * 2) * 1.6 : 0;
+  const leftLegOffset = isMoving ? Math.sin(walkTime) * 4.5 : 0;
+  const rightLegOffset = isMoving ? -Math.sin(walkTime) * 4.5 : 0;
+  const armSwing = isMoving ? Math.sin(walkTime) * 3.5 : 0;
 
-  // Character Shadow
-  ctx.fillStyle = "rgba(0, 0, 0, 0.35)";
+  // 1. Directional Cast Shadow (Extending to Bottom-Right)
+  ctx.fillStyle = "rgba(0, 0, 0, 0.4)";
   ctx.beginPath();
-  ctx.ellipse(playerPx, playerPy + 16, 10, 4, 0, 0, Math.PI * 2);
+  ctx.ellipse(playerPx + 6, playerPy + 16, 14, 6, Math.PI / 7, 0, Math.PI * 2);
   ctx.fill();
 
-  // Mechanical Survival Backpack with Status LED
-  ctx.fillStyle = "#2c3e50";
+  // 2. Mechanical Survival Backpack & Over-Shoulder Holster
+  ctx.fillStyle = "#1e2430";
   ctx.fillRect(playerPx - 9, playerPy - 6 + walkBob, 18, 12);
-  ctx.fillStyle = "#2ecc71"; // green power active LED
-  ctx.fillRect(playerPx - 7, playerPy - 4 + walkBob, 3, 3);
-
-  // Armored Hazard Suit Legs & Steel Boots
-  ctx.fillStyle = "#34495e";
-  ctx.fillRect(playerPx - 7, playerPy + 9 + leftLegOffset, 5.5, 9 - leftLegOffset);
-  ctx.fillRect(playerPx + 1.5, playerPy + 9 + rightLegOffset, 5.5, 9 - rightLegOffset);
-  ctx.fillStyle = "#1b2631"; // steel toe caps
-  ctx.fillRect(playerPx - 8, playerPy + 16 + leftLegOffset, 6.5, 2.5);
-  ctx.fillRect(playerPx + 1.5, playerPy + 16 + rightLegOffset, 6.5, 2.5);
-
-  // Armored Hazard Suit Torso (Khaki/Olive Hazard Suit with Yellow Stripes)
-  ctx.fillStyle = "#4a5332";
-  ctx.fillRect(playerPx - 7.5, playerPy - 5 + walkBob, 15, 14);
-  ctx.fillStyle = "#f39c12"; // caution hazard harness
-  ctx.fillRect(playerPx - 5, playerPy - 3 + walkBob, 2, 10);
-  ctx.fillRect(playerPx + 3, playerPy - 3 + walkBob, 2, 10);
-
-  // Engineer Combat Helmet
-  ctx.fillStyle = "#34495e";
-  ctx.fillRect(playerPx - 6, playerPy - 15 + walkBob, 12, 10);
-
-  // Factorio Iconic Orange Reflective Visor
+  ctx.fillStyle = "#2ecc71"; // active energy LED
+  ctx.fillRect(playerPx - 7, playerPy - 4 + walkBob, 2.5, 2.5);
+  // Survival Antenna / Holster extending over right shoulder
+  ctx.fillStyle = "#d35400";
+  ctx.fillRect(playerPx + 7, playerPy - 12 + walkBob, 4, 10);
   ctx.fillStyle = "#e67e22";
+  ctx.fillRect(playerPx + 8, playerPy - 14 + walkBob, 2, 4);
+
+  // 3. Ribbed Hazard Combat Legs & Steel-Toed Boots
+  // Left Leg
+  ctx.fillStyle = "#4a5568";
+  ctx.fillRect(playerPx - 7, playerPy + 8 + leftLegOffset, 5.5, 9 - leftLegOffset);
+  ctx.fillStyle = "#2d3748"; // Ribbed joint lines
+  ctx.fillRect(playerPx - 7, playerPy + 11 + leftLegOffset, 5.5, 1.5);
+  ctx.fillStyle = "#d48817"; // Ochre Knee Guard
+  ctx.fillRect(playerPx - 7.5, playerPy + 13 + leftLegOffset, 6, 3);
+  ctx.fillStyle = "#111827"; // Heavy Steel Boot
+  ctx.fillRect(playerPx - 8, playerPy + 16 + leftLegOffset, 7, 3);
+
+  // Right Leg
+  ctx.fillStyle = "#4a5568";
+  ctx.fillRect(playerPx + 1.5, playerPy + 8 + rightLegOffset, 5.5, 9 - rightLegOffset);
+  ctx.fillStyle = "#2d3748";
+  ctx.fillRect(playerPx + 1.5, playerPy + 11 + rightLegOffset, 5.5, 1.5);
+  ctx.fillStyle = "#d48817"; // Ochre Knee Guard
+  ctx.fillRect(playerPx + 1, playerPy + 13 + rightLegOffset, 6, 3);
+  ctx.fillStyle = "#111827"; // Heavy Steel Boot
+  ctx.fillRect(playerPx + 1, playerPy + 16 + rightLegOffset, 7, 3);
+
+  // 4. Arms & Heavy Gauntlets
+  // Left Arm
+  ctx.fillStyle = "#4a5568";
+  ctx.fillRect(playerPx - 11, playerPy - 2 + walkBob + armSwing, 4, 9);
+  ctx.fillStyle = "#2d3748"; // Gauntlet
+  ctx.fillRect(playerPx - 11.5, playerPy + 4 + walkBob + armSwing, 4.5, 4);
+
+  // Right Arm
+  ctx.fillStyle = "#4a5568";
+  ctx.fillRect(playerPx + 7, playerPy - 2 + walkBob - armSwing, 4, 9);
+  ctx.fillStyle = "#2d3748"; // Gauntlet
+  ctx.fillRect(playerPx + 7, playerPy + 4 + walkBob - armSwing, 4.5, 4);
+
+  // 5. Signature Ochre Hazard Suit Torso & Heavy Pauldrons
+  // Flared Shoulder Pauldrons (Left & Right)
+  ctx.fillStyle = "#d48817";
+  ctx.fillRect(playerPx - 12, playerPy - 6 + walkBob, 6, 5);
+  ctx.fillRect(playerPx + 6, playerPy - 6 + walkBob, 6, 5);
+  ctx.fillStyle = "#b8700e";
+  ctx.fillRect(playerPx - 12, playerPy - 2 + walkBob, 6, 1.5);
+  ctx.fillRect(playerPx + 6, playerPy - 2 + walkBob, 6, 1.5);
+
+  // Armored Torso Vest
+  ctx.fillStyle = "#d48817";
+  ctx.fillRect(playerPx - 6.5, playerPy - 5 + walkBob, 13, 14);
+  // Dark Reinforced Harness & Utility Pouches
+  ctx.fillStyle = "#1e2430";
+  ctx.fillRect(playerPx - 5, playerPy - 2 + walkBob, 10, 4);
+  ctx.fillRect(playerPx - 4, playerPy + 4 + walkBob, 8, 3.5);
+  ctx.fillStyle = "#e59324";
+  ctx.fillRect(playerPx - 3, playerPy + 5 + walkBob, 2, 2);
+  ctx.fillRect(playerPx + 1, playerPy + 5 + walkBob, 2, 2);
+
+  // 6. Iconic Factorio Dome Helmet with Optic Sensor & Respirators
+  // Dome Helmet
+  ctx.fillStyle = "#d48817";
+  ctx.beginPath();
+  ctx.arc(playerPx, playerPy - 11 + walkBob, 6.5, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "#b8700e";
+  ctx.fillRect(playerPx - 6, playerPy - 7 + walkBob, 12, 2.5);
+
+  // Side Respirators / Filtration Canisters
+  ctx.fillStyle = "#2d3748";
+  ctx.fillRect(playerPx - 8, playerPy - 10 + walkBob, 2.5, 4);
+  ctx.fillRect(playerPx + 5.5, playerPy - 10 + walkBob, 2.5, 4);
+
+  // Optic Sensor / Reflective Lens
   if (p.dir === "down") {
-    ctx.fillRect(playerPx - 4, playerPy - 12 + walkBob, 8, 4);
-    ctx.fillStyle = "#f39c12";
-    ctx.fillRect(playerPx - 3, playerPy - 11 + walkBob, 3, 2);
-  } else if (p.dir === "up") {
-    ctx.fillStyle = "#2c3e50";
-    ctx.fillRect(playerPx - 6, playerPy - 15 + walkBob, 12, 6);
+    ctx.fillStyle = "#1b2631";
+    ctx.beginPath();
+    ctx.arc(playerPx, playerPy - 10.5 + walkBob, 3.2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#74b9ff"; // Glowing sensor lens
+    ctx.beginPath();
+    ctx.arc(playerPx, playerPy - 10.5 + walkBob, 2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(playerPx - 1, playerPy - 11.5 + walkBob, 1, 1);
   } else if (p.dir === "left") {
-    ctx.fillRect(playerPx - 5.5, playerPy - 12 + walkBob, 5, 4);
+    ctx.fillStyle = "#1b2631";
+    ctx.fillRect(playerPx - 6, playerPy - 12 + walkBob, 3, 4);
+    ctx.fillStyle = "#74b9ff";
+    ctx.fillRect(playerPx - 5.5, playerPy - 11.5 + walkBob, 2, 2.5);
   } else if (p.dir === "right") {
-    ctx.fillRect(playerPx + 0.5, playerPy - 12 + walkBob, 5, 4);
+    ctx.fillStyle = "#1b2631";
+    ctx.fillRect(playerPx + 3, playerPy - 12 + walkBob, 3, 4);
+    ctx.fillStyle = "#74b9ff";
+    ctx.fillRect(playerPx + 3.5, playerPy - 11.5 + walkBob, 2, 2.5);
+  } else {
+    // Up (Back of Helmet)
+    ctx.fillStyle = "#9c5e0c";
+    ctx.fillRect(playerPx - 4, playerPy - 13 + walkBob, 8, 4);
   }
 
   // Weapon in Hands / Mining Laser targeting beam

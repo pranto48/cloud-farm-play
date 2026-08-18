@@ -4797,7 +4797,8 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                     </span>
                   </div>
                   <span className="font-bold text-amber-400">+{line.earnings}g</span>
-              </div>
+                </div>
+              ))}
 
               <div className="flex justify-between items-center border-t border-[#5d4037] pt-3 font-bold text-sm">
                 <span>Overnight Net Profits:</span>
@@ -4806,7 +4807,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
             </div>
 
             <DialogFooter>
-              <Button w-full className="text-xs font-bold" onClick={handleCloseSleepSummary}>
+              <Button className="w-full text-xs font-bold" onClick={handleCloseSleepSummary}>
                 Wake Up (Day {state.day})
               </Button>
             </DialogFooter>

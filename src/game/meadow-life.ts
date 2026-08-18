@@ -5845,41 +5845,38 @@ export function draw(
         ctx.fillStyle = "#110e0c";
         ctx.fillRect(px, py, TILE, TILE);
       } else if (!state.inMine) {
-        // Smooth noise-based grass color
+        // Factorio Planet Nauvis Base Terrain (Multi-frequency Arid Dirt & Red Desert Noise)
         const grassColor = getGrassColor(x, y, state.season);
         ctx.fillStyle = grassColor;
         ctx.fillRect(px, py, TILE, TILE);
 
-        // Cute floral and blades accents deterministically seeded
+        // Factorio Arid Surface Details: Mineral Gravel Specks, Dry Earth Cracks, and Stone Grains
         const r = seedRandom(x * 37 + y * 73);
-        if (r < 0.15) {
-          // Grass blades using curved paths
-          ctx.strokeStyle = "#4e8a4a";
-          ctx.lineWidth = 1.2;
+        if (r < 0.18) {
+          // Tiny mineral gravel / pebble
+          const gx = px + 6 + (r * 18);
+          const gy = py + 6 + ((r * 99) % 18);
+          ctx.fillStyle = "#3b2f21";
+          ctx.fillRect(gx, gy, 2, 2);
+          ctx.fillStyle = "#63503a";
+          ctx.fillRect(gx + 1, gy, 1, 1);
+        } else if (r < 0.28) {
+          // Dry cracked earth fissure line
+          const cx = px + 8 + (r * 12);
+          const cy = py + 8 + ((r * 66) % 12);
+          ctx.strokeStyle = "#2d2419";
+          ctx.lineWidth = 1;
           ctx.beginPath();
-          const bx = px + 8 + r * 10;
-          const by = py + 24 - r * 8;
-          ctx.moveTo(bx, by);
-          ctx.quadraticCurveTo(bx - 3, by - 6, bx - 5, by - 12);
-          ctx.moveTo(bx + 4, by + 2);
-          ctx.quadraticCurveTo(bx + 5, by - 5, bx + 7, by - 10);
+          ctx.moveTo(cx, cy);
+          ctx.lineTo(cx + 4, cy + 3);
+          ctx.lineTo(cx + 7, cy + 1);
           ctx.stroke();
-        } else if (r < 0.22) {
-          // Tiny flowers
-          const fx = px + 8 + r * 14;
-          const fy = py + 8 + r * 14;
-          const fColor = r < 0.17 ? "#ffffff" : r < 0.20 ? "#f1c40f" : "#9b59b6";
-          ctx.fillStyle = fColor;
-          ctx.beginPath();
-          ctx.arc(fx - 2, fy, 1.8, 0, Math.PI * 2);
-          ctx.arc(fx + 2, fy, 1.8, 0, Math.PI * 2);
-          ctx.arc(fx, fy - 2, 1.8, 0, Math.PI * 2);
-          ctx.arc(fx, fy + 2, 1.8, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.fillStyle = "#e67e22";
-          ctx.beginPath();
-          ctx.arc(fx, fy, 1, 0, Math.PI * 2);
-          ctx.fill();
+        } else if (r < 0.35) {
+          // Subtle ochre mineral dust speck
+          const dx = px + 4 + (r * 22);
+          const dy = py + 4 + ((r * 44) % 22);
+          ctx.fillStyle = "#8a7154";
+          ctx.fillRect(dx, dy, 1.5, 1.5);
         }
       } else {
         // Mine dirt tiles
@@ -5894,7 +5891,7 @@ export function draw(
     }
   }
 
-  // Terrain Tiles Layer (Layer 2: Winding Paths, Connected Shore Water, Connected Soils)
+  // Terrain Tiles Layer (Layer 2: Seamless Factorio Water Lakes, Concrete Paths, and Agricultural Plots)
   for (let y = startRow; y < endRow; y++) {
     for (let x = startCol; x < endCol; x++) {
       const t = currentGrid[y][x];
@@ -5902,88 +5899,83 @@ export function draw(
       const py = y * TILE;
 
       if (t.kind === "path") {
-        // Gravel path outer border
-        drawOrganicBlob(ctx, y, x, currentGrid, TILE, isPath, "#bd9e72", 0.65);
-        // Slate/sandy path core
-        drawOrganicBlob(ctx, y, x, currentGrid, TILE, isPath, "#ceb48a", 0.45);
-        
-        // Add random tiny gravel pebbles
-        const pathR = seedRandom(x * 47 + y * 83);
-        if (pathR < 0.25) {
-          ctx.fillStyle = "#bd9e72";
-          ctx.fillRect(px + 8 + pathR * 12, py + 8 + pathR * 12, 2, 2);
+        // Factorio Reinforced Concrete & Stone Brick Paving
+        ctx.fillStyle = "#334155";
+        ctx.fillRect(px, py, TILE, TILE);
+        ctx.fillStyle = "#475569";
+        ctx.fillRect(px + 1, py + 1, TILE - 2, TILE - 2);
+
+        // Brick Pavement Seam Grid
+        ctx.strokeStyle = "#1e293b";
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(px, py + TILE / 2);
+        ctx.lineTo(px + TILE, py + TILE / 2);
+        ctx.moveTo(px + TILE / 2, py);
+        ctx.lineTo(px + TILE / 2, py + TILE);
+        ctx.stroke();
+
+      } else if (t.kind === "water") {
+        // 1. Seamless Deep Factorio Lake Water
+        ctx.fillStyle = "#123842";
+        ctx.fillRect(px, py, TILE, TILE);
+
+        // Subtle Deep Basin Gradient
+        const depthGlow = (Math.sin(x * 0.15) * Math.cos(y * 0.15) + 1) * 0.5;
+        ctx.fillStyle = `rgba(10, 34, 41, ${0.3 + depthGlow * 0.3})`;
+        ctx.fillRect(px + 2, py + 2, TILE - 4, TILE - 4);
+
+        // 2. Seamless Natural Sandy Shore Transitions
+        const hasTopLand = y > 0 && currentGrid[y - 1] && currentGrid[y - 1][x]?.kind !== "water";
+        const hasBottomLand = y < gridRows - 1 && currentGrid[y + 1] && currentGrid[y + 1][x]?.kind !== "water";
+        const hasLeftLand = x > 0 && currentGrid[y][x - 1]?.kind !== "water";
+        const hasRightLand = x < gridCols - 1 && currentGrid[y][x + 1]?.kind !== "water";
+
+        if (hasTopLand || hasBottomLand || hasLeftLand || hasRightLand) {
+          // Wet Sand Shore Transition
+          ctx.fillStyle = "#5c4832";
+          if (hasTopLand) ctx.fillRect(px, py, TILE, 5);
+          if (hasBottomLand) ctx.fillRect(px, py + TILE - 5, TILE, 5);
+          if (hasLeftLand) ctx.fillRect(px, py, 5, TILE);
+          if (hasRightLand) ctx.fillRect(px + TILE - 5, py, 5, TILE);
+
+          // Outer Sandy Beach Blend
+          ctx.fillStyle = "#7a6246";
+          if (hasTopLand) ctx.fillRect(px, py, TILE, 2.5);
+          if (hasBottomLand) ctx.fillRect(px, py + TILE - 2.5, TILE, 2.5);
+          if (hasLeftLand) ctx.fillRect(px, py, 2.5, TILE);
+          if (hasRightLand) ctx.fillRect(px + TILE - 2.5, py, 2.5, TILE);
+
+          // Shore Foam Line
+          const foamBob = Math.sin(Date.now() / 450 + (x + y)) * 1.5;
+          ctx.fillStyle = "rgba(175, 225, 235, 0.35)";
+          if (hasTopLand) ctx.fillRect(px, py + 4 + foamBob, TILE, 1.5);
+          if (hasBottomLand) ctx.fillRect(px, py + TILE - 6 - foamBob, TILE, 1.5);
+          if (hasLeftLand) ctx.fillRect(px + 4 + foamBob, py, 1.5, TILE);
+          if (hasRightLand) ctx.fillRect(px + TILE - 6 - foamBob, py, 1.5, TILE);
         }
-            } else if (t.kind === "water") {
-        // 1. Natural Organic Lake Sandy/Pebble Shore
-        drawOrganicBlob(ctx, y, x, currentGrid, TILE, isWater, "#c2a688", 0.85);
-        // 2. Lake Shelf Transition (Emerald / Turquoise)
-        drawOrganicBlob(ctx, y, x, currentGrid, TILE, isWater, "#136f63", 0.68);
-        // 3. Deep Crystal Lake Blue Core
-        drawOrganicBlob(ctx, y, x, currentGrid, TILE, isWater, "#032b43", 0.52);
 
-        // Animated Multi-Layer Water Caustics & Sun Shimmer
-        const timeOffset = Date.now() / 800;
-        const waveX1 = Math.sin(timeOffset + y * 0.4) * 4;
-        const waveY1 = Math.cos(timeOffset + x * 0.4) * 3;
-        const waveX2 = Math.cos(timeOffset * 1.5 + (x + y) * 0.3) * 3;
-        const waveY2 = Math.sin(timeOffset * 1.5 + (x - y) * 0.3) * 3;
-        const shimmerAlpha = Math.max(0.1, (Math.sin(timeOffset * 2.5 + x * 2 + y * 2) + 1) * 0.25);
+        // 3. Animated Surface Wave Caustics
+        const waveTime = Date.now() / 800;
+        const waveX = Math.sin(waveTime + (x * 0.3 + y * 0.3)) * 3;
+        const waveY = Math.cos(waveTime * 1.2 + (x * 0.4 - y * 0.2)) * 2;
 
-        // Soft Sun glint / Caustic Lines
-        ctx.fillStyle = `rgba(128, 255, 219, ${shimmerAlpha})`;
-        ctx.fillRect(px + 6 + waveX1, py + 10 + waveY1, 14, 1.8);
-        ctx.fillRect(px + 12 + waveX2, py + 20 + waveY2, 10, 1.6);
-        ctx.fillStyle = `rgba(255, 255, 255, ${shimmerAlpha * 0.8})`;
-        ctx.fillRect(px + 8 + waveX1, py + 10 + waveY1, 4, 1.8);
+        ctx.fillStyle = "rgba(72, 178, 196, 0.18)";
+        ctx.fillRect(px + 4 + waveX, py + 8 + waveY, 14, 2);
+        ctx.fillRect(px + 10 - waveX, py + 20 - waveY, 10, 2);
+        ctx.fillStyle = "rgba(255, 255, 255, 0.12)";
+        ctx.fillRect(px + 6 + waveX, py + 8 + waveY, 5, 2);
 
-        // Dynamic Edge Shore Foam with Gentle Bobbing
-        if (y > 0 && currentGrid[y - 1] && currentGrid[y - 1][x].kind !== "water") {
-          const foamBob = Math.sin(Date.now() / 450 + x * 1.5) * 1.8;
-          ctx.fillStyle = "rgba(224, 251, 252, 0.65)";
-          ctx.beginPath();
-          ctx.ellipse(px + TILE / 2, py + 4 + foamBob, TILE / 2, 2.5, 0, 0, Math.PI * 2);
-          ctx.fill();
-        }
-
-        // Stepping water lily pads with bobbing and rotation
-        if ((x * 13 + y * 9) % 23 === 0) {
-          const lilyBob = Math.sin(Date.now() / 700 + (x * 13 + y * 9)) * 1.2;
-          const lilyAngle = Math.sin(Date.now() / 1400 + x) * 0.06;
-          ctx.save();
-          ctx.translate(px + 16, py + 16 + lilyBob);
-          ctx.rotate(lilyAngle);
-
-          // Pad
-          ctx.fillStyle = "#27ae60";
-          ctx.beginPath();
-          ctx.arc(0, 0, 5.5, 0, Math.PI * 1.75);
-          ctx.fill();
-
-          // Pink Lily Flower bloom
-          if ((x * 13 + y * 9) % 46 === 0) {
-            ctx.fillStyle = "#f48fb1";
-            ctx.beginPath();
-            ctx.arc(-1.5, -1.5, 2, 0, Math.PI * 2);
-            ctx.arc(1.5, 1.5, 2, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.fillStyle = "#ffffff";
-            ctx.beginPath();
-            ctx.arc(0, 0, 1.2, 0, Math.PI * 2);
-            ctx.fill();
-          }
-          ctx.restore();
-        }
       } else if (t.kind === "soil" || t.kind === "watered" || t.cropId !== undefined) {
-        // Draw connected soil plots with a darker shadow/border first
-        const soilShadow = state.season === "winter" ? "#4d423b" : "#5a3b25";
-        drawOrganicBlob(ctx, y, x, currentGrid, TILE, isSoil, soilShadow, 0.68);
-        const baseSoil = state.season === "winter" ? "#7c6c5f" : "#8a5a3b";
-        const wetSoil = state.season === "winter" ? "#3a2a20" : "#4a3120";
-        const soilColor = (t.kind === "watered" || t.watered) ? wetSoil : baseSoil;
-        drawOrganicBlob(ctx, y, x, currentGrid, TILE, isSoil, soilColor, 0.58);
+        // Space Age Gleba Bio-Peat Bed / Nutrient Soil
+        const isWatered = t.kind === "watered" || t.watered;
+        ctx.fillStyle = isWatered ? "#241c14" : "#3a2e22";
+        ctx.fillRect(px, py, TILE, TILE);
+        ctx.fillStyle = isWatered ? "#1b140e" : "#2c2219";
+        ctx.fillRect(px + 2, py + 2, TILE - 4, TILE - 4);
 
-        // Glistening effect on watered soils
-        if (t.kind === "watered" || t.watered) {
+        // Glistening effect on moist soil
+        if (isWatered) {
           const glisten = Math.sin(Date.now() / 350 + (x * 17 + y * 23));
           if (glisten > 0.82) {
             ctx.fillStyle = "rgba(174, 214, 241, 0.75)";

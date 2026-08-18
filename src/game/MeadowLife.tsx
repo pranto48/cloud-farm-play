@@ -7267,29 +7267,29 @@ function drawMinimap(
       const tile = grid[y][x];
       if (!tile) continue;
 
-      let color = "#346933";
+      let color = "#7c6448";
       switch (tile.kind) {
         case "grass":
-          color = "#346933";
+          color = "#7c6448";
           break;
         case "water":
-          color = "#1f5673";
+          color = "#123842";
           break;
         case "path":
-          color = "#9c8e77";
+          color = "#475569";
           break;
         case "soil":
-          color = "#6a5247";
+          color = "#3a2e22";
           break;
         case "watered":
-          color = "#4a3931";
+          color = "#241c14";
           break;
         case "tree":
-          color = "#1e4d2b";
+          color = "#2d3e2f";
           break;
         case "house":
         case "shop":
-          color = "#8d4536";
+          color = "#34495e";
           break;
         case "mine_cave":
           color = "#000000";
@@ -7304,19 +7304,25 @@ function drawMinimap(
           color = "#ffd700";
           break;
         case "debris_weed":
-          color = "#4c8a48";
+          color = "#4a5568";
           break;
         case "debris_branch":
-          color = "#8b7355";
+          color = "#5c4832";
           break;
         case "debris_stone":
-          color = "#707070";
+          color = "#7f8c8d";
           break;
         case "ore_copper":
-          color = "#d35400";
+          color = "#e67e22";
           break;
         case "ore_iron":
-          color = "#7f8c8d";
+          color = "#3498db";
+          break;
+        case "ore_coal":
+          color = "#17202a";
+          break;
+        case "ore_uranium":
+          color = "#2ecc71";
           break;
         case "ore_gold":
           color = "#f1c40f";

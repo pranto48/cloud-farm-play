@@ -6926,8 +6926,50 @@ export function draw(
           ctx.fill();
         }
 
-        // 12. Oil Refineries & Chemical Plants
-        else if (id.includes("refinery") || id.includes("chemical")) {
+        // 12. Factorio Chemical Plants (Matching Attached Reference: Yellow Cylindrical Vessel, Bubbling Cyan Window, Right Chimney Stack)
+        else if (id.includes("chemical") || id.includes("plant")) {
+          // Base Ground Shadow
+          ctx.fillStyle = "rgba(0, 0, 0, 0.4)";
+          ctx.fillRect(px + 2, py + 2, TILE - 4, TILE - 4);
+
+          // Main Yellow-Amber Reaction Tank Vessel
+          ctx.fillStyle = "#7d6608";
+          ctx.fillRect(px + 3, py + 7, 20, 19);
+          ctx.fillStyle = "#d4ac0d";
+          ctx.fillRect(px + 4, py + 8, 18, 17);
+          ctx.fillStyle = "#f1c40f";
+          ctx.fillRect(px + 5, py + 9, 16, 4);
+
+          // Top Motorized Agitator & Upper Pipe Elbows
+          ctx.fillStyle = "#b7950b";
+          ctx.fillRect(px + 7, py + 4, 10, 4);
+          ctx.fillStyle = "#7f8c8d";
+          ctx.fillRect(px + 4, py + 3, 5, 4);
+          ctx.fillRect(px + 3, py + 3, 2, 8);
+
+          // Wide Curved Cyan/Blue Chemical Reaction Window
+          ctx.fillStyle = "#1b2631";
+          ctx.fillRect(px + 5, py + 14, 15, 9);
+          const chemBubble = (Math.sin(Date.now() / 150) + 1) * 0.5;
+          ctx.fillStyle = `rgba(0, 206, 201, ${0.7 + chemBubble * 0.3})`;
+          ctx.fillRect(px + 6, py + 15, 13, 7);
+          ctx.fillStyle = "#0984e3";
+          ctx.fillRect(px + 6, py + 18, 13, 4);
+          ctx.fillStyle = "#ffffff";
+          ctx.fillRect(px + 8 + (chemBubble * 6), py + 16, 2, 2);
+
+          // Right Heavy Exhaust Stack / Distillation Chimney
+          ctx.fillStyle = "#2c3e50";
+          ctx.fillRect(px + 22, py + 4, 7, 22);
+          ctx.fillStyle = "#5d6d7e";
+          ctx.fillRect(px + 23, py + 5, 5, 20);
+          ctx.fillStyle = "#34495e";
+          ctx.fillRect(px + 21, py + 2, 9, 3); // Chimney Rim
+          ctx.fillRect(px + 22, py + 14, 7, 2); // Center Steel Collar Band
+        }
+
+        // 12b. Factorio Oil Refineries
+        else if (id.includes("refinery")) {
           ctx.fillStyle = "#1e272c";
           ctx.fillRect(px + 1, py + 1, TILE - 2, TILE - 2);
           ctx.fillStyle = "#16a085";
@@ -6937,7 +6979,7 @@ export function draw(
           ctx.fillRect(px + 4, py + 5, 6, TILE - 10);
           ctx.fillRect(px + 14, py + 5, 6, TILE - 10);
           ctx.fillRect(px + 23, py + 8, 5, TILE - 13);
-          ctx.fillStyle = "#f39c12"; // pressure indicators
+          ctx.fillStyle = "#f39c12";
           ctx.fillRect(px + 6, py + 7, 2, 4);
         }
 

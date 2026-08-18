@@ -5032,179 +5032,101 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                       }
 
                       return (
-                            </div>
-                          </div>
-
-                          {/* Action Buttons */}
-                          <div className="grid grid-cols-3 gap-1 pt-1 border-t border-zinc-800">
-                            <button
-                              onClick={() => handleStartCrafting(hoveredRecipe, 1, false)}
-                              disabled={!plan.canCraft}
-                              className={`py-1 rounded font-bold text-[9px] ${plan.canCraft ? "bg-orange-600 hover:bg-orange-500 text-white" : "bg-zinc-800 text-zinc-600 cursor-not-allowed"}`}
-                            >
-                              Craft 1
-                            </button>
-                            <button
-                              onClick={() => handleStartCrafting(hoveredRecipe, 5, false)}
-                              disabled={!plan.canCraft}
-                              className={`py-1 rounded font-bold text-[9px] ${plan.canCraft ? "bg-amber-600 hover:bg-amber-500 text-white" : "bg-zinc-800 text-zinc-600 cursor-not-allowed"}`}
-                            >
-                              Craft 5
-                            </button>
-                            <button
-                              onClick={() => handleStartCrafting(hoveredRecipe, 1, true)}
-                              disabled={!plan.canCraft}
-                              className={`py-1 rounded font-bold text-[9px] ${plan.canCraft ? "bg-emerald-600 hover:bg-emerald-500 text-white" : "bg-zinc-800 text-zinc-600 cursor-not-allowed"}`}
-                            >
-                              Craft All
-                            </button>
-                          </div>
-                        </div>
+                        <FactorioCraftingIcon
+                          key={recipe.id}
+                          iconSymbol={itemDef?.iconSymbol || "⚙"}
+                          name={recipe.name}
+                          count={recipe.outputCount}
+                          craftableCount={maxCount}
+                          canCraft={canCraft}
+                          isTechLocked={isTechLocked}
+                          isSelected={hoveredRecipe?.id === recipe.id}
+                          onMouseEnter={() => setHoveredRecipe(recipe)}
+                          onMouseLeave={() => setHoveredRecipe(null)}
+                          onClick={(e) => handleStartCrafting(recipe, 1, e.shiftKey)}
+                          onContextMenu={() => handleStartCrafting(recipe, 5, false)}
+                        />
                       );
-                    })() : (
-                      <div className="text-center text-zinc-500 py-3">
-                        Hover recipe to inspect costs. Left-click 1x | Right-click 5x | Shift-click All
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {activeTab === "workers" && (
-              <div className="space-y-3">
-                <div className="flex justify-between items-center border-b border-[#ff9200]/30 pb-2 mb-2">
-                  <h3 className="text-[#ff9200] font-bold">Worker Management</h3>
-                  <Button
-                    size="sm"
-                    className="bg-[#2a2c2e] border border-[#ff9200]/50 text-[#ff9200] hover:bg-[#ff9200] hover:text-white text-[10px] font-bold uppercase rounded-none px-3"
-                    onClick={() => {
-                      setZoningMode("farming");
-                      setInventoryOpen(false);
-                    }}
-                  >
-                    🖌️ Paint Work Zones
-                  </Button>
-                </div>
-                <div className="grid grid-cols-1 gap-2">
-                  {state.workers && state.workers.length > 0 ? state.workers.map(w => (
-                    <div key={w.id} className="bg-[#141517] p-2 border border-slate-700 rounded-none flex items-center gap-3">
-                      <div className="w-8 h-8 flex items-center justify-center bg-[#2f3136] border border-slate-600">👷</div>
-                      <div className="flex-1 text-xs">
-                        <div className="font-bold text-[#ff9200]">{w.name} <span className="text-[9px] text-slate-500 font-normal">({w.role})</span></div>
-                        <div className="text-slate-400 text-[10px]">Energy: {Math.floor(w.energy)}%</div>
-                        <div className="text-slate-400 text-[10px]">Status: {w.statusText}</div>
-                        <div className="text-slate-500 text-[9px] mt-1 italic">
-                          {w.role === "idle" ? "Assign a role and paint a zone to start." : `Searching for work inside painted zones.`}
-                        </div>
-                        {w.inventory && (
-                          <div className="text-emerald-400 text-[10px]">Holding: {w.inventory.name} ({w.inventory.count}x)</div>
-                        )}
-                      </div>
-                      <div className="flex flex-col gap-1">
-                        <select
-                          className="bg-[#2f3136] border border-slate-600 text-xs px-2 py-1 text-slate-200 outline-none hover:border-[#ff9200] transition-colors"
-                          value={w.role}
-                          onChange={(e) => {
-                            const val = e.target.value as any;
-                            setState(prev => {
-                              const next = structuredClone(prev);
-                              const target = next.workers?.find(x => x.id === w.id);
-                              if (target) {
-                                target.role = val;
-                                target.task = "idle";
-                              }
-                              return next;
-                            });
-                          }}
-                        >
-                          <option value="idle">Idle (Resting)</option>
-                          <option value="farming">Farming (Water/Harvest)</option>
-                          <option value="woodcutting">Woodcutting (Chop/Clear)</option>
-                          <option value="water">Water Collection</option>
-                          <option value="mining">Mining</option>
-                        </select>
-                      </div>
-                    </div>
-                  )) : (
-                    <div className="text-center text-slate-500 text-xs py-4">No workers hired. Hire them from the Shop tab.</div>
+                    })
                   )}
                 </div>
               </div>
-            )}
 
-            {activeTab === "social" && (
-              <div className="space-y-3">
-                {Object.keys(NPCS).map((id) => {
-                  const npc = NPCS[id];
-                  const points = state.npcFriendships[id] || 0;
-                  const hearts = Math.min(10, Math.floor(points / 250));
-                  return (
-                    <div
-                      key={id}
-                      className="p-3 bg-stone-900/40 rounded-lg border border-stone-800 flex items-center justify-between"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div
-                          className="w-8 h-8 rounded-full border border-stone-700 flex items-center justify-center font-bold"
-                          style={{ backgroundColor: npc.portraitColor }}
-                        >
-                          {npc.name[0]}
-                        </div>
-                        <div>
-                          <div className="font-bold text-xs text-stone-200">{npc.name}</div>
-                          <div className="text-[10px] text-stone-400 mt-0.5">
-                            {npc.description}
-                          </div>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-0.5">
-                        {Array.from({ length: 10 }).map((_, i) => (
-                          <Heart
-                            key={i}
-                            className={`h-3 w-3 ${i < hearts ? "text-red-500 fill-red-500" : "text-stone-700"
-                              }`}
-                          />
-                        ))}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-
-            {activeTab === "skills" && (
-              <div className="space-y-4">
-                {(["farming", "mining", "combat", "fishing"] as const).map((skill) => {
-                  const lvl = state.skills[skill];
-                  const xp = state.experience[skill];
-                  const needed = (lvl + 1) * 100;
-                  const percent = Math.min(100, (xp / needed) * 100);
+              {/* Recipe Flow Card Inspector */}
+              <div className="bg-[#12151a] p-2 rounded-sm border border-[#27303d] text-[10px]">
+                {hoveredRecipe ? (() => {
+                  const itemDef = ITEM_DEFS[hoveredRecipe.outputId];
+                  const isTechLocked = hoveredRecipe.techRequired && !(state.unlockedTechs || []).includes(hoveredRecipe.techRequired);
+                  const plan = resolveFactorioCraftPlan(state, hoveredRecipe, 1);
 
                   return (
-                    <div key={skill} className="space-y-1.5 p-3 bg-stone-900/40 rounded-lg border border-stone-800">
-                      <div className="flex justify-between items-center text-xs">
-                        <span className="capitalize font-bold text-amber-400">{skill}</span>
-                        <span className="text-[10px] text-stone-400 font-mono">
-                          Level {lvl} ({xp}/{needed} XP)
+                    <div className="space-y-1">
+                      <div className="flex justify-between items-center border-b border-[#27303d] pb-1">
+                        <span className="font-bold text-[#ff9200] text-xs flex items-center gap-1">
+                          {hoveredRecipe.name} {isTechLocked && "🔒"}
                         </span>
+                        <span className="text-[9px] text-amber-400">⏱️ {hoveredRecipe.craftTimeSeconds || 0.5}s</span>
                       </div>
-                      <div className="h-2 w-full bg-stone-950 rounded-full overflow-hidden border border-stone-850">
-                        <div
-                          className="h-full bg-amber-500 transition-all duration-500"
-                          style={{ width: `${percent}%` }}
-                        />
+
+                      {/* Ingredient Flow Diagram */}
+                      <div className="flex items-center gap-1 overflow-x-auto py-1">
+                        {hoveredRecipe.inputs.map((inp) => {
+                          const playerHas = getGlobalItemCount(state, inp.itemId);
+                          const hasDirect = playerHas >= inp.count;
+                          return (
+                            <div key={inp.itemId} className={`px-1.5 py-0.5 rounded-sm border flex items-center gap-1 ${hasDirect ? "border-green-800 bg-green-950/30 text-green-300" : "border-amber-800 bg-amber-950/30 text-amber-300"}`}>
+                              <span>{ITEM_DEFS[inp.itemId]?.iconSymbol || "📦"}</span>
+                              <span className="font-bold">{playerHas}/{inp.count}</span>
+                            </div>
+                          );
+                        })}
+                        <span className="text-orange-400 font-bold">➔</span>
+                        <div className="px-1.5 py-0.5 bg-orange-950/50 border border-orange-600 rounded-sm text-orange-300 font-bold flex items-center gap-1">
+                          <span>{itemDef?.iconSymbol || "⚙️"}</span>
+                          <span>{hoveredRecipe.outputCount}x</span>
+                        </div>
+                      </div>
+
+                      {/* Action Buttons */}
+                      <div className="grid grid-cols-3 gap-1 pt-1 border-t border-zinc-800">
+                        <button
+                          onClick={() => handleStartCrafting(hoveredRecipe, 1, false)}
+                          disabled={!plan.canCraft}
+                          className={`py-1 rounded-none font-bold text-[9px] cursor-pointer ${plan.canCraft ? "bg-orange-600 hover:bg-orange-500 text-white" : "bg-zinc-800 text-zinc-600 cursor-not-allowed"}`}
+                        >
+                          Craft 1
+                        </button>
+                        <button
+                          onClick={() => handleStartCrafting(hoveredRecipe, 5, false)}
+                          disabled={!plan.canCraft}
+                          className={`py-1 rounded-none font-bold text-[9px] cursor-pointer ${plan.canCraft ? "bg-amber-600 hover:bg-amber-500 text-white" : "bg-zinc-800 text-zinc-600 cursor-not-allowed"}`}
+                        >
+                          Craft 5
+                        </button>
+                        <button
+                          onClick={() => handleStartCrafting(hoveredRecipe, 1, true)}
+                          disabled={!plan.canCraft}
+                          className={`py-1 rounded-none font-bold text-[9px] cursor-pointer ${plan.canCraft ? "bg-emerald-600 hover:bg-emerald-500 text-white" : "bg-zinc-800 text-zinc-600 cursor-not-allowed"}`}
+                        >
+                          Craft All
+                        </button>
                       </div>
                     </div>
                   );
-                })}
+                })() : (
+                  <div className="text-center text-zinc-500 py-1 text-[10px]">
+                    Hover recipe to inspect costs. Left-click 1x | Right-click 5x | Shift-click All
+                  </div>
+                )}
               </div>
-            )}
+            </div>
           </div>
 
-          <DialogFooter>
-            <Button variant="outline" className="text-xs" onClick={() => setInventoryOpen(false)}>
-              Back to Game
+          </div>
+
+          <DialogFooter className="border-t border-[#2d3542] pt-2 mt-2 flex justify-end">
+            <Button variant="outline" className="text-xs bg-[#161a20] border-slate-600 text-slate-300 hover:bg-[#202836] rounded-none font-mono" onClick={() => setInventoryOpen(false)}>
+              Back to Game (E)
             </Button>
           </DialogFooter>
         </DialogContent>

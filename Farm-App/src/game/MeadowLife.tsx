@@ -68,8 +68,8 @@ import {
 import { toast } from "sonner";
 
 type Props = {
-  initialState: GameState | null;
-  onStateChange: (s: GameState) => void;
+  initialState?: GameState | null;
+  onStateChange?: (s: GameState) => void;
 };
 
 function FactorioCraftingIcon({
@@ -895,7 +895,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
 
   // Synchronize state changes to parent (save handler)
   useEffect(() => {
-    onStateChange(state);
+    onStateChange?.(state);
   }, [state, onStateChange]);
 
   // Start background ambient music on mount

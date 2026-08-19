@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import MeadowLife from "./game/MeadowLife";
+import { MeadowLife } from "./game/MeadowLife";
 import { isDesktopRuntime } from "./saves/DiskSaveSystem";
 import { Maximize, Minimize, Minus, X, HardDrive, Sparkles } from "lucide-react";
 import { Toaster } from "sonner";

@@ -1,0 +1,7 @@
+node_modules
+dist
+dist-electron
+saves/*.json
+!saves/.gitkeep
+.DS_Store
+*.local

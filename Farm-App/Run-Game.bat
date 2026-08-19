@@ -6,12 +6,13 @@ echo   Direct Hardware-Accelerated Standalone Runner
 echo ========================================================
 echo.
 
+set "PATH=C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Microsoft\VisualStudio\NodeJs;%PATH%"
 cd /d "%~dp0"
 
 if not exist "node_modules" (
     echo [INFO] First time setup: Installing local dependencies...
-    call "C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Microsoft\VisualStudio\NodeJs\npm.cmd" install
+    call npm install
 )
 
 echo [INFO] Starting Desktop Game Client...
-call "C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Microsoft\VisualStudio\NodeJs\npm.cmd" run dev
+call npm run dev

@@ -5,13 +5,19 @@ echo   FARM-APP: COMPILING STANDALONE PORTABLE WINDOWS EXE
 echo ========================================================
 echo.
 
+set "PATH=C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Microsoft\VisualStudio\NodeJs;%PATH%"
 cd /d "%~dp0"
 
+if not exist "node_modules" (
+    echo [INFO] Installing build dependencies...
+    call npm install
+)
+
 echo [1/2] Compiling Production Web Engine...
-call "C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Microsoft\VisualStudio\NodeJs\npm.cmd" run build
+call npm run build
 
 echo [2/2] Packaging Portable Windows Executable...
-call "C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Microsoft\VisualStudio\NodeJs\npx.cmd" electron-builder --win portable
+call npx electron-builder --win portable
 
 echo.
 echo ========================================================

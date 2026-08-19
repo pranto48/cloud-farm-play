@@ -1,0 +1,54 @@
+{
+  "name": "farm-app",
+  "version": "1.0.0",
+  "description": "Factorio-style Industrial Automation & Farming Simulation - Windows Desktop Game",
+  "main": "electron/main.cjs",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "start": "electron .",
+    "desktop:dev": "concurrently \"vite\" \"wait-on tcp:5173 && electron .\"",
+    "desktop:build": "vite build && electron-builder --win portable"
+  },
+  "dependencies": {
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.468.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "sonner": "^1.7.1",
+    "tailwind-merge": "^2.5.5"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
+    "@vitejs/plugin-react-swc": "^3.7.2",
+    "autoprefixer": "^10.4.20",
+    "electron": "^33.2.1",
+    "electron-builder": "^25.1.8",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.17",
+    "typescript": "~5.6.2",
+    "vite": "^6.0.3"
+  },
+  "build": {
+    "appId": "com.farm.app.factorio",
+    "productName": "Farm-App",
+    "directories": {
+      "output": "dist-electron"
+    },
+    "win": {
+      "target": "portable",
+      "icon": "build/icon.ico"
+    },
+    "portable": {
+      "artifactName": "Farm-App.exe"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "saves/**/*",
+      "package.json"
+    ]
+  }
+}

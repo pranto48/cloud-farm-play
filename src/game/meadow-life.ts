@@ -188,6 +188,11 @@ export interface GameState {
     reachDistance?: number;
     lastDamageTime?: number;
     isCharacterDetached?: boolean;
+    dressColor?: string;
+    secondaryColor?: string;
+    suitType?: "engineer" | "heavy" | "modular" | "power_armor";
+    helmetType?: "none" | "cap" | "visor" | "helmet" | "power_visor";
+    skinTone?: "default" | "tan" | "fair" | "dark";
   };
   characterCorpses?: {
     id: string;
@@ -196,6 +201,19 @@ export interface GameState {
     items: (Item | null)[];
     timestamp: number;
   }[];
+  settings?: {
+    fpsLimit: 30 | 60 | 120 | 144 | 0;
+    graphicsQuality: "low" | "medium" | "high" | "ultra";
+    showGrid: boolean;
+    showFpsOverlay: boolean;
+    shadowsEnabled: boolean;
+    particleDensity: "low" | "medium" | "high";
+    desktopMode: boolean;
+  };
+  cloudSave?: {
+    lastCloudSaveTimestamp: number | null;
+    cloudStatus: "synced" | "saving" | "idle" | "error";
+  };
   day: number;
   time: number;
   inventory: (Item | null)[];
@@ -3098,8 +3116,26 @@ export function newGame(): GameState {
       shield: 0,
       maxShield: 100,
       reachDistance: 10,
+      dressColor: "#e67e22",
+      secondaryColor: "#1e2430",
+      suitType: "engineer",
+      helmetType: "visor",
+      skinTone: "default",
     },
     characterCorpses: [],
+    settings: {
+      fpsLimit: 40,
+      graphicsQuality: "low",
+      showGrid: true,
+      showFpsOverlay: true,
+      shadowsEnabled: true,
+      particleDensity: "low",
+      desktopMode: true,
+    },
+    cloudSave: {
+      lastCloudSaveTimestamp: Date.now(),
+      cloudStatus: "synced",
+    },
     day: 1,
     time: DAY_START_MINUTES,
     inventory: inv,
@@ -6239,8 +6275,23 @@ export function draw(
         for (let i = 4; i < TILE - 2; i += 6) {
           ctx.fillRect(px + 8, py + i, 12, 2);
         }
-      }
     }
+  }
+
+  // Factorio Alt-Grid Overlay Lines
+  if (state.settings?.showGrid) {
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.07)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let x = startCol; x <= endCol; x++) {
+      ctx.moveTo(x * TILE, startRow * TILE);
+      ctx.lineTo(x * TILE, endRow * TILE);
+    }
+    for (let y = startRow; y <= endRow; y++) {
+      ctx.moveTo(startCol * TILE, y * TILE);
+      ctx.lineTo(endCol * TILE, y * TILE);
+    }
+    ctx.stroke();
   }
 
   // Terrain Tiles Layer (Layer 3: Trees, Growing Crops, Debris, and Placed Items)
@@ -7431,6 +7482,11 @@ export function draw(
   const rightLegOffset = isMoving ? -Math.sin(walkTime) * 4.5 : 0;
   const armSwing = isMoving ? Math.sin(walkTime) * 3.5 : 0;
 
+  const dressCol = p.dressColor || "#d48817";
+  const secCol = p.secondaryColor || "#1e2430";
+  const suitType = p.suitType || "engineer";
+  const helmetType = p.helmetType || "visor";
+
   // 1. Directional Cast Shadow (Extending to Bottom-Right)
   ctx.fillStyle = "rgba(0, 0, 0, 0.4)";
   ctx.beginPath();
@@ -7438,110 +7494,113 @@ export function draw(
   ctx.fill();
 
   // 2. Mechanical Survival Backpack & Over-Shoulder Holster
-  ctx.fillStyle = "#1e2430";
+  ctx.fillStyle = secCol;
   ctx.fillRect(playerPx - 9, playerPy - 6 + walkBob, 18, 12);
   ctx.fillStyle = "#2ecc71"; // active energy LED
   ctx.fillRect(playerPx - 7, playerPy - 4 + walkBob, 2.5, 2.5);
   // Survival Antenna / Holster extending over right shoulder
-  ctx.fillStyle = "#d35400";
+  ctx.fillStyle = dressCol;
   ctx.fillRect(playerPx + 7, playerPy - 12 + walkBob, 4, 10);
   ctx.fillStyle = "#e67e22";
   ctx.fillRect(playerPx + 8, playerPy - 14 + walkBob, 2, 4);
 
   // 3. Ribbed Hazard Combat Legs & Steel-Toed Boots
   // Left Leg
-  ctx.fillStyle = "#4a5568";
+  ctx.fillStyle = suitType === "power_armor" ? "#2c3e50" : suitType === "heavy" ? "#34495e" : "#4a5568";
   ctx.fillRect(playerPx - 7, playerPy + 8 + leftLegOffset, 5.5, 9 - leftLegOffset);
   ctx.fillStyle = "#2d3748"; // Ribbed joint lines
   ctx.fillRect(playerPx - 7, playerPy + 11 + leftLegOffset, 5.5, 1.5);
-  ctx.fillStyle = "#d48817"; // Ochre Knee Guard
+  ctx.fillStyle = dressCol; // Knee Guard
   ctx.fillRect(playerPx - 7.5, playerPy + 13 + leftLegOffset, 6, 3);
   ctx.fillStyle = "#111827"; // Heavy Steel Boot
   ctx.fillRect(playerPx - 8, playerPy + 16 + leftLegOffset, 7, 3);
 
   // Right Leg
-  ctx.fillStyle = "#4a5568";
+  ctx.fillStyle = suitType === "power_armor" ? "#2c3e50" : suitType === "heavy" ? "#34495e" : "#4a5568";
   ctx.fillRect(playerPx + 1.5, playerPy + 8 + rightLegOffset, 5.5, 9 - rightLegOffset);
   ctx.fillStyle = "#2d3748";
   ctx.fillRect(playerPx + 1.5, playerPy + 11 + rightLegOffset, 5.5, 1.5);
-  ctx.fillStyle = "#d48817"; // Ochre Knee Guard
+  ctx.fillStyle = dressCol; // Knee Guard
   ctx.fillRect(playerPx + 1, playerPy + 13 + rightLegOffset, 6, 3);
   ctx.fillStyle = "#111827"; // Heavy Steel Boot
   ctx.fillRect(playerPx + 1, playerPy + 16 + rightLegOffset, 7, 3);
 
   // 4. Arms & Heavy Gauntlets
   // Left Arm
-  ctx.fillStyle = "#4a5568";
+  ctx.fillStyle = suitType === "power_armor" ? "#2980b9" : "#4a5568";
   ctx.fillRect(playerPx - 11, playerPy - 2 + walkBob + armSwing, 4, 9);
-  ctx.fillStyle = "#2d3748"; // Gauntlet
+  ctx.fillStyle = secCol; // Gauntlet
   ctx.fillRect(playerPx - 11.5, playerPy + 4 + walkBob + armSwing, 4.5, 4);
 
   // Right Arm
-  ctx.fillStyle = "#4a5568";
+  ctx.fillStyle = suitType === "power_armor" ? "#2980b9" : "#4a5568";
   ctx.fillRect(playerPx + 7, playerPy - 2 + walkBob - armSwing, 4, 9);
-  ctx.fillStyle = "#2d3748"; // Gauntlet
+  ctx.fillStyle = secCol; // Gauntlet
   ctx.fillRect(playerPx + 7, playerPy + 4 + walkBob - armSwing, 4.5, 4);
 
   // 5. Signature Ochre Hazard Suit Torso & Heavy Pauldrons
   // Flared Shoulder Pauldrons (Left & Right)
-  ctx.fillStyle = "#d48817";
+  ctx.fillStyle = dressCol;
   ctx.fillRect(playerPx - 12, playerPy - 6 + walkBob, 6, 5);
   ctx.fillRect(playerPx + 6, playerPy - 6 + walkBob, 6, 5);
-  ctx.fillStyle = "#b8700e";
+  ctx.fillStyle = secCol;
   ctx.fillRect(playerPx - 12, playerPy - 2 + walkBob, 6, 1.5);
   ctx.fillRect(playerPx + 6, playerPy - 2 + walkBob, 6, 1.5);
 
   // Armored Torso Vest
-  ctx.fillStyle = "#d48817";
+  ctx.fillStyle = dressCol;
   ctx.fillRect(playerPx - 6.5, playerPy - 5 + walkBob, 13, 14);
   // Dark Reinforced Harness & Utility Pouches
-  ctx.fillStyle = "#1e2430";
+  ctx.fillStyle = secCol;
   ctx.fillRect(playerPx - 5, playerPy - 2 + walkBob, 10, 4);
   ctx.fillRect(playerPx - 4, playerPy + 4 + walkBob, 8, 3.5);
-  ctx.fillStyle = "#e59324";
+  ctx.fillStyle = "#f1c40f";
   ctx.fillRect(playerPx - 3, playerPy + 5 + walkBob, 2, 2);
   ctx.fillRect(playerPx + 1, playerPy + 5 + walkBob, 2, 2);
 
-  // 6. Iconic Factorio Dome Helmet with Optic Sensor & Respirators
-  // Dome Helmet
-  ctx.fillStyle = "#d48817";
-  ctx.beginPath();
-  ctx.arc(playerPx, playerPy - 11 + walkBob, 6.5, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = "#b8700e";
-  ctx.fillRect(playerPx - 6, playerPy - 7 + walkBob, 12, 2.5);
-
-  // Side Respirators / Filtration Canisters
-  ctx.fillStyle = "#2d3748";
-  ctx.fillRect(playerPx - 8, playerPy - 10 + walkBob, 2.5, 4);
-  ctx.fillRect(playerPx + 5.5, playerPy - 10 + walkBob, 2.5, 4);
-
-  // Optic Sensor / Reflective Lens
-  if (p.dir === "down") {
-    ctx.fillStyle = "#1b2631";
+  // 6. Iconic Factorio Dome Helmet / Cap / Power Visor
+  if (helmetType !== "none") {
+    // Dome Helmet / Headgear
+    ctx.fillStyle = helmetType === "power_visor" ? "#8e44ad" : helmetType === "helmet" ? "#34495e" : dressCol;
     ctx.beginPath();
-    ctx.arc(playerPx, playerPy - 10.5 + walkBob, 3.2, 0, Math.PI * 2);
+    ctx.arc(playerPx, playerPy - 11 + walkBob, 6.5, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillStyle = "#74b9ff"; // Glowing sensor lens
-    ctx.beginPath();
-    ctx.arc(playerPx, playerPy - 10.5 + walkBob, 2, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = "#ffffff";
-    ctx.fillRect(playerPx - 1, playerPy - 11.5 + walkBob, 1, 1);
-  } else if (p.dir === "left") {
-    ctx.fillStyle = "#1b2631";
-    ctx.fillRect(playerPx - 6, playerPy - 12 + walkBob, 3, 4);
-    ctx.fillStyle = "#74b9ff";
-    ctx.fillRect(playerPx - 5.5, playerPy - 11.5 + walkBob, 2, 2.5);
-  } else if (p.dir === "right") {
-    ctx.fillStyle = "#1b2631";
-    ctx.fillRect(playerPx + 3, playerPy - 12 + walkBob, 3, 4);
-    ctx.fillStyle = "#74b9ff";
-    ctx.fillRect(playerPx + 3.5, playerPy - 11.5 + walkBob, 2, 2.5);
-  } else {
-    // Up (Back of Helmet)
-    ctx.fillStyle = "#9c5e0c";
-    ctx.fillRect(playerPx - 4, playerPy - 13 + walkBob, 8, 4);
+    ctx.fillStyle = secCol;
+    ctx.fillRect(playerPx - 6, playerPy - 7 + walkBob, 12, 2.5);
+
+    // Side Respirators / Filtration Canisters
+    ctx.fillStyle = "#2d3748";
+    ctx.fillRect(playerPx - 8, playerPy - 10 + walkBob, 2.5, 4);
+    ctx.fillRect(playerPx + 5.5, playerPy - 10 + walkBob, 2.5, 4);
+
+    // Optic Sensor / Reflective Visor Lens
+    const visorGlow = helmetType === "power_visor" ? "#a855f7" : helmetType === "visor" ? "#38bdf8" : "#f59e0b";
+    if (p.dir === "down") {
+      ctx.fillStyle = "#1b2631";
+      ctx.beginPath();
+      ctx.arc(playerPx, playerPy - 10.5 + walkBob, 3.2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = visorGlow; // Glowing sensor lens
+      ctx.beginPath();
+      ctx.arc(playerPx, playerPy - 10.5 + walkBob, 2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(playerPx - 1, playerPy - 11.5 + walkBob, 1, 1);
+    } else if (p.dir === "left") {
+      ctx.fillStyle = "#1b2631";
+      ctx.fillRect(playerPx - 6, playerPy - 12 + walkBob, 3, 4);
+      ctx.fillStyle = visorGlow;
+      ctx.fillRect(playerPx - 5.5, playerPy - 11.5 + walkBob, 2, 2.5);
+    } else if (p.dir === "right") {
+      ctx.fillStyle = "#1b2631";
+      ctx.fillRect(playerPx + 3, playerPy - 12 + walkBob, 3, 4);
+      ctx.fillStyle = visorGlow;
+      ctx.fillRect(playerPx + 3.5, playerPy - 11.5 + walkBob, 2, 2.5);
+    } else {
+      // Up (Back of Helmet)
+      ctx.fillStyle = secCol;
+      ctx.fillRect(playerPx - 4, playerPy - 13 + walkBob, 8, 4);
+    }
   }
 
   // Weapon in Hands / Mining Laser targeting beam

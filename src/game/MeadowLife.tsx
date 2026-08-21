@@ -499,7 +499,78 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
     });
   };
 
+  // Offline / Online Network Detection State & Local Windows File Export/Import
+  const [isOnline, setIsOnline] = useState<boolean>(typeof navigator !== "undefined" ? navigator.onLine : true);
+
+  useEffect(() => {
+    const handleOnline = () => {
+      setIsOnline(true);
+      toast.success("🌐 Online Connected! Auto-syncing saves to Cloud...");
+      handleCloudSave();
+    };
+
+    const handleOffline = () => {
+      setIsOnline(false);
+      toast.warning("📶 Offline Windows Mode Active. Game saving locally to disk.");
+    };
+
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, []);
+
+  const handleExportSaveFile = () => {
+    try {
+      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(state));
+      const downloadAnchor = document.createElement("a");
+      downloadAnchor.setAttribute("href", dataStr);
+      downloadAnchor.setAttribute("download", `MeadowLife_Factorio_Save_Day${state.day}_${Date.now()}.json`);
+      document.body.appendChild(downloadAnchor);
+      downloadAnchor.click();
+      downloadAnchor.remove();
+      toast.success("Exported save game file (.json) to Windows PC disk! 💾");
+    } catch (e) {
+      toast.error("Failed to export save file.");
+    }
+  };
+
+  const handleImportSaveFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const parsed = JSON.parse(event.target?.result as string);
+        const migrated = migrateState(parsed);
+        setState(migrated);
+        stateRef.current = migrated;
+        toast.success("Loaded save game from Windows disk file! 📂");
+      } catch (err) {
+        toast.error("Invalid save file format.");
+      }
+    };
+    reader.readAsText(file);
+  };
+
   const handleCloudSave = () => {
+    if (!isOnline) {
+      // Local Storage / Disk save when offline
+      try {
+        const snapshot = JSON.stringify(state);
+        localStorage.setItem("meadow_life_cloud_save_sync", snapshot);
+        localStorage.setItem("meadow_life_cloud_backup_auto", snapshot);
+        toast.warning("📶 Offline Mode: Game saved locally to disk backup!");
+      } catch (e) {
+        toast.error("Failed to save locally.");
+      }
+      return;
+    }
+
     setState((prev) => {
       const next = structuredClone(prev);
       if (!next.cloudSave) next.cloudSave = { lastCloudSaveTimestamp: null, cloudStatus: "idle" };
@@ -514,7 +585,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
         next.cloudSave.lastCloudSaveTimestamp = Date.now();
         next.cloudSave.cloudStatus = "synced";
 
-        // Local Storage Automatic Backup (Ensures 0 Data Loss if remote fails)
+        // Local Storage Automatic Backup
         try {
           const snapshot = JSON.stringify(next);
           localStorage.setItem("meadow_life_cloud_save_sync", snapshot);
@@ -523,7 +594,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
           console.warn("Local backup warning:", e);
         }
 
-        toast.success("Cloud Save Synced & Local Backup Preserved! ☁️💾");
+        toast.success("Cloud Save Synced & Local Windows Disk Backup Saved! 🌐💾");
         return next;
       });
     }, 500);
@@ -6737,6 +6808,26 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
               )}
             </div>
           )}
+
+          {/* Windows PC Offline File Backup & Import Controls */}
+          <div className="p-3 bg-[#101318] border border-[#ff9200]/40 rounded-sm space-y-2 my-2">
+            <span className="font-extrabold text-[#ff9200] text-xs block uppercase">
+              💻 Real Offline Windows PC Save File Controls (.json):
+            </span>
+            <div className="flex flex-col sm:flex-row items-center gap-2">
+              <Button
+                size="sm"
+                onClick={handleExportSaveFile}
+                className="w-full sm:flex-1 bg-amber-600 hover:bg-amber-500 text-black font-extrabold text-xs rounded-none h-8"
+              >
+                <span>💾 Export Save File (.json) to Windows Disk</span>
+              </Button>
+              <label className="w-full sm:flex-1 bg-sky-600 hover:bg-sky-500 text-white font-extrabold text-xs rounded-none h-8 flex items-center justify-center cursor-pointer">
+                <span>📂 Import Save File (.json) from Windows Disk</span>
+                <input type="file" accept=".json" onChange={handleImportSaveFile} className="hidden" />
+              </label>
+            </div>
+          </div>
 
           {/* TAB 2: CREATE NEW NAMED SAVE */}
           {saveLoadTab === "save" && (

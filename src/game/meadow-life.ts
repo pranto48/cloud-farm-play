@@ -6285,6 +6285,7 @@ export function draw(
         for (let i = 4; i < TILE - 2; i += 6) {
           ctx.fillRect(px + 8, py + i, 12, 2);
         }
+      }
     }
   }
 

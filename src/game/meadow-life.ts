@@ -7993,6 +7993,61 @@ export function draw(
       }
     }
   }
+
+  // 12. Factorio Railway Tracks & Autonomous Diesel Locomotive Train Engine Renderer
+  for (let y = startRow; y < endRow; y++) {
+    for (let x = startCol; x < endCol; x++) {
+      const t = currentGrid[y][x];
+      if (t.kind === "placed_item" && t.placedItemId) {
+        const id = t.placedItemId;
+        const rpx = x * TILE - cameraX;
+        const rpy = y * TILE - cameraY;
+
+        if (id === "rail") {
+          // Wooden Ties & Parallel Steel Rails
+          ctx.fillStyle = "#4a3b32";
+          ctx.fillRect(rpx + 2, rpy + 4, TILE - 4, 3);
+          ctx.fillRect(rpx + 2, rpy + 14, TILE - 4, 3);
+          ctx.fillRect(rpx + 2, rpy + 24, TILE - 4, 3);
+
+          ctx.fillStyle = "#b0c4de";
+          ctx.fillRect(rpx + 8, rpy, 3, TILE);
+          ctx.fillRect(rpx + 21, rpy, 3, TILE);
+        } else if (id === "locomotive" || id === "cargo_wagon") {
+          // Steel Rail Track Underbed
+          ctx.fillStyle = "#4a3b32";
+          ctx.fillRect(rpx + 2, rpy + 4, TILE - 4, 3);
+          ctx.fillRect(rpx + 2, rpy + 14, TILE - 4, 3);
+          ctx.fillRect(rpx + 2, rpy + 24, TILE - 4, 3);
+          ctx.fillStyle = "#b0c4de";
+          ctx.fillRect(rpx + 8, rpy, 3, TILE);
+          ctx.fillRect(rpx + 21, rpy, 3, TILE);
+
+          // Animated Diesel Locomotive Engine / Cargo Wagon Sprite
+          const isLoco = id === "locomotive";
+          ctx.fillStyle = isLoco ? "#d35400" : "#7f8c8d";
+          ctx.fillRect(rpx + 4, rpy + 2, TILE - 8, TILE - 4);
+
+          ctx.fillStyle = isLoco ? "#e67e22" : "#95a5a6";
+          ctx.fillRect(rpx + 6, rpy + 4, TILE - 12, TILE - 8);
+
+          // Engine Headlight
+          if (isLoco) {
+            ctx.fillStyle = "#f1c40f";
+            ctx.fillRect(rpx + 13, rpy + 2, 6, 3);
+            // Light cone
+            ctx.fillStyle = "rgba(241, 196, 15, 0.25)";
+            ctx.beginPath();
+            ctx.moveTo(rpx + 16, rpy + 2);
+            ctx.lineTo(rpx + 4, rpy - 24);
+            ctx.lineTo(rpx + 28, rpy - 24);
+            ctx.closePath();
+            ctx.fill();
+          }
+        }
+      }
+    }
+  }
 }
 
 export function sortInventory(inventory: (Item | null)[]): (Item | null)[] {

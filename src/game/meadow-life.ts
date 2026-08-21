@@ -206,6 +206,7 @@ export interface GameState {
     fpsLimit: 30 | 60 | 120 | 144 | 0;
     graphicsQuality: "low" | "medium" | "high" | "ultra";
     showGrid: boolean;
+    showPollution?: boolean;
     showFpsOverlay: boolean;
     shadowsEnabled: boolean;
     particleDensity: "low" | "medium" | "high";
@@ -3137,6 +3138,7 @@ export function newGame(): GameState {
       fpsLimit: 40,
       graphicsQuality: "low",
       showGrid: true,
+      showPollution: true,
       showFpsOverlay: true,
       shadowsEnabled: true,
       particleDensity: "low",
@@ -6303,6 +6305,27 @@ export function draw(
       ctx.lineTo(endCol * TILE, y * TILE);
     }
     ctx.stroke();
+  }
+
+  // Factorio Industrial Pollution Cloud Visualizer Overlay
+  if (state.settings?.showPollution ?? true) {
+    for (let y = startRow; y < endRow; y++) {
+      for (let x = startCol; x < endCol; x++) {
+        const t = currentGrid[y][x];
+        if (t.kind === "placed_item" && t.placedItemId) {
+          const id = t.placedItemId;
+          if (id.includes("drill") || id.includes("furnace") || id.includes("boiler") || id.includes("assembler") || id.includes("refinery")) {
+            const px = x * TILE;
+            const py = y * TILE;
+            const pulse = (Math.sin(Date.now() / 400 + x * 3 + y * 7) + 1) * 0.5;
+            ctx.fillStyle = `rgba(180, 40, 20, ${0.12 + pulse * 0.08})`;
+            ctx.beginPath();
+            ctx.arc(px + 16, py + 16, 28 + pulse * 6, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
+      }
+    }
   }
 
   // Terrain Tiles Layer (Layer 3: Trees, Growing Crops, Debris, and Placed Items)

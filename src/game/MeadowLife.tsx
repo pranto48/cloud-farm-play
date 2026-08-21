@@ -7694,6 +7694,17 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                 </div>
 
                 <div className="flex items-center justify-between border-t border-zinc-800 pt-2">
+                  <span className="text-slate-300 font-semibold">☁️ Industrial Pollution Cloud Overlay:</span>
+                  <Button
+                    size="sm"
+                    onClick={() => handleUpdateSettings({ showPollution: !(state.settings?.showPollution ?? true) })}
+                    className={`text-[10px] font-bold ${(state.settings?.showPollution ?? true) ? "bg-red-500 text-white" : "bg-zinc-800 text-slate-400"}`}
+                  >
+                    {(state.settings?.showPollution ?? true) ? "ENABLED" : "DISABLED"}
+                  </Button>
+                </div>
+
+                <div className="flex items-center justify-between border-t border-zinc-800 pt-2">
                   <span className="text-slate-300 font-semibold">📊 Real-Time FPS Overlay Bar:</span>
                   <Button
                     size="sm"

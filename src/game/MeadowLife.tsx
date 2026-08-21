@@ -7546,7 +7546,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                   </span>
                 </label>
                 <div className="flex gap-1.5 pt-1">
-                  {[40, 60, 120, 144, 0].map((fps) => (
+                  {[30, 40, 60, 120, 144, 0].map((fps) => (
                     <Button
                       key={fps}
                       size="sm"
@@ -7746,6 +7746,21 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                       />
                     ))}
                   </div>
+                </div>
+
+                {/* Skin Tone Selector */}
+                <div>
+                  <label className="text-slate-300 font-bold block mb-1">Character Skin Tone:</label>
+                  <select
+                    value={state.player.skinTone || "default"}
+                    onChange={(e) => handleUpdateDress({ skinTone: e.target.value as any })}
+                    className="w-full bg-zinc-900 border border-zinc-700 rounded p-1.5 text-xs text-slate-100 font-mono"
+                  >
+                    <option value="default">👤 Default Skin</option>
+                    <option value="fair">🏼 Fair Skin</option>
+                    <option value="tan">🏽 Tan Skin</option>
+                    <option value="dark">🏿 Dark Skin</option>
+                  </select>
                 </div>
 
                 {/* Suit Armor Tier */}

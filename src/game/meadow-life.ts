@@ -32,6 +32,7 @@ export type TileKind =
   | "ore_aluminum"
   | "ore_coal"
   | "ore_uranium"
+  | "ore_crude_oil"
   | "house_wall"
   | "house_floor"
   | "house_bed"
@@ -2779,6 +2780,15 @@ function makeMap(): Tile[][] {
     }
   }
 
+  // 6. Crude Oil Deposit Field (South-East industrial sector)
+  for (let y = 56; y <= 64; y++) {
+    for (let x = 60; x <= 70; x++) {
+      if (Math.hypot(x - 65, y - 60) <= 4.2 && Math.random() < 0.80) {
+        t[y][x] = { kind: "ore_crude_oil", age: 0, watered: false };
+      }
+    }
+  }
+
   // Dedicated Mining Quarry Area (x: 78..115, y: 6..35) near the mine cave
   for (let y = 6; y <= 35; y++) {
     for (let x = 78; x <= 115; x++) {
@@ -3187,8 +3197,8 @@ export function newGame(): GameState {
 const TILE_KINDS = new Set<TileKind>([
   "grass", "soil", "watered", "water", "tree", "house", "path", "shop", "npc",
   "mine_cave", "mine_dirt", "mine_wall", "mine_ladder", "debris_weed", "debris_branch",
-  "debris_stone", "ore_copper", "ore_iron", "ore_gold", "ore_silver", "ore_coal",
-  "ore_uranium", "house_wall", "house_floor", "house_bed", "house_door", "placed_item",
+  "ore_stone", "ore_copper", "ore_iron", "ore_gold", "ore_silver", "ore_coal",
+  "ore_uranium", "ore_crude_oil", "house_wall", "house_floor", "house_bed", "house_door", "placed_item",
 ]);
 
 function serializeTile(tile: Tile): Partial<Tile> {
@@ -6546,6 +6556,28 @@ export function draw(
             ctx.fillRect(cx - 1, cy - s - 1, 2, 2);
           }
         });
+      } else if (t.kind === "ore_crude_oil") {
+        // Factorio Crude Oil Geyser Spring Pool
+        ctx.fillStyle = "rgba(0, 0, 0, 0.4)";
+        ctx.beginPath();
+        ctx.ellipse(px + 16 + debrisShake, py + 22, 14, 7, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = "#11161b";
+        ctx.beginPath();
+        ctx.ellipse(px + 16 + debrisShake, py + 20, 13, 6, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = "#2c3e50";
+        ctx.beginPath();
+        ctx.ellipse(px + 14 + debrisShake, py + 18, 9, 4, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        const oilBubble = (Math.sin(Date.now() / 200 + (x * 7 + y * 13)) + 1) * 0.5;
+        ctx.fillStyle = "#f39c12";
+        ctx.beginPath();
+        ctx.arc(px + 12 + oilBubble * 8 + debrisShake, py + 18, 2 + oilBubble * 1.5, 0, Math.PI * 2);
+        ctx.fill();
       }
 
       // Render Placed Items (Factorio Automation & Farm Placeables)

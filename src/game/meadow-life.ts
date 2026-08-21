@@ -8048,6 +8048,54 @@ export function draw(
       }
     }
   }
+
+  // 13. Factorio 9x9 Rocket Silo Industrial Launchpad Renderer
+  for (let y = startRow; y < endRow; y++) {
+    for (let x = startCol; x < endCol; x++) {
+      const t = currentGrid[y][x];
+      if (t.kind === "placed_item" && t.placedItemId === "rocket_silo") {
+        const rpx = x * TILE + 16 - cameraX;
+        const rpy = y * TILE + 16 - cameraY;
+
+        // Circular Silo Shaft Base
+        ctx.fillStyle = "#1e272c";
+        ctx.beginPath();
+        ctx.arc(rpx, rpy, 42, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = "#2c3e50";
+        ctx.beginPath();
+        ctx.arc(rpx, rpy, 34, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = "#11161b";
+        ctx.beginPath();
+        ctx.arc(rpx, rpy, 24, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Rocket Nose Cone in Silo Shaft
+        ctx.fillStyle = "#ecf0f1";
+        ctx.beginPath();
+        ctx.arc(rpx, rpy, 14, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = "#e67e22";
+        ctx.beginPath();
+        ctx.arc(rpx, rpy, 6, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Gantry Structural Beams & Hazard Stripes
+        ctx.strokeStyle = "#f39c12";
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.moveTo(rpx - 44, rpy);
+        ctx.lineTo(rpx + 44, rpy);
+        ctx.moveTo(rpx, rpy - 44);
+        ctx.lineTo(rpx, rpy + 44);
+        ctx.stroke();
+      }
+    }
+  }
 }
 
 export function sortInventory(inventory: (Item | null)[]): (Item | null)[] {

@@ -2731,6 +2731,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
         tile.placedItemId === "solar_panel" ||
         tile.placedItemId === "battery" ||
         tile.placedItemId === "power_pole" ||
+        tile.placedItemId === "rocket_silo" ||
         tile.placedItemId === "chest" ||
         tile.placedItemId === "iron_chest" ||
         tile.placedItemId === "steel_chest" ||

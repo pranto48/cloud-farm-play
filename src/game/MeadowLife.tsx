@@ -2558,8 +2558,6 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
     hoveredTileRef.current = null;
     isDraggingZone.current = false;
     stopContinuousAction();
-  };
-
   const handleCanvasWheel = (e: React.WheelEvent<HTMLCanvasElement>) => {
     e.preventDefault();
     if (e.deltaY < 0) {
@@ -2570,8 +2568,126 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
   };
 
   const handleTileInteraction = (coords: { x: number; y: number }) => {
-    if (zoningMode !== "none") return;
     const curState = stateRef.current;
+    if (!curState) return;
+
+    // Handle Factorio Blueprint Copy / Stamp / Deconstruct Click Logic
+    if (curState.blueprint && curState.blueprint.mode) {
+      const mode = curState.blueprint.mode;
+      const bp = curState.blueprint;
+
+      if (mode === "copy") {
+        if (!bp.startTile) {
+          setState((prev) => ({
+            ...prev,
+            blueprint: { ...(prev.blueprint || { mode: "copy" }), mode: "copy", startTile: coords, currentTile: coords },
+          }));
+          toast.info(`Blueprint Copy Start set at (${coords.x}, ${coords.y}). Click end tile!`);
+        } else {
+          const start = bp.startTile;
+          const minX = Math.min(start.x, coords.x);
+          const maxX = Math.max(start.x, coords.x);
+          const minY = Math.min(start.y, coords.y);
+          const maxY = Math.max(start.y, coords.y);
+
+          const curGrid = curState.inHouse ? curState.houseGrid! : (curState.inMine ? curState.mineGrid : curState.tiles);
+          const saved: { relX: number; relY: number; placedItemId: string; direction?: string }[] = [];
+
+          for (let y = minY; y <= maxY; y++) {
+            for (let x = minX; x <= maxX; x++) {
+              const tile = curGrid[y][x];
+              if (tile.kind === "placed_item" && tile.placedItemId) {
+                saved.push({
+                  relX: x - minX,
+                  relY: y - minY,
+                  placedItemId: tile.placedItemId,
+                  direction: tile.direction,
+                });
+              }
+            }
+          }
+
+          if (saved.length > 0) {
+            setState((prev) => ({
+              ...prev,
+              blueprint: { mode: "stamp", startTile: null, currentTile: null, savedEntities: saved },
+            }));
+            toast.success(`📋 Blueprint Copied ${saved.length} entities! Click anywhere to STAMP!`);
+          } else {
+            toast.warning("No placed factory entities found in selected rectangle.");
+            setState((prev) => ({ ...prev, blueprint: { mode: null, startTile: null, currentTile: null, savedEntities: [] } }));
+          }
+        }
+        return;
+      } else if (mode === "deconstruct") {
+        if (!bp.startTile) {
+          setState((prev) => ({
+            ...prev,
+            blueprint: { ...(prev.blueprint || { mode: "deconstruct" }), mode: "deconstruct", startTile: coords, currentTile: coords },
+          }));
+          toast.info(`Deconstruction Start set at (${coords.x}, ${coords.y}). Click end tile!`);
+        } else {
+          const start = bp.startTile;
+          const minX = Math.min(start.x, coords.x);
+          const maxX = Math.max(start.x, coords.x);
+          const minY = Math.min(start.y, coords.y);
+          const maxY = Math.max(start.y, coords.y);
+
+          let count = 0;
+          setState((prev) => {
+            const next = structuredClone(prev);
+            const grid = next.inHouse ? next.houseGrid! : (next.inMine ? next.mineGrid : next.tiles);
+
+            for (let y = minY; y <= maxY; y++) {
+              for (let x = minX; x <= maxX; x++) {
+                const tile = grid[y][x];
+                if (tile.kind === "placed_item" && tile.placedItemId) {
+                  const itemId = tile.placedItemId;
+                  const itemObj = createItem(itemId, 1);
+                  addItem(next.inventory, itemObj);
+                  grid[y][x].kind = next.inHouse ? "house_floor" : (next.inMine ? "mine_dirt" : "grass");
+                  grid[y][x].placedItemId = undefined;
+                  count++;
+                }
+              }
+            }
+            next.blueprint = { mode: null, startTile: null, currentTile: null, savedEntities: prev.blueprint?.savedEntities || [] };
+            return next;
+          });
+
+          toast.success(`✂️ Deconstructed ${count} entities back into inventory!`);
+        }
+        return;
+      } else if (mode === "stamp" && bp.savedEntities && bp.savedEntities.length > 0) {
+        let placedCount = 0;
+        setState((prev) => {
+          const next = structuredClone(prev);
+          const grid = next.inHouse ? next.houseGrid! : (next.inMine ? next.mineGrid : next.tiles);
+
+          bp.savedEntities!.forEach((ent) => {
+            const tx = coords.x + ent.relX;
+            const ty = coords.y + ent.relY;
+
+            if (ty >= 0 && ty < grid.length && tx >= 0 && tx < grid[0].length) {
+              const targetTile = grid[ty][tx];
+              if (targetTile.kind !== "water" && targetTile.kind !== "mine_wall" && targetTile.kind !== "placed_item") {
+                targetTile.kind = "placed_item";
+                targetTile.placedItemId = ent.placedItemId;
+                targetTile.direction = (ent.direction as any) || "right";
+                placedCount++;
+              }
+            }
+          });
+
+          next.blueprint = { ...prev.blueprint, mode: null };
+          return next;
+        });
+
+        toast.success(`📌 Stamped ${placedCount} blueprint entities onto map!`);
+        return;
+      }
+    }
+
     const p = curState.player;
     const dist = Math.abs(coords.x - p.x) + Math.abs(coords.y - p.y);
     if (dist > 5) {
@@ -3628,6 +3744,83 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
             >
               <span className="text-yellow-400 text-xs">🔍</span>
               <span className="text-yellow-400 text-[10px]">Alt</span>
+            </button>
+
+            {/* Factorio Blueprint Copy Tool Button */}
+            <button
+              onClick={() => {
+                setState((prev) => {
+                  const currentMode = prev.blueprint?.mode;
+                  const nextMode = currentMode === "copy" ? null : "copy";
+                  toast(`Factorio Blueprint Copy: ${nextMode ? "ACTIVE (Drag rectangle to copy factory)" : "OFF"}`);
+                  return {
+                    ...prev,
+                    blueprint: {
+                      mode: nextMode,
+                      startTile: null,
+                      currentTile: null,
+                      savedEntities: prev.blueprint?.savedEntities || [],
+                    },
+                  };
+                });
+              }}
+              title="Factorio Blueprint Copy (Ctrl+C): Drag rectangle to copy factory entities"
+              className={`h-8 px-2 flex items-center justify-center gap-1 bg-[#2a2c2e] hover:bg-cyan-500/20 border transition-all cursor-pointer font-bold text-xs ${state.blueprint?.mode === "copy" ? "border-cyan-400 text-cyan-400 bg-cyan-500/20 animate-pulse" : "border-slate-600 text-slate-300 hover:border-cyan-400"}`}
+            >
+              <span className="text-cyan-400 text-xs">📋</span>
+              <span className="text-cyan-400 text-[10px]">Blueprint</span>
+            </button>
+
+            {/* Factorio Stamp Tool Button */}
+            <button
+              onClick={() => {
+                if (!state.blueprint?.savedEntities || state.blueprint.savedEntities.length === 0) {
+                  toast.error("No blueprint copied yet! Copy a factory layout first.");
+                  return;
+                }
+                setState((prev) => {
+                  const currentMode = prev.blueprint?.mode;
+                  const nextMode = currentMode === "stamp" ? null : "stamp";
+                  toast(`Factorio Stamp: ${nextMode ? "ACTIVE (Click to stamp copied layout)" : "OFF"}`);
+                  return {
+                    ...prev,
+                    blueprint: {
+                      ...(prev.blueprint || { savedEntities: [] }),
+                      mode: nextMode,
+                    },
+                  };
+                });
+              }}
+              title="Factorio Stamp (Ctrl+V): Stamp copied blueprint onto factory map"
+              className={`h-8 px-2 flex items-center justify-center gap-1 bg-[#2a2c2e] hover:bg-emerald-500/20 border transition-all cursor-pointer font-bold text-xs ${state.blueprint?.mode === "stamp" ? "border-emerald-400 text-emerald-400 bg-emerald-500/20 animate-pulse" : "border-slate-600 text-slate-300 hover:border-emerald-400"}`}
+            >
+              <span className="text-emerald-400 text-xs">📌</span>
+              <span className="text-emerald-400 text-[10px]">Stamp</span>
+            </button>
+
+            {/* Factorio Deconstruction Planner Button */}
+            <button
+              onClick={() => {
+                setState((prev) => {
+                  const currentMode = prev.blueprint?.mode;
+                  const nextMode = currentMode === "deconstruct" ? null : "deconstruct";
+                  toast(`Factorio Deconstruction Planner: ${nextMode ? "ACTIVE (Drag red box to batch deconstruct)" : "OFF"}`);
+                  return {
+                    ...prev,
+                    blueprint: {
+                      mode: nextMode,
+                      startTile: null,
+                      currentTile: null,
+                      savedEntities: prev.blueprint?.savedEntities || [],
+                    },
+                  };
+                });
+              }}
+              title="Factorio Deconstruction Planner (Ctrl+X): Drag red rectangle to deconstruct area"
+              className={`h-8 px-2 flex items-center justify-center gap-1 bg-[#2a2c2e] hover:bg-red-500/20 border transition-all cursor-pointer font-bold text-xs ${state.blueprint?.mode === "deconstruct" ? "border-red-500 text-red-400 bg-red-500/20 animate-pulse" : "border-slate-600 text-slate-300 hover:border-red-500"}`}
+            >
+              <span className="text-red-400 text-xs">✂️</span>
+              <span className="text-red-400 text-[10px]">Deconstruct</span>
             </button>
 
             {/* Player Wardrobe / Dress Customization Button */}

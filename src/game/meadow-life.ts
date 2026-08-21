@@ -216,6 +216,12 @@ export interface GameState {
     lastCloudSaveTimestamp: number | null;
     cloudStatus: "synced" | "saving" | "idle" | "error";
   };
+  blueprint?: {
+    mode: "copy" | "stamp" | "deconstruct" | null;
+    startTile?: { x: number; y: number } | null;
+    currentTile?: { x: number; y: number } | null;
+    savedEntities?: { relX: number; relY: number; placedItemId: string; direction?: string }[];
+  } | null;
   day: number;
   time: number;
   inventory: (Item | null)[];
@@ -3147,6 +3153,12 @@ export function newGame(): GameState {
     cloudSave: {
       lastCloudSaveTimestamp: Date.now(),
       cloudStatus: "synced",
+    },
+    blueprint: {
+      mode: null,
+      startTile: null,
+      currentTile: null,
+      savedEntities: [],
     },
     day: 1,
     time: DAY_START_MINUTES,
@@ -7858,6 +7870,74 @@ export function draw(
       }
 
       ctx.drawImage(tempCanvas, 0, 0);
+    }
+  }
+
+  // 10. Factorio Blueprint, Stamp & Deconstruction Bounding Box Overlay
+  if (state.blueprint && state.blueprint.mode) {
+    const bp = state.blueprint;
+    const start = bp.startTile;
+    const curr = bp.currentTile || hoveredTile;
+
+    if (bp.mode === "copy" && start && curr) {
+      const minX = Math.min(start.x, curr.x);
+      const maxX = Math.max(start.x, curr.x);
+      const minY = Math.min(start.y, curr.y);
+      const maxY = Math.max(start.y, curr.y);
+
+      const bx = minX * TILE - cameraX;
+      const by = minY * TILE - cameraY;
+      const bw = (maxX - minX + 1) * TILE;
+      const bh = (maxY - minY + 1) * TILE;
+
+      ctx.fillStyle = "rgba(0, 206, 201, 0.25)";
+      ctx.fillRect(bx, by, bw, bh);
+
+      ctx.strokeStyle = "#00cec9";
+      ctx.lineWidth = 2;
+      ctx.setLineDash([6, 4]);
+      ctx.strokeRect(bx, by, bw, bh);
+      ctx.setLineDash([]);
+
+      ctx.fillStyle = "#00cec9";
+      ctx.font = "bold 11px monospace";
+      ctx.fillText(`📋 Blueprint Selection: ${maxX - minX + 1}x${maxY - minY + 1} tiles`, bx + 4, Math.max(14, by - 6));
+    } else if (bp.mode === "deconstruct" && start && curr) {
+      const minX = Math.min(start.x, curr.x);
+      const maxX = Math.max(start.x, curr.x);
+      const minY = Math.min(start.y, curr.y);
+      const maxY = Math.max(start.y, curr.y);
+
+      const bx = minX * TILE - cameraX;
+      const by = minY * TILE - cameraY;
+      const bw = (maxX - minX + 1) * TILE;
+      const bh = (maxY - minY + 1) * TILE;
+
+      ctx.fillStyle = "rgba(235, 77, 75, 0.35)";
+      ctx.fillRect(bx, by, bw, bh);
+
+      ctx.strokeStyle = "#eb4d4b";
+      ctx.lineWidth = 2.5;
+      ctx.setLineDash([4, 4]);
+      ctx.strokeRect(bx, by, bw, bh);
+      ctx.setLineDash([]);
+
+      ctx.fillStyle = "#eb4d4b";
+      ctx.font = "bold 11px monospace";
+      ctx.fillText(`✂️ Deconstruction Planner: ${maxX - minX + 1}x${maxY - minY + 1} tiles`, bx + 4, Math.max(14, by - 6));
+    } else if (bp.mode === "stamp" && bp.savedEntities && bp.savedEntities.length > 0 && hoveredTile) {
+      bp.savedEntities.forEach((ent) => {
+        const targetX = hoveredTile.x + ent.relX;
+        const targetY = hoveredTile.y + ent.relY;
+        const epx = targetX * TILE - cameraX;
+        const epy = targetY * TILE - cameraY;
+
+        ctx.fillStyle = "rgba(46, 204, 113, 0.4)";
+        ctx.fillRect(epx, epy, TILE, TILE);
+        ctx.strokeStyle = "#2ecc71";
+        ctx.lineWidth = 1;
+        ctx.strokeRect(epx, epy, TILE, TILE);
+      });
     }
   }
 }

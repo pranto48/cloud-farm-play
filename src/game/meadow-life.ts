@@ -7940,6 +7940,59 @@ export function draw(
       });
     }
   }
+
+  // 11. Factorio Roboport & Flying Autonomous Drone Bots Renderer
+  for (let y = startRow; y < endRow; y++) {
+    for (let x = startCol; x < endCol; x++) {
+      const t = currentGrid[y][x];
+      if (t.kind === "placed_item" && t.placedItemId === "roboport") {
+        const rpx = x * TILE + 16 - cameraX;
+        const rpy = y * TILE + 16 - cameraY;
+
+        // Render Roboport 32x32 Logistic Coverage Outer Square
+        ctx.strokeStyle = "rgba(142, 68, 173, 0.25)";
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([4, 4]);
+        ctx.strokeRect(rpx - 256, rpy - 256, 512, 512);
+        ctx.setLineDash([]);
+
+        // Render Autonomous Flying Drone Swarm Spanning from Roboport
+        const tNow = Date.now() / 1000;
+        for (let i = 0; i < 4; i++) {
+          const droneAngle = tNow * (0.8 + i * 0.2) + i * (Math.PI / 2);
+          const orbitR = 60 + Math.sin(tNow + i) * 35;
+          const dx = rpx + Math.cos(droneAngle) * orbitR;
+          const dy = rpy + Math.sin(droneAngle) * orbitR;
+
+          // Drone shadow on ground
+          ctx.fillStyle = "rgba(0, 0, 0, 0.3)";
+          ctx.beginPath();
+          ctx.ellipse(dx, dy + 18, 6, 2.5, 0, 0, Math.PI * 2);
+          ctx.fill();
+
+          // Drone body sprite
+          ctx.fillStyle = i % 2 === 0 ? "#2ecc71" : "#3498db";
+          ctx.beginPath();
+          ctx.arc(dx, dy, 4.5, 0, Math.PI * 2);
+          ctx.fill();
+
+          // Glowing Green/Blue Drone LED
+          ctx.fillStyle = "#ffffff";
+          ctx.fillRect(dx - 1, dy - 1, 2, 2);
+
+          // Drone propeller rotor lines
+          ctx.strokeStyle = "rgba(255, 255, 255, 0.7)";
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(dx - 6, dy);
+          ctx.lineTo(dx + 6, dy);
+          ctx.moveTo(dx, dy - 6);
+          ctx.lineTo(dx, dy + 6);
+          ctx.stroke();
+        }
+      }
+    }
+  }
 }
 
 export function sortInventory(inventory: (Item | null)[]): (Item | null)[] {

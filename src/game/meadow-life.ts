@@ -8104,6 +8104,43 @@ export function draw(
       }
     }
   }
+
+  // 14. Factorio Circuit Network 2.0 Combinators & Signal Wire Connections
+  for (let y = startRow; y < endRow; y++) {
+    for (let x = startCol; x < endCol; x++) {
+      const t = currentGrid[y][x];
+      if (t.kind === "placed_item" && t.placedItemId) {
+        const id = t.placedItemId;
+        const cpx = x * TILE + 16 - cameraX;
+        const cpy = y * TILE + 16 - cameraY;
+
+        if (id.includes("combinator")) {
+          // Microchip PCB base
+          ctx.fillStyle = id.includes("decider") ? "#2c3e50" : id.includes("arithmetic") ? "#d35400" : "#27ae60";
+          ctx.fillRect(cpx - 12, cpy - 10, 24, 20);
+
+          ctx.strokeStyle = "#f1c40f";
+          ctx.lineWidth = 1.2;
+          ctx.strokeRect(cpx - 12, cpy - 10, 24, 20);
+
+          // LED Status lights
+          ctx.fillStyle = "#2ecc71";
+          ctx.fillRect(cpx - 9, cpy - 7, 4, 4);
+
+          ctx.fillStyle = "#e74c3c";
+          ctx.fillRect(cpx + 5, cpy - 7, 4, 4);
+
+          // Symbol
+          ctx.fillStyle = "#ffffff";
+          ctx.font = "bold 9px monospace";
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          const sym = id.includes("decider") ? "⚖" : id.includes("arithmetic") ? "➕" : "123";
+          ctx.fillText(sym, cpx, cpy + 2);
+        }
+      }
+    }
+  }
 }
 
 export function sortInventory(inventory: (Item | null)[]): (Item | null)[] {

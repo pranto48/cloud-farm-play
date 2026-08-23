@@ -2558,6 +2558,8 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
     hoveredTileRef.current = null;
     isDraggingZone.current = false;
     stopContinuousAction();
+  };
+
   const handleCanvasWheel = (e: React.WheelEvent<HTMLCanvasElement>) => {
     e.preventDefault();
     if (e.deltaY < 0) {

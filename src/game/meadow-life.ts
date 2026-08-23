@@ -8,6 +8,8 @@ export const TILE = 32;
 export const COLS = 240;
 export const ROWS = 240;
 
+let _cachedLightCanvas: HTMLCanvasElement | null = null;
+
 export type TileKind =
   | "grass"
   | "soil"
@@ -7818,18 +7820,24 @@ export function draw(
 
   ctx.restore(); // restore viewport transform
 
-  // 9. Ambient Night/Evening Lighting filter
+  // 9. Ambient Night/Evening Lighting filter (Performance Cached Offscreen Canvas)
   if (phase !== "morning") {
-    const tempCanvas = document.createElement("canvas");
-    tempCanvas.width = viewWidth;
-    tempCanvas.height = viewHeight;
-    const tCtx = tempCanvas.getContext("2d");
+    if (!_cachedLightCanvas) {
+      _cachedLightCanvas = typeof document !== "undefined" ? document.createElement("canvas") : null;
+    }
+    if (_cachedLightCanvas) {
+      if (_cachedLightCanvas.width !== viewWidth || _cachedLightCanvas.height !== viewHeight) {
+        _cachedLightCanvas.width = viewWidth;
+        _cachedLightCanvas.height = viewHeight;
+      }
+      const tCtx = _cachedLightCanvas.getContext("2d");
 
-    if (tCtx) {
-      tCtx.fillStyle = phase === "night" ? "rgba(10, 15, 40, 0.72)" : "rgba(230, 126, 34, 0.28)";
-      tCtx.fillRect(0, 0, viewWidth, viewHeight);
+      if (tCtx) {
+        tCtx.globalCompositeOperation = "source-over";
+        tCtx.fillStyle = phase === "night" ? "rgba(10, 15, 40, 0.72)" : "rgba(230, 126, 34, 0.28)";
+        tCtx.fillRect(0, 0, viewWidth, viewHeight);
 
-      tCtx.globalCompositeOperation = "destination-out";
+        tCtx.globalCompositeOperation = "destination-out";
 
       // Player light radius
       const plViewX = playerPx - cameraX;
@@ -7869,7 +7877,7 @@ export function draw(
         }
       }
 
-      ctx.drawImage(tempCanvas, 0, 0);
+      ctx.drawImage(_cachedLightCanvas, 0, 0);
     }
   }
 

@@ -1142,11 +1142,11 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
 
       if ((dx !== 0 || dy !== 0) && !inventoryOpen && !shopOpen && !chestOpenTile && !mailboxOpen && !chatOpen) {
         const isShift = pressedKeysRef.current.has("shift") || mobileSprint;
-        const speed = (isShift ? 9.5 : 6.5) * dt;
+        const speed = (isShift ? 13.5 : 8.5) * dt;
 
         // X Movement with collision sliding
         const newSubX = Math.max(0, Math.min(cols - 1, p.subX + dx * speed));
-        const targetX = Math.floor(newSubX + (dx > 0 ? 0.25 : -0.25));
+        const targetX = Math.floor(newSubX + (dx > 0 ? 0.1 : -0.1));
         const curY = Math.floor(p.subY);
         if (targetX >= 0 && targetX < cols && curY >= 0 && curY < rows && isWalkable(grid[curY]?.[targetX])) {
           p.subX = newSubX;
@@ -1155,7 +1155,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
 
         // Y Movement with collision sliding
         const newSubY = Math.max(0, Math.min(rows - 1, p.subY + dy * speed));
-        const targetY = Math.floor(newSubY + (dy > 0 ? 0.25 : -0.25));
+        const targetY = Math.floor(newSubY + (dy > 0 ? 0.1 : -0.1));
         const curX = Math.floor(p.subX);
         if (curX >= 0 && curX < cols && targetY >= 0 && targetY < rows && isWalkable(grid[targetY]?.[curX])) {
           p.subY = newSubY;
@@ -1753,7 +1753,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
       if (["w", "arrowup", "s", "arrowdown", "a", "arrowleft", "d", "arrowright"].includes(k)) {
         e.preventDefault();
         const now = performance.now();
-        const runMultiplier = e.shiftKey ? 70 : 130;
+        const runMultiplier = e.shiftKey ? 35 : 60;
         if (now - lastMove < runMultiplier) return;
         lastMove = now;
 

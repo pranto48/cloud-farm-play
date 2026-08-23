@@ -8141,6 +8141,59 @@ export function draw(
       }
     }
   }
+
+  // 15. Factorio Nuclear Power Grid & Uranium Centrifuge Renderer
+  for (let y = startRow; y < endRow; y++) {
+    for (let x = startCol; x < endCol; x++) {
+      const t = currentGrid[y][x];
+      if (t.kind === "placed_item" && t.placedItemId) {
+        const id = t.placedItemId;
+        const npx = x * TILE + 16 - cameraX;
+        const npy = y * TILE + 16 - cameraY;
+
+        if (id === "nuclear_reactor") {
+          // Nuclear Reactor Core Base with Cherenkov Radiation Glow
+          ctx.fillStyle = "#1e272c";
+          ctx.beginPath();
+          ctx.arc(npx, npy, 28, 0, Math.PI * 2);
+          ctx.fill();
+
+          ctx.fillStyle = "#2ecc71";
+          ctx.beginPath();
+          ctx.arc(npx, npy, 20, 0, Math.PI * 2);
+          ctx.fill();
+
+          // Pulsing Cherenkov Cyan Radiation Glow
+          const radGlow = 14 + Math.sin(Date.now() / 120) * 3;
+          ctx.fillStyle = "rgba(0, 255, 200, 0.75)";
+          ctx.beginPath();
+          ctx.arc(npx, npy, radGlow, 0, Math.PI * 2);
+          ctx.fill();
+        } else if (id === "centrifuge") {
+          // Centrifuge Cylinder Drum Base
+          ctx.fillStyle = "#16a085";
+          ctx.fillRect(npx - 12, npy - 12, 24, 24);
+
+          // Spinning Centrifuge Rotor
+          const spinA = (Date.now() / 150) % (Math.PI * 2);
+          ctx.strokeStyle = "#00ff7f";
+          ctx.lineWidth = 2.5;
+          ctx.beginPath();
+          ctx.arc(npx, npy, 8, spinA, spinA + Math.PI * 1.5);
+          ctx.stroke();
+        } else if (id === "heat_exchanger" || id === "steam_turbine") {
+          // 500°C Thermal Heat Pipe & Plasma Blue Steam Turbine
+          ctx.fillStyle = id === "heat_exchanger" ? "#d35400" : "#34495e";
+          ctx.fillRect(npx - 14, npy - 10, 28, 20);
+
+          ctx.fillStyle = "#3498db";
+          ctx.beginPath();
+          ctx.arc(npx, npy, 6, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+    }
+  }
 }
 
 export function sortInventory(inventory: (Item | null)[]): (Item | null)[] {

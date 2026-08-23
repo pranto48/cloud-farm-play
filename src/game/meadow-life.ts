@@ -8194,6 +8194,45 @@ export function draw(
       }
     }
   }
+
+  // 16. Factorio Space Age Space Platform Hub & Orbital Cargo Drop Pod Renderer
+  for (let y = startRow; y < endRow; y++) {
+    for (let x = startCol; x < endCol; x++) {
+      const t = currentGrid[y][x];
+      if (t.kind === "placed_item" && t.placedItemId) {
+        const id = t.placedItemId;
+        const spx = x * TILE + 16 - cameraX;
+        const spy = y * TILE + 16 - cameraY;
+
+        if (id === "space_platform_hub" || id === "cargo_landing_pad") {
+          // Target Concentric Target Circles
+          ctx.strokeStyle = "#e67e22";
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(spx, spy, 22, 0, Math.PI * 2);
+          ctx.arc(spx, spy, 12, 0, Math.PI * 2);
+          ctx.stroke();
+
+          // Descending Orbital Drop Pod Sprite Animation
+          const podProgress = (Date.now() / 2000) % 1;
+          const podY = spy - 120 * (1 - podProgress);
+          const podScale = 0.4 + podProgress * 0.6;
+
+          // Re-entry Flame Trail
+          ctx.fillStyle = "rgba(230, 126, 34, 0.65)";
+          ctx.beginPath();
+          ctx.arc(spx, podY - 8, 6 * podScale, 0, Math.PI * 2);
+          ctx.fill();
+
+          // Drop Pod Capsule
+          ctx.fillStyle = "#ecf0f1";
+          ctx.beginPath();
+          ctx.arc(spx, podY, 7 * podScale, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+    }
+  }
 }
 
 export function sortInventory(inventory: (Item | null)[]): (Item | null)[] {

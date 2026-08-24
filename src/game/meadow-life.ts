@@ -5992,10 +5992,24 @@ export function draw(
         ctx.fillStyle = "#110e0c";
         ctx.fillRect(px, py, TILE, TILE);
       } else if (!state.inMine) {
-        // Factorio Planet Nauvis Base Terrain (Multi-frequency Arid Dirt & Red Desert Noise)
-        const grassColor = getGrassColor(x, y, state.season);
-        ctx.fillStyle = grassColor;
-        ctx.fillRect(px, py, TILE, TILE);
+        // Factorio Planet Nauvis Base Terrain (Seamless Organic Biomes & Ore Veins)
+        const tile = currentGrid[y]?.[x];
+        if (tile && tile.kind && tile.kind.startsWith("ore_")) {
+          const oreBedColors: Record<string, string> = {
+            ore_iron: "#253040",
+            ore_copper: "#5c331a",
+            ore_coal: "#14171a",
+            ore_uranium: "#0e3b1c",
+            ore_gold: "#4a3c10",
+            ore_crude_oil: "#161b22"
+          };
+          ctx.fillStyle = oreBedColors[tile.kind] || "#3b2f21";
+          ctx.fillRect(px, py, TILE, TILE);
+        } else {
+          const grassColor = getGrassColor(x, y, state.season);
+          ctx.fillStyle = grassColor;
+          ctx.fillRect(px, py, TILE, TILE);
+        }
 
         // Factorio Arid Surface Details: Mineral Gravel Specks, Dry Earth Cracks, and Stone Grains
         const r = seedRandom(x * 37 + y * 73);
@@ -6114,12 +6128,17 @@ export function draw(
         ctx.fillRect(px + 6 + waveX, py + 8 + waveY, 5, 2);
 
       } else if (t.kind === "soil" || t.kind === "watered" || t.cropId !== undefined) {
-        // Space Age Gleba Bio-Peat Bed / Nutrient Soil
+        // Space Age Gleba Bio-Peat Bed / Nutrient Soil (Seamless Organic Blend)
         const isWatered = t.kind === "watered" || t.watered;
         ctx.fillStyle = isWatered ? "#241c14" : "#3a2e22";
         ctx.fillRect(px, py, TILE, TILE);
-        ctx.fillStyle = isWatered ? "#1b140e" : "#2c2219";
-        ctx.fillRect(px + 2, py + 2, TILE - 4, TILE - 4);
+
+        // Organic Soil Edge Granules
+        ctx.fillStyle = isWatered ? "#1b140e" : "#4a3b2c";
+        const rNoise = seedRandom(x * 19 + y * 31);
+        if (rNoise > 0.4) {
+          ctx.fillRect(px + 4 + (rNoise * 16), py + 4 + ((rNoise * 33) % 16), 2, 2);
+        }
 
         // Glistening effect on moist soil
         if (isWatered) {

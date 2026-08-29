@@ -163,6 +163,62 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
     const onKeyDown = (e: KeyboardEvent) => {
       const k = e.key.toLowerCase();
       const tag = (e.target as HTMLElement | null)?.tagName;
+
+      // F11 / Alt+Enter for Borderless Windows Native Fullscreen
+      if (e.key === "F11" || (e.altKey && e.key === "Enter")) {
+        e.preventDefault();
+        toggleFullscreen();
+        return;
+      }
+
+      // Ctrl + S: Save game file (.json) to Windows PC disk
+      if ((e.ctrlKey || e.metaKey) && k === "s") {
+        e.preventDefault();
+        handleExportSaveFile();
+        return;
+      }
+
+      // Ctrl + O: Open / Import save file from Windows PC disk
+      if ((e.ctrlKey || e.metaKey) && k === "o") {
+        e.preventDefault();
+        const fileInput = document.createElement("input");
+        fileInput.type = "file";
+        fileInput.accept = ".json";
+        fileInput.onchange = (evt: any) => handleImportSaveFile(evt);
+        fileInput.click();
+        return;
+      }
+
+      // F5: Quick Save Checkpoint to PC storage
+      if (e.key === "F5") {
+        e.preventDefault();
+        try {
+          localStorage.setItem("meadow_life_quicksave", JSON.stringify(stateRef.current));
+          toast.success("⚡ Quick Save Checkpoint Created! (F5)");
+        } catch (err) {
+          toast.error("Failed to quick save.");
+        }
+        return;
+      }
+
+      // F9: Quick Load Checkpoint from PC storage
+      if (e.key === "F9") {
+        e.preventDefault();
+        try {
+          const raw = localStorage.getItem("meadow_life_quicksave");
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            setState(migrateState(parsed));
+            toast.success("⚡ Quick Save Checkpoint Loaded! (F9)");
+          } else {
+            toast.warning("No Quick Save found (press F5 first).");
+          }
+        } catch (err) {
+          toast.error("Failed to quick load.");
+        }
+        return;
+      }
+
       if (tag === "INPUT" || tag === "TEXTAREA") return;
       pressedKeysRef.current.add(k);
       if (e.shiftKey) pressedKeysRef.current.add("shift");
@@ -178,6 +234,23 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
     };
+  }, []);
+
+  // 3-Minute Background Auto-Save to Local PC Storage & Cloud Sync
+  useEffect(() => {
+    const autoSaveTimer = setInterval(() => {
+      try {
+        localStorage.setItem("meadow_life_autosave", JSON.stringify(stateRef.current));
+        toast.info("💾 Auto-Saved game state to local PC disk storage.", { duration: 2000 });
+        if (typeof navigator !== "undefined" && navigator.onLine) {
+          handleCloudSave();
+        }
+      } catch (err) {
+        // silent fallback
+      }
+    }, 180000); // 3 minutes
+
+    return () => clearInterval(autoSaveTimer);
   }, []);
 
   // Menu Overlays

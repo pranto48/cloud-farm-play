@@ -8248,6 +8248,43 @@ export function draw(
           ctx.beginPath();
           ctx.arc(spx, podY, 7 * podScale, 0, Math.PI * 2);
           ctx.fill();
+        } else if (id === "spidertron") {
+          // Spidertron Heavy Central Chassis Hull
+          ctx.fillStyle = "#e67e22";
+          ctx.beginPath();
+          ctx.arc(spx, spy, 16, 0, Math.PI * 2);
+          ctx.fill();
+
+          ctx.fillStyle = "#d35400";
+          ctx.beginPath();
+          ctx.arc(spx, spy, 10, 0, Math.PI * 2);
+          ctx.fill();
+
+          // 8 Stepping Mechanical Legs Animation
+          const legTime = Date.now() / 250;
+          ctx.strokeStyle = "#7f8c8d";
+          ctx.lineWidth = 2.5;
+          ctx.beginPath();
+          for (let i = 0; i < 8; i++) {
+            const angle = (i * Math.PI) / 4 + Math.sin(legTime + i) * 0.15;
+            const legX = spx + Math.cos(angle) * 32;
+            const legY = spy + Math.sin(angle) * 32;
+            ctx.moveTo(spx, spy);
+            ctx.lineTo(legX, legY);
+
+            // Foot Joint
+            ctx.fillStyle = "#e74c3c";
+            ctx.fillRect(legX - 2, legY - 2, 4, 4);
+          }
+          ctx.stroke();
+        } else if (id === "foundry" || id === "electromagnetic_plant" || id === "biochamber" || id === "agricultural_tower") {
+          // Space Age Vulcanus / Fulgora / Gleba Planetary Industrial Facility
+          ctx.fillStyle = id === "foundry" ? "#c0392b" : id === "electromagnetic_plant" ? "#8e44ad" : id === "biochamber" ? "#27ae60" : "#16a085";
+          ctx.fillRect(spx - 14, spy - 14, 28, 28);
+
+          ctx.strokeStyle = "#f39c12";
+          ctx.lineWidth = 1.5;
+          ctx.strokeRect(spx - 14, spy - 14, 28, 28);
         }
       }
     }

@@ -8,6 +8,12 @@ echo.
 
 cd /d "%~dp0"
 
+if exist "dist-electron\win-unpacked\Farm-App.exe" (
+    echo [INFO] Launching Compiled Standalone Farm-App.exe...
+    start "" "dist-electron\win-unpacked\Farm-App.exe"
+    exit /b
+)
+
 if not exist "node_modules" (
     echo [INFO] First time setup: Installing local dependencies...
     call cmd /c npm install

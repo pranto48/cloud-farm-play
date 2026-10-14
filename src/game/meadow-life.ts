@@ -2889,7 +2889,9 @@ export function generateProceduralTile(worldX: number, worldY: number, season?: 
 
 // Dynamically generate and expand world chunks as player explores
 export function ensureMapExploration(state: GameState, playerX: number, playerY: number): void {
-  if (state.inHouse || state.inMine || !state.tiles) return;
+  // Prevent unshifting / expanding when map is already at max size (ROWS x COLS = 240x240)
+  // to avoid huge GC pauses and coordinate shifting at startup
+  if (state.inHouse || state.inMine || !state.tiles || state.tiles.length >= ROWS) return;
 
   const CHUNK_SIZE = 32;
   const BUFFER = 24;
@@ -4152,47 +4154,72 @@ function updateScienceLab(tile: Tile, state: GameState, dt: number, powerSatisfa
   }
 }
 
+// High-performance placed machine coordinates cache (avoids 115,200 tile scans every 80ms)
+let _cachedMachineCoords: { x: number; y: number }[] = [];
+let _lastMachineCoordsScan = 0;
+
+export function invalidateMachineCache(): void {
+  _lastMachineCoordsScan = 0;
+}
+
 export function updateEntities(state: GameState, dt: number): void {
-  // 1. Calculate Power Grid Metrics across the entire factory map
+  // 1. Calculate Power Grid Metrics across active factory machines
   let totalGenerationKw = 0;
   let totalDemandKw = 0;
   const hours = state.time / 60;
   const isDay = hours >= 6 && hours <= 19;
 
-  for (let y = 0; y < ROWS; y++) {
-    for (let x = 0; x < COLS; x++) {
-      const tile = state.tiles[y]?.[x];
-      if (tile && tile.kind === "placed_item" && tile.placedItemId) {
-        const id = tile.placedItemId;
-        if (id === "generator" || id === "steam_engine") {
-          totalGenerationKw += 900;
-        } else if (id === "steam_turbine") {
-          totalGenerationKw += 5800;
-        } else if (id === "nuclear_reactor") {
-          totalGenerationKw += 40000;
-        } else if (id === "fusion_generator" || id === "fusion_reactor") {
-          totalGenerationKw += 250000;
-        } else if (id === "solar_panel" && isDay) {
-          totalGenerationKw += 60;
-        } else if (id.includes("drill")) {
-          totalDemandKw += id.includes("big") ? 300 : 90;
-        } else if (id === "assembling_machine_1") {
-          totalDemandKw += 75;
-        } else if (id === "assembling_machine_2" || id === "chemical_plant") {
-          totalDemandKw += 150;
-        } else if (id === "assembling_machine_3" || id === "oil_refinery" || id === "centrifuge") {
-          totalDemandKw += 375;
-        } else if (id === "electric_furnace" || id === "foundry") {
-          totalDemandKw += 180;
-        } else if (id === "science_lab" || id === "biolab") {
-          totalDemandKw += 60;
-        } else if (id.includes("inserter")) {
-          totalDemandKw += id.includes("stack") ? 45 : id.includes("fast") ? 30 : 15;
-        } else if (id.includes("turret") && id.includes("laser")) {
-          totalDemandKw += 1200;
-        } else if (id.includes("radar")) {
-          totalDemandKw += 300;
+  const now = performance.now();
+  // Refresh cache every 2 seconds or if empty
+  if (now - _lastMachineCoordsScan > 2000 || _cachedMachineCoords.length === 0) {
+    _lastMachineCoordsScan = now;
+    _cachedMachineCoords = [];
+    const tRows = state.tiles?.length || 0;
+    const tCols = state.tiles?.[0]?.length || 0;
+    for (let y = 0; y < tRows; y++) {
+      for (let x = 0; x < tCols; x++) {
+        const tile = state.tiles[y]?.[x];
+        if (tile && tile.kind === "placed_item" && tile.placedItemId) {
+          _cachedMachineCoords.push({ x, y });
         }
+      }
+    }
+  }
+
+  // Pass 1: Power Grid Calculation over placed machines only
+  for (let i = 0; i < _cachedMachineCoords.length; i++) {
+    const { x, y } = _cachedMachineCoords[i];
+    const tile = state.tiles[y]?.[x];
+    if (tile && tile.kind === "placed_item" && tile.placedItemId) {
+      const id = tile.placedItemId;
+      if (id === "generator" || id === "steam_engine") {
+        totalGenerationKw += 900;
+      } else if (id === "steam_turbine") {
+        totalGenerationKw += 5800;
+      } else if (id === "nuclear_reactor") {
+        totalGenerationKw += 40000;
+      } else if (id === "fusion_generator" || id === "fusion_reactor") {
+        totalGenerationKw += 250000;
+      } else if (id === "solar_panel" && isDay) {
+        totalGenerationKw += 60;
+      } else if (id.includes("drill")) {
+        totalDemandKw += id.includes("big") ? 300 : 90;
+      } else if (id === "assembling_machine_1") {
+        totalDemandKw += 75;
+      } else if (id === "assembling_machine_2" || id === "chemical_plant") {
+        totalDemandKw += 150;
+      } else if (id === "assembling_machine_3" || id === "oil_refinery" || id === "centrifuge") {
+        totalDemandKw += 375;
+      } else if (id === "electric_furnace" || id === "foundry") {
+        totalDemandKw += 180;
+      } else if (id === "science_lab" || id === "biolab") {
+        totalDemandKw += 60;
+      } else if (id.includes("inserter")) {
+        totalDemandKw += id.includes("stack") ? 45 : id.includes("fast") ? 30 : 15;
+      } else if (id.includes("turret") && id.includes("laser")) {
+        totalDemandKw += 1200;
+      } else if (id.includes("radar")) {
+        totalDemandKw += 300;
       }
     }
   }
@@ -4226,39 +4253,38 @@ export function updateEntities(state: GameState, dt: number): void {
     state.productionStats.powerConsumedKw = totalDemandKw;
   }
 
-  // 2. Factorio Logistics & Machines Tick Pipeline + Pollution Emission
+  // 2. Factorio Logistics & Machines Tick Pipeline + Pollution Emission (Cached coordinates only)
   let totalPollutionEmitted = 0;
-  for (let y = 0; y < ROWS; y++) {
-    for (let x = 0; x < COLS; x++) {
-      const tile = state.tiles[y]?.[x];
-      if (!tile || tile.kind !== "placed_item" || !tile.placedItemId) continue;
+  for (let i = 0; i < _cachedMachineCoords.length; i++) {
+    const { x, y } = _cachedMachineCoords[i];
+    const tile = state.tiles[y]?.[x];
+    if (!tile || tile.kind !== "placed_item" || !tile.placedItemId) continue;
 
-      const id = tile.placedItemId;
-      let pollutionEmission = 0;
+    const id = tile.placedItemId;
+    let pollutionEmission = 0;
 
-      if (id.includes("belt") || id.includes("loader")) {
-        updateTransportBelt(tile, state.tiles, x, y, dt);
-      } else if (id.includes("drill")) {
-        updateMiningDrill(tile, state.tiles, x, y, dt, satisfaction);
-        pollutionEmission = id.includes("burner") ? 10 * dt : 5 * dt;
-      } else if (id.includes("inserter")) {
-        updateInserter(tile, state.tiles, x, y, dt, satisfaction);
-      } else if (id.includes("assembling_machine") || id.includes("chemical") || id.includes("refinery") || id.includes("centrifuge") || id.includes("electromagnetic") || id.includes("cryogenic") || id.includes("foundry") || id.includes("biochamber")) {
-        updateAssemblingMachine(tile, state.tiles, x, y, dt, satisfaction);
-        pollutionEmission = 4 * dt;
-      } else if (id.includes("furnace") || id === "furnace") {
-        tickFurnace(tile, dt, satisfaction);
-        pollutionEmission = id.includes("stone") ? 8 * dt : 4 * dt;
-      } else if (id.includes("lab")) {
-        updateScienceLab(tile, state, dt, satisfaction);
-      } else if (id === "boiler" || id === "generator") {
-        pollutionEmission = 15 * dt;
-      }
+    if (id.includes("belt") || id.includes("loader")) {
+      updateTransportBelt(tile, state.tiles, x, y, dt);
+    } else if (id.includes("drill")) {
+      updateMiningDrill(tile, state.tiles, x, y, dt, satisfaction);
+      pollutionEmission = id.includes("burner") ? 10 * dt : 5 * dt;
+    } else if (id.includes("inserter")) {
+      updateInserter(tile, state.tiles, x, y, dt, satisfaction);
+    } else if (id.includes("assembling_machine") || id.includes("chemical") || id.includes("refinery") || id.includes("centrifuge") || id.includes("electromagnetic") || id.includes("cryogenic") || id.includes("foundry") || id.includes("biochamber")) {
+      updateAssemblingMachine(tile, state.tiles, x, y, dt, satisfaction);
+      pollutionEmission = 4 * dt;
+    } else if (id.includes("furnace") || id === "furnace") {
+      tickFurnace(tile, dt, satisfaction);
+      pollutionEmission = id.includes("stone") ? 8 * dt : 4 * dt;
+    } else if (id.includes("lab")) {
+      updateScienceLab(tile, state, dt, satisfaction);
+    } else if (id === "boiler" || id === "generator") {
+      pollutionEmission = 15 * dt;
+    }
 
-      if (pollutionEmission > 0) {
-        state.pollutionGrid[y][x] = Math.min(500, (state.pollutionGrid[y][x] || 0) + pollutionEmission);
-        totalPollutionEmitted += pollutionEmission;
-      }
+    if (pollutionEmission > 0) {
+      state.pollutionGrid[y][x] = Math.min(500, (state.pollutionGrid[y][x] || 0) + pollutionEmission);
+      totalPollutionEmitted += pollutionEmission;
     }
   }
 
@@ -5227,6 +5253,7 @@ export function interact(
         tile.kind = "grass";
         tile.placedItemId = undefined;
         tile.chestInventory = undefined;
+        invalidateMachineCache();
         addItem(state.inventory, itemObj);
         result.message = `Picked up ${itemObj.name}`;
       }
@@ -5364,6 +5391,7 @@ export function interact(
       tile.kind = "placed_item";
       tile.placedItemId = heldItem.id;
       tile.direction = state.placementDirection || "right";
+      invalidateMachineCache();
 
       if (heldItem.id === "chest") {
         tile.chestInventory = Array.from({ length: 12 }, () => null);

@@ -1264,13 +1264,14 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
       if (p.subX === undefined) p.subX = p.x;
       if (p.subY === undefined) p.subY = p.y;
 
-      if ((dx !== 0 || dy !== 0) && !inventoryOpen && !shopOpen && !chestOpenTile && !mailboxOpen && !chatOpen) {
+      if ((dx !== 0 || dy !== 0) && !inventoryOpen && !shopOpen && !chestOpenTile && !mailboxOpen && !chatOpen && cur.harvestLiftingTimer <= 0) {
         const isShift = pressedKeysRef.current.has("shift") || mobileSprint;
-        const speed = (isShift ? 13.5 : 8.5) * dt;
+        // Modern brisk responsive speed (13.5 normal, 22.0 sprint)
+        const speed = (isShift ? 22.0 : 13.5) * dt;
 
         // X Movement with collision sliding
         const newSubX = Math.max(0, Math.min(cols - 1, p.subX + dx * speed));
-        const targetX = Math.floor(newSubX + (dx > 0 ? 0.1 : -0.1));
+        const targetX = Math.floor(newSubX + (dx > 0 ? 0.2 : -0.2));
         const curY = Math.floor(p.subY);
         if (targetX >= 0 && targetX < cols && curY >= 0 && curY < rows && isWalkable(grid[curY]?.[targetX])) {
           p.subX = newSubX;
@@ -1279,7 +1280,7 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
 
         // Y Movement with collision sliding
         const newSubY = Math.max(0, Math.min(rows - 1, p.subY + dy * speed));
-        const targetY = Math.floor(newSubY + (dy > 0 ? 0.1 : -0.1));
+        const targetY = Math.floor(newSubY + (dy > 0 ? 0.2 : -0.2));
         const curX = Math.floor(p.subX);
         if (curX >= 0 && curX < cols && targetY >= 0 && targetY < rows && isWalkable(grid[targetY]?.[curX])) {
           p.subY = newSubY;
@@ -1293,8 +1294,67 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
           p.dir = dy > 0 ? "down" : "up";
         }
 
-        // Dynamically generate procedural infinite chunks as player explores
-        ensureMapExploration(cur, p.x, p.y);
+        // Rustle sway and particles when walking through crops or weeds
+        const stepTile = grid[p.y]?.[p.x];
+        if (stepTile && (stepTile.cropId || stepTile.kind === "debris_weed")) {
+          const nowMs = performance.now();
+          if (!stepTile.lastRustleTime || nowMs - stepTile.lastRustleTime > 250) {
+            stepTile.lastRustleTime = nowMs;
+            const pColor = stepTile.kind === "debris_weed" ? "#2ecc71" : (CROPS[stepTile.cropId!]?.accent || "#2ecc71");
+            const px = p.x * TILE + 16;
+            const py = p.y * TILE + 24;
+            for (let i = 0; i < 2; i++) {
+              particlesRef.current.push({
+                x: px + (Math.random() * 12 - 6),
+                y: py - (Math.random() * 8),
+                vx: (Math.random() * 2 - 1) * 25,
+                vy: -Math.random() * 30 - 15,
+                color: pColor,
+                age: 0,
+                maxAge: 0.35 + Math.random() * 0.15,
+                type: "leaf"
+              });
+            }
+          }
+        }
+
+        // Smooth Zone Transitions (House, Shop, Mines) without costly React state clones
+        if (cur.inHouse && p.x === 5 && p.y === 9) {
+          cur.inHouse = false;
+          p.x = 15; p.y = 29; p.subX = 15; p.subY = 29;
+          toast("Exited Farm House");
+          setState(prev => ({ ...prev, inHouse: false, player: { ...prev.player, x: 15, y: 29, subX: 15, subY: 29 } }));
+        } else if (!cur.inHouse && !cur.inMine && p.x === 15 && p.y === 28) {
+          cur.inHouse = true;
+          p.x = 5; p.y = 8; p.subX = 5; p.subY = 8;
+          toast("Entered Farm House");
+          setState(prev => ({ ...prev, inHouse: true, player: { ...prev.player, x: 5, y: 8, subX: 5, subY: 8 } }));
+        } else if (!cur.inHouse && !cur.inMine && p.x === 70 && p.y === 40) {
+          if (!shopOpen) setShopOpen(true);
+        } else if (cur.inMine && grid[p.y]?.[p.x]?.kind === "mine_ladder" && p.x === 3 && p.y === 3) {
+          cur.inMine = false;
+          cur.mineDepth = 0;
+          p.x = 72; p.y = 8; p.subX = 72; p.subY = 8;
+          toast("Exited the mines.");
+          setState(prev => ({ ...prev, inMine: false, mineDepth: 0, player: { ...prev.player, x: 72, y: 8, subX: 72, subY: 8 } }));
+        } else if (cur.inMine && grid[p.y]?.[p.x]?.kind === "mine_ladder" && (p.x !== 3 || p.y !== 3)) {
+          cur.mineDepth += 1;
+          const f = generateMineFloor(cur.mineDepth);
+          cur.mineGrid = f.grid;
+          cur.mineEnemies = f.enemies;
+          p.x = 3; p.y = 3; p.subX = 3; p.subY = 3;
+          toast.success(`Descended to mine floor ${cur.mineDepth}!`);
+          setState(prev => ({ ...prev, mineDepth: cur.mineDepth, mineGrid: f.grid, mineEnemies: f.enemies, player: { ...prev.player, x: 3, y: 3, subX: 3, subY: 3 } }));
+        } else if (!cur.inMine && !cur.inHouse && grid[p.y]?.[p.x]?.kind === "mine_cave") {
+          cur.inMine = true;
+          cur.mineDepth = 1;
+          const f = generateMineFloor(1);
+          cur.mineGrid = f.grid;
+          cur.mineEnemies = f.enemies;
+          p.x = 3; p.y = 3; p.subX = 3; p.subY = 3;
+          toast.success("Entered the mines. Watch out for slimes!");
+          setState(prev => ({ ...prev, inMine: true, mineDepth: 1, mineGrid: f.grid, mineEnemies: f.enemies, player: { ...prev.player, x: 3, y: 3, subX: 3, subY: 3 } }));
+        }
       }
 
       // Factorio Belt Riding Dynamic Physics
@@ -1784,20 +1844,21 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
     return () => clearInterval(id);
   }, []);
 
-  // Animal Wandering AI updates (Runs every 3 seconds)
+  // Animal Wandering AI updates (Runs every 3 seconds - Shallow update, no tile cloning)
   useEffect(() => {
     const id = setInterval(() => {
       const cur = stateRef.current;
-      if (cur.animals.length === 0) return;
+      if (!cur.animals || cur.animals.length === 0) return;
 
       setState((prev) => {
-        const next = structuredClone(prev);
-        const grid = next.inMine ? next.mineGrid : next.tiles;
+        if (!prev.animals || prev.animals.length === 0) return prev;
+        const grid = prev.inMine ? prev.mineGrid : prev.tiles;
+        const rows = grid.length;
+        const cols = grid[0]?.length || 0;
 
-        if (!next.animals) next.animals = [];
-        next.animals.forEach((animal) => {
-          if (!animal) return;
-          // Wander randomly
+        let changed = false;
+        const newAnimals = prev.animals.map((animal) => {
+          if (!animal) return animal;
           const dirs = [[0, 1], [0, -1], [1, 0], [-1, 0]];
           const choice = dirs[Math.floor(Math.random() * dirs.length)];
           const nx = animal.x + choice[1];
@@ -1806,36 +1867,41 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
           if (
             nx >= 0 &&
             ny >= 0 &&
-            nx < grid[0].length &&
-            ny < grid.length &&
+            nx < cols &&
+            ny < rows &&
             isWalkable(grid[ny][nx])
           ) {
-            animal.x = nx;
-            animal.y = ny;
+            changed = true;
+            return { ...animal, x: nx, y: ny };
           }
+          return animal;
         });
 
-        return next;
+        if (!changed) return prev;
+        return { ...prev, animals: newAnimals };
       });
     }, 3000);
 
     return () => clearInterval(id);
   }, []);
 
-  // Time Ticks and Auto-Watering Rainy day notifications
+  // Time Ticks and Auto-Watering Rainy day notifications (Microsecond shallow updates)
   useEffect(() => {
     const id = setInterval(() => {
       setState((prev) => {
-        const next = structuredClone(prev);
-        const dayEnded = next.time + 10 >= 24 * 60;
+        const dayEnded = prev.time + 10 >= 24 * 60;
         if (dayEnded) {
+          const next = structuredClone(prev);
           sleep(next);
           setSleepSummary(next.dailyEarnings || null);
           toast.success(`Day ${next.day} begins!`);
+          return next;
         } else {
-          next.time += 10;
+          return {
+            ...prev,
+            time: prev.time + 10,
+          };
         }
-        return next;
       });
     }, TIME_TICK_MS);
 
@@ -1873,109 +1939,8 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
       if (curState.harvestLiftingTimer > 0) return;
 
 
-      // W A S D Movement keys
-      if (["w", "arrowup", "s", "arrowdown", "a", "arrowleft", "d", "arrowright"].includes(k)) {
-        e.preventDefault();
-        const now = performance.now();
-        const runMultiplier = e.shiftKey ? 35 : 60;
-        if (now - lastMove < runMultiplier) return;
-        lastMove = now;
-
-        setState((prev) => {
-          const next = structuredClone(prev);
-          let { x, y } = next.player;
-
-          if (k === "w" || k === "arrowup") {
-            next.player.dir = "up";
-            y -= 1;
-          } else if (k === "s" || k === "arrowdown") {
-            next.player.dir = "down";
-            y += 1;
-          } else if (k === "a" || k === "arrowleft") {
-            next.player.dir = "left";
-            x -= 1;
-          } else if (k === "d" || k === "arrowright") {
-            next.player.dir = "right";
-            x += 1;
-          }
-
-          const grid = next.inHouse
-            ? next.houseGrid!
-            : (next.inMine ? next.mineGrid : next.tiles);
-          const gridRows = grid.length;
-          const gridCols = grid[0]?.length || 0;
-
-          if (next.inHouse && x === 5 && y === 9) {
-            next.inHouse = false;
-            next.player.x = 15;
-            next.player.y = 29;
-            next.player.subX = 15;
-            next.player.subY = 29;
-            toast("Exited Farm House");
-          } else if (!next.inHouse && !next.inMine && x === 15 && y === 28) {
-            next.inHouse = true;
-            next.player.x = 5;
-            next.player.y = 8;
-            next.player.subX = 5;
-            next.player.subY = 8;
-            toast("Entered Farm House");
-          } else if (!next.inHouse && !next.inMine && x === 70 && y === 40) {
-            setTimeout(() => setShopOpen(true), 0);
-          } else if (x >= 0 && y >= 0 && x < gridCols && y < gridRows && isWalkable(grid[y][x])) {
-            next.player.x = x;
-            next.player.y = y;
-
-            // Trigger rustle sway and spawn particles when player walks through crops or weeds
-            const stepTile = grid[y][x];
-            if (stepTile.cropId || stepTile.kind === "debris_weed") {
-              stepTile.lastRustleTime = Date.now();
-              const pColor = stepTile.kind === "debris_weed" ? "#2ecc71" : (CROPS[stepTile.cropId!]?.accent || "#2ecc71");
-              const px = x * TILE + 16;
-              const py = y * TILE + 24;
-              for (let i = 0; i < 3; i++) {
-                particlesRef.current.push({
-                  x: px + (Math.random() * 12 - 6),
-                  y: py - (Math.random() * 8),
-                  vx: (Math.random() * 2 - 1) * 25,
-                  vy: -Math.random() * 30 - 15,
-                  color: pColor,
-                  age: 0,
-                  maxAge: 0.35 + Math.random() * 0.15,
-                  type: "leaf"
-                });
-              }
-            }
-
-            if (next.inMine && grid[y][x].kind === "mine_ladder" && x === 3 && y === 3) {
-              next.inMine = false;
-              next.mineDepth = 0;
-              next.player.x = 72;
-              next.player.y = 8;
-              toast("Exited the mines.");
-            } else if (next.inMine && grid[y][x].kind === "mine_ladder" && (x !== 3 || y !== 3)) {
-              next.mineDepth += 1;
-              const f = generateMineFloor(next.mineDepth);
-              next.mineGrid = f.grid;
-              next.mineEnemies = f.enemies;
-              next.player.x = 3;
-              next.player.y = 3;
-              toast.success(`Descended to mine floor ${next.mineDepth}!`);
-            } else if (!next.inMine && grid[y][x].kind === "mine_cave") {
-              next.inMine = true;
-              next.mineDepth = 1;
-              const f = generateMineFloor(1);
-              next.mineGrid = f.grid;
-              next.mineEnemies = f.enemies;
-              next.player.x = 3;
-              next.player.y = 3;
-              toast.success("Entered the mines. Watch out for slimes!");
-            }
-          }
-          return next;
-        });
-      }
       // Space / E Action Key
-      else if (e.code === "Space") {
+      if (e.code === "Space") {
         e.preventDefault();
 
         const held = curState.inventory[curState.hotbarIndex];
@@ -8246,6 +8211,10 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
 
 }
 
+let _cachedMinimapCanvas: HTMLCanvasElement | null = null;
+let _lastMinimapTerrainRender = 0;
+let _cachedMinimapMode = "";
+
 function drawMinimap(
   ctx: CanvasRenderingContext2D,
   state: GameState,
@@ -8256,95 +8225,121 @@ function drawMinimap(
   const grid = isMine ? state.mineGrid : state.tiles;
   if (!grid || grid.length === 0) return;
   const rows = grid.length;
-  const cols = grid[0].length;
+  const cols = grid[0]?.length || 0;
+  if (cols === 0) return;
 
   const w = ctx.canvas.width;
   const h = ctx.canvas.height;
+  const currentMode = `${isMine ? "mine_" + state.mineDepth : "farm"}_${rows}x${cols}`;
+  const now = performance.now();
 
-  // Clear canvas
-  ctx.fillStyle = "#141517";
-  ctx.fillRect(0, 0, w, h);
+  if (!_cachedMinimapCanvas) {
+    _cachedMinimapCanvas = document.createElement("canvas");
+  }
+  if (_cachedMinimapCanvas.width !== w || _cachedMinimapCanvas.height !== h) {
+    _cachedMinimapCanvas.width = w;
+    _cachedMinimapCanvas.height = h;
+    _lastMinimapTerrainRender = 0;
+  }
+
+  // Only re-rasterize 57,600 tiles once every 1500ms or when changing map/floors
+  if (now - _lastMinimapTerrainRender > 1500 || _cachedMinimapMode !== currentMode) {
+    _lastMinimapTerrainRender = now;
+    _cachedMinimapMode = currentMode;
+
+    const offCtx = _cachedMinimapCanvas.getContext("2d");
+    if (offCtx) {
+      offCtx.fillStyle = "#141517";
+      offCtx.fillRect(0, 0, w, h);
+
+      const scaleX = w / cols;
+      const scaleY = h / rows;
+
+      for (let y = 0; y < rows; y++) {
+        for (let x = 0; x < cols; x++) {
+          const tile = grid[y]?.[x];
+          if (!tile) continue;
+
+          let color = "#7c6448";
+          switch (tile.kind) {
+            case "grass":
+              color = "#7c6448";
+              break;
+            case "water":
+              color = "#123842";
+              break;
+            case "path":
+              color = "#475569";
+              break;
+            case "soil":
+              color = "#3a2e22";
+              break;
+            case "watered":
+              color = "#241c14";
+              break;
+            case "tree":
+              color = "#2d3e2f";
+              break;
+            case "house":
+            case "shop":
+              color = "#34495e";
+              break;
+            case "mine_cave":
+              color = "#000000";
+              break;
+            case "mine_dirt":
+              color = "#3d312a";
+              break;
+            case "mine_wall":
+              color = "#2b2521";
+              break;
+            case "mine_ladder":
+              color = "#ffd700";
+              break;
+            case "debris_weed":
+              color = "#4a5568";
+              break;
+            case "debris_branch":
+              color = "#5c4832";
+              break;
+            case "debris_stone":
+              color = "#7f8c8d";
+              break;
+            case "ore_copper":
+              color = "#e67e22";
+              break;
+            case "ore_iron":
+              color = "#3498db";
+              break;
+            case "ore_coal":
+              color = "#17202a";
+              break;
+            case "ore_uranium":
+              color = "#2ecc71";
+              break;
+            case "ore_gold":
+              color = "#f1c40f";
+              break;
+            case "placed_item":
+              if (tile.placedItemId === "mailbox") color = "#34495e";
+              else if (tile.placedItemId === "chest") color = "#d35400";
+              else if (tile.placedItemId && tile.placedItemId.startsWith("sprinkler")) color = "#3498db";
+              else color = "#ab47bc";
+              break;
+          }
+
+          offCtx.fillStyle = color;
+          offCtx.fillRect(x * scaleX, y * scaleY, Math.ceil(scaleX), Math.ceil(scaleY));
+        }
+      }
+    }
+  }
+
+  // Blit pre-rendered background in 1 ultra-fast draw call!
+  ctx.drawImage(_cachedMinimapCanvas, 0, 0);
 
   const scaleX = w / cols;
   const scaleY = h / rows;
-
-  for (let y = 0; y < rows; y++) {
-    for (let x = 0; x < cols; x++) {
-      const tile = grid[y][x];
-      if (!tile) continue;
-
-      let color = "#7c6448";
-      switch (tile.kind) {
-        case "grass":
-          color = "#7c6448";
-          break;
-        case "water":
-          color = "#123842";
-          break;
-        case "path":
-          color = "#475569";
-          break;
-        case "soil":
-          color = "#3a2e22";
-          break;
-        case "watered":
-          color = "#241c14";
-          break;
-        case "tree":
-          color = "#2d3e2f";
-          break;
-        case "house":
-        case "shop":
-          color = "#34495e";
-          break;
-        case "mine_cave":
-          color = "#000000";
-          break;
-        case "mine_dirt":
-          color = "#3d312a";
-          break;
-        case "mine_wall":
-          color = "#2b2521";
-          break;
-        case "mine_ladder":
-          color = "#ffd700";
-          break;
-        case "debris_weed":
-          color = "#4a5568";
-          break;
-        case "debris_branch":
-          color = "#5c4832";
-          break;
-        case "debris_stone":
-          color = "#7f8c8d";
-          break;
-        case "ore_copper":
-          color = "#e67e22";
-          break;
-        case "ore_iron":
-          color = "#3498db";
-          break;
-        case "ore_coal":
-          color = "#17202a";
-          break;
-        case "ore_uranium":
-          color = "#2ecc71";
-          break;
-        case "ore_gold":
-          color = "#f1c40f";
-          break;
-        case "placed_item":
-          if (tile.placedItemId === "mailbox") color = "#34495e";
-          else if (tile.placedItemId === "chest") color = "#d35400";
-          else if (tile.placedItemId && tile.placedItemId.startsWith("sprinkler")) color = "#3498db";
-          else color = "#ab47bc";
-          break;
-      }
-
-      ctx.fillStyle = color;
-      ctx.fillRect(x * scaleX, y * scaleY, Math.ceil(scaleX), Math.ceil(scaleY));
-    }
-  }
 
   if (state.workers) {
     ctx.fillStyle = "#f39c12";

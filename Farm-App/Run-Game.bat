@@ -1,18 +1,23 @@
 @echo off
 title Farm-App: Factorio Industrial Simulation Desktop Runner
 echo ========================================================
-echo   FARM-APP: FACTORIO DESKTOP GAME EDITION
-echo   Direct Hardware-Accelerated Standalone Runner
+echo   FARM-APP: FACTORIO DESKTOP GAME RUNNER
+echo   Direct Hardware-Accelerated Standalone Windows App
 echo ========================================================
 echo.
 
-set "PATH=C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Microsoft\VisualStudio\NodeJs;%PATH%"
 cd /d "%~dp0"
 
 if not exist "node_modules" (
     echo [INFO] First time setup: Installing local dependencies...
-    call npm install
+    call cmd /c npm install
 )
 
-echo [INFO] Starting Desktop Game Client...
-call npm run dev
+if not exist "dist\index.html" (
+    echo [INFO] Compiling game engine for Desktop...
+    call cmd /c npm run build
+)
+
+echo.
+echo [INFO] Launching Farm-App Factorio Desktop Client...
+call cmd /c npx electron .

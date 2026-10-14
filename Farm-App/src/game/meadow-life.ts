@@ -8,6 +8,8 @@ export const TILE = 32;
 export const COLS = 240;
 export const ROWS = 240;
 
+let _cachedLightCanvas: HTMLCanvasElement | null = null;
+
 export type TileKind =
   | "grass"
   | "soil"
@@ -32,6 +34,7 @@ export type TileKind =
   | "ore_aluminum"
   | "ore_coal"
   | "ore_uranium"
+  | "ore_crude_oil"
   | "house_wall"
   | "house_floor"
   | "house_bed"
@@ -188,6 +191,11 @@ export interface GameState {
     reachDistance?: number;
     lastDamageTime?: number;
     isCharacterDetached?: boolean;
+    dressColor?: string;
+    secondaryColor?: string;
+    suitType?: "engineer" | "heavy" | "modular" | "power_armor";
+    helmetType?: "none" | "cap" | "visor" | "helmet" | "power_visor";
+    skinTone?: "default" | "tan" | "fair" | "dark";
   };
   characterCorpses?: {
     id: string;
@@ -196,6 +204,26 @@ export interface GameState {
     items: (Item | null)[];
     timestamp: number;
   }[];
+  settings?: {
+    fpsLimit: 30 | 60 | 120 | 144 | 0;
+    graphicsQuality: "low" | "medium" | "high" | "ultra";
+    showGrid: boolean;
+    showPollution?: boolean;
+    showFpsOverlay: boolean;
+    shadowsEnabled: boolean;
+    particleDensity: "low" | "medium" | "high";
+    desktopMode: boolean;
+  };
+  cloudSave?: {
+    lastCloudSaveTimestamp: number | null;
+    cloudStatus: "synced" | "saving" | "idle" | "error";
+  };
+  blueprint?: {
+    mode: "copy" | "stamp" | "deconstruct" | null;
+    startTile?: { x: number; y: number } | null;
+    currentTile?: { x: number; y: number } | null;
+    savedEntities?: { relX: number; relY: number; placedItemId: string; direction?: string }[];
+  } | null;
   day: number;
   time: number;
   inventory: (Item | null)[];
@@ -2761,6 +2789,15 @@ function makeMap(): Tile[][] {
     }
   }
 
+  // 6. Crude Oil Deposit Field (South-East industrial sector)
+  for (let y = 56; y <= 64; y++) {
+    for (let x = 60; x <= 70; x++) {
+      if (Math.hypot(x - 65, y - 60) <= 4.2 && Math.random() < 0.80) {
+        t[y][x] = { kind: "ore_crude_oil", age: 0, watered: false };
+      }
+    }
+  }
+
   // Dedicated Mining Quarry Area (x: 78..115, y: 6..35) near the mine cave
   for (let y = 6; y <= 35; y++) {
     for (let x = 78; x <= 115; x++) {
@@ -3098,8 +3135,33 @@ export function newGame(): GameState {
       shield: 0,
       maxShield: 100,
       reachDistance: 10,
+      dressColor: "#e67e22",
+      secondaryColor: "#1e2430",
+      suitType: "engineer",
+      helmetType: "visor",
+      skinTone: "default",
     },
     characterCorpses: [],
+    settings: {
+      fpsLimit: 40,
+      graphicsQuality: "low",
+      showGrid: true,
+      showPollution: true,
+      showFpsOverlay: true,
+      shadowsEnabled: true,
+      particleDensity: "low",
+      desktopMode: true,
+    },
+    cloudSave: {
+      lastCloudSaveTimestamp: Date.now(),
+      cloudStatus: "synced",
+    },
+    blueprint: {
+      mode: null,
+      startTile: null,
+      currentTile: null,
+      savedEntities: [],
+    },
     day: 1,
     time: DAY_START_MINUTES,
     inventory: inv,
@@ -3151,8 +3213,8 @@ export function newGame(): GameState {
 const TILE_KINDS = new Set<TileKind>([
   "grass", "soil", "watered", "water", "tree", "house", "path", "shop", "npc",
   "mine_cave", "mine_dirt", "mine_wall", "mine_ladder", "debris_weed", "debris_branch",
-  "debris_stone", "ore_copper", "ore_iron", "ore_gold", "ore_silver", "ore_coal",
-  "ore_uranium", "house_wall", "house_floor", "house_bed", "house_door", "placed_item",
+  "ore_stone", "ore_copper", "ore_iron", "ore_gold", "ore_silver", "ore_coal",
+  "ore_uranium", "ore_crude_oil", "house_wall", "house_floor", "house_bed", "house_door", "placed_item",
 ]);
 
 function serializeTile(tile: Tile): Partial<Tile> {
@@ -5930,10 +5992,24 @@ export function draw(
         ctx.fillStyle = "#110e0c";
         ctx.fillRect(px, py, TILE, TILE);
       } else if (!state.inMine) {
-        // Factorio Planet Nauvis Base Terrain (Multi-frequency Arid Dirt & Red Desert Noise)
-        const grassColor = getGrassColor(x, y, state.season);
-        ctx.fillStyle = grassColor;
-        ctx.fillRect(px, py, TILE, TILE);
+        // Factorio Planet Nauvis Base Terrain (Seamless Organic Biomes & Ore Veins)
+        const tile = currentGrid[y]?.[x];
+        if (tile && tile.kind && tile.kind.startsWith("ore_")) {
+          const oreBedColors: Record<string, string> = {
+            ore_iron: "#253040",
+            ore_copper: "#5c331a",
+            ore_coal: "#14171a",
+            ore_uranium: "#0e3b1c",
+            ore_gold: "#4a3c10",
+            ore_crude_oil: "#161b22"
+          };
+          ctx.fillStyle = oreBedColors[tile.kind] || "#3b2f21";
+          ctx.fillRect(px, py, TILE, TILE);
+        } else {
+          const grassColor = getGrassColor(x, y, state.season);
+          ctx.fillStyle = grassColor;
+          ctx.fillRect(px, py, TILE, TILE);
+        }
 
         // Factorio Arid Surface Details: Mineral Gravel Specks, Dry Earth Cracks, and Stone Grains
         const r = seedRandom(x * 37 + y * 73);
@@ -6052,12 +6128,17 @@ export function draw(
         ctx.fillRect(px + 6 + waveX, py + 8 + waveY, 5, 2);
 
       } else if (t.kind === "soil" || t.kind === "watered" || t.cropId !== undefined) {
-        // Space Age Gleba Bio-Peat Bed / Nutrient Soil
+        // Space Age Gleba Bio-Peat Bed / Nutrient Soil (Seamless Organic Blend)
         const isWatered = t.kind === "watered" || t.watered;
         ctx.fillStyle = isWatered ? "#241c14" : "#3a2e22";
         ctx.fillRect(px, py, TILE, TILE);
-        ctx.fillStyle = isWatered ? "#1b140e" : "#2c2219";
-        ctx.fillRect(px + 2, py + 2, TILE - 4, TILE - 4);
+
+        // Organic Soil Edge Granules
+        ctx.fillStyle = isWatered ? "#1b140e" : "#4a3b2c";
+        const rNoise = seedRandom(x * 19 + y * 31);
+        if (rNoise > 0.4) {
+          ctx.fillRect(px + 4 + (rNoise * 16), py + 4 + ((rNoise * 33) % 16), 2, 2);
+        }
 
         // Glistening effect on moist soil
         if (isWatered) {
@@ -6238,6 +6319,43 @@ export function draw(
         ctx.fillRect(px + 20, py + 2, 3, TILE - 4);
         for (let i = 4; i < TILE - 2; i += 6) {
           ctx.fillRect(px + 8, py + i, 12, 2);
+        }
+      }
+    }
+  }
+
+  // Factorio Alt-Grid Overlay Lines
+  if (state.settings?.showGrid) {
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.07)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let x = startCol; x <= endCol; x++) {
+      ctx.moveTo(x * TILE, startRow * TILE);
+      ctx.lineTo(x * TILE, endRow * TILE);
+    }
+    for (let y = startRow; y <= endRow; y++) {
+      ctx.moveTo(startCol * TILE, y * TILE);
+      ctx.lineTo(endCol * TILE, y * TILE);
+    }
+    ctx.stroke();
+  }
+
+  // Factorio Industrial Pollution Cloud Visualizer Overlay
+  if (state.settings?.showPollution ?? true) {
+    for (let y = startRow; y < endRow; y++) {
+      for (let x = startCol; x < endCol; x++) {
+        const t = currentGrid[y][x];
+        if (t.kind === "placed_item" && t.placedItemId) {
+          const id = t.placedItemId;
+          if (id.includes("drill") || id.includes("furnace") || id.includes("boiler") || id.includes("assembler") || id.includes("refinery")) {
+            const px = x * TILE;
+            const py = y * TILE;
+            const pulse = (Math.sin(Date.now() / 400 + x * 3 + y * 7) + 1) * 0.5;
+            ctx.fillStyle = `rgba(180, 40, 20, ${0.12 + pulse * 0.08})`;
+            ctx.beginPath();
+            ctx.arc(px + 16, py + 16, 28 + pulse * 6, 0, Math.PI * 2);
+            ctx.fill();
+          }
         }
       }
     }
@@ -6495,6 +6613,28 @@ export function draw(
             ctx.fillRect(cx - 1, cy - s - 1, 2, 2);
           }
         });
+      } else if (t.kind === "ore_crude_oil") {
+        // Factorio Crude Oil Geyser Spring Pool
+        ctx.fillStyle = "rgba(0, 0, 0, 0.4)";
+        ctx.beginPath();
+        ctx.ellipse(px + 16 + debrisShake, py + 22, 14, 7, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = "#11161b";
+        ctx.beginPath();
+        ctx.ellipse(px + 16 + debrisShake, py + 20, 13, 6, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = "#2c3e50";
+        ctx.beginPath();
+        ctx.ellipse(px + 14 + debrisShake, py + 18, 9, 4, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        const oilBubble = (Math.sin(Date.now() / 200 + (x * 7 + y * 13)) + 1) * 0.5;
+        ctx.fillStyle = "#f39c12";
+        ctx.beginPath();
+        ctx.arc(px + 12 + oilBubble * 8 + debrisShake, py + 18, 2 + oilBubble * 1.5, 0, Math.PI * 2);
+        ctx.fill();
       }
 
       // Render Placed Items (Factorio Automation & Farm Placeables)
@@ -7431,6 +7571,11 @@ export function draw(
   const rightLegOffset = isMoving ? -Math.sin(walkTime) * 4.5 : 0;
   const armSwing = isMoving ? Math.sin(walkTime) * 3.5 : 0;
 
+  const dressCol = p.dressColor || "#d48817";
+  const secCol = p.secondaryColor || "#1e2430";
+  const suitType = p.suitType || "engineer";
+  const helmetType = p.helmetType || "visor";
+
   // 1. Directional Cast Shadow (Extending to Bottom-Right)
   ctx.fillStyle = "rgba(0, 0, 0, 0.4)";
   ctx.beginPath();
@@ -7438,110 +7583,113 @@ export function draw(
   ctx.fill();
 
   // 2. Mechanical Survival Backpack & Over-Shoulder Holster
-  ctx.fillStyle = "#1e2430";
+  ctx.fillStyle = secCol;
   ctx.fillRect(playerPx - 9, playerPy - 6 + walkBob, 18, 12);
   ctx.fillStyle = "#2ecc71"; // active energy LED
   ctx.fillRect(playerPx - 7, playerPy - 4 + walkBob, 2.5, 2.5);
   // Survival Antenna / Holster extending over right shoulder
-  ctx.fillStyle = "#d35400";
+  ctx.fillStyle = dressCol;
   ctx.fillRect(playerPx + 7, playerPy - 12 + walkBob, 4, 10);
   ctx.fillStyle = "#e67e22";
   ctx.fillRect(playerPx + 8, playerPy - 14 + walkBob, 2, 4);
 
   // 3. Ribbed Hazard Combat Legs & Steel-Toed Boots
   // Left Leg
-  ctx.fillStyle = "#4a5568";
+  ctx.fillStyle = suitType === "power_armor" ? "#2c3e50" : suitType === "heavy" ? "#34495e" : "#4a5568";
   ctx.fillRect(playerPx - 7, playerPy + 8 + leftLegOffset, 5.5, 9 - leftLegOffset);
   ctx.fillStyle = "#2d3748"; // Ribbed joint lines
   ctx.fillRect(playerPx - 7, playerPy + 11 + leftLegOffset, 5.5, 1.5);
-  ctx.fillStyle = "#d48817"; // Ochre Knee Guard
+  ctx.fillStyle = dressCol; // Knee Guard
   ctx.fillRect(playerPx - 7.5, playerPy + 13 + leftLegOffset, 6, 3);
   ctx.fillStyle = "#111827"; // Heavy Steel Boot
   ctx.fillRect(playerPx - 8, playerPy + 16 + leftLegOffset, 7, 3);
 
   // Right Leg
-  ctx.fillStyle = "#4a5568";
+  ctx.fillStyle = suitType === "power_armor" ? "#2c3e50" : suitType === "heavy" ? "#34495e" : "#4a5568";
   ctx.fillRect(playerPx + 1.5, playerPy + 8 + rightLegOffset, 5.5, 9 - rightLegOffset);
   ctx.fillStyle = "#2d3748";
   ctx.fillRect(playerPx + 1.5, playerPy + 11 + rightLegOffset, 5.5, 1.5);
-  ctx.fillStyle = "#d48817"; // Ochre Knee Guard
+  ctx.fillStyle = dressCol; // Knee Guard
   ctx.fillRect(playerPx + 1, playerPy + 13 + rightLegOffset, 6, 3);
   ctx.fillStyle = "#111827"; // Heavy Steel Boot
   ctx.fillRect(playerPx + 1, playerPy + 16 + rightLegOffset, 7, 3);
 
   // 4. Arms & Heavy Gauntlets
   // Left Arm
-  ctx.fillStyle = "#4a5568";
+  ctx.fillStyle = suitType === "power_armor" ? "#2980b9" : "#4a5568";
   ctx.fillRect(playerPx - 11, playerPy - 2 + walkBob + armSwing, 4, 9);
-  ctx.fillStyle = "#2d3748"; // Gauntlet
+  ctx.fillStyle = secCol; // Gauntlet
   ctx.fillRect(playerPx - 11.5, playerPy + 4 + walkBob + armSwing, 4.5, 4);
 
   // Right Arm
-  ctx.fillStyle = "#4a5568";
+  ctx.fillStyle = suitType === "power_armor" ? "#2980b9" : "#4a5568";
   ctx.fillRect(playerPx + 7, playerPy - 2 + walkBob - armSwing, 4, 9);
-  ctx.fillStyle = "#2d3748"; // Gauntlet
+  ctx.fillStyle = secCol; // Gauntlet
   ctx.fillRect(playerPx + 7, playerPy + 4 + walkBob - armSwing, 4.5, 4);
 
   // 5. Signature Ochre Hazard Suit Torso & Heavy Pauldrons
   // Flared Shoulder Pauldrons (Left & Right)
-  ctx.fillStyle = "#d48817";
+  ctx.fillStyle = dressCol;
   ctx.fillRect(playerPx - 12, playerPy - 6 + walkBob, 6, 5);
   ctx.fillRect(playerPx + 6, playerPy - 6 + walkBob, 6, 5);
-  ctx.fillStyle = "#b8700e";
+  ctx.fillStyle = secCol;
   ctx.fillRect(playerPx - 12, playerPy - 2 + walkBob, 6, 1.5);
   ctx.fillRect(playerPx + 6, playerPy - 2 + walkBob, 6, 1.5);
 
   // Armored Torso Vest
-  ctx.fillStyle = "#d48817";
+  ctx.fillStyle = dressCol;
   ctx.fillRect(playerPx - 6.5, playerPy - 5 + walkBob, 13, 14);
   // Dark Reinforced Harness & Utility Pouches
-  ctx.fillStyle = "#1e2430";
+  ctx.fillStyle = secCol;
   ctx.fillRect(playerPx - 5, playerPy - 2 + walkBob, 10, 4);
   ctx.fillRect(playerPx - 4, playerPy + 4 + walkBob, 8, 3.5);
-  ctx.fillStyle = "#e59324";
+  ctx.fillStyle = "#f1c40f";
   ctx.fillRect(playerPx - 3, playerPy + 5 + walkBob, 2, 2);
   ctx.fillRect(playerPx + 1, playerPy + 5 + walkBob, 2, 2);
 
-  // 6. Iconic Factorio Dome Helmet with Optic Sensor & Respirators
-  // Dome Helmet
-  ctx.fillStyle = "#d48817";
-  ctx.beginPath();
-  ctx.arc(playerPx, playerPy - 11 + walkBob, 6.5, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = "#b8700e";
-  ctx.fillRect(playerPx - 6, playerPy - 7 + walkBob, 12, 2.5);
-
-  // Side Respirators / Filtration Canisters
-  ctx.fillStyle = "#2d3748";
-  ctx.fillRect(playerPx - 8, playerPy - 10 + walkBob, 2.5, 4);
-  ctx.fillRect(playerPx + 5.5, playerPy - 10 + walkBob, 2.5, 4);
-
-  // Optic Sensor / Reflective Lens
-  if (p.dir === "down") {
-    ctx.fillStyle = "#1b2631";
+  // 6. Iconic Factorio Dome Helmet / Cap / Power Visor
+  if (helmetType !== "none") {
+    // Dome Helmet / Headgear
+    ctx.fillStyle = helmetType === "power_visor" ? "#8e44ad" : helmetType === "helmet" ? "#34495e" : dressCol;
     ctx.beginPath();
-    ctx.arc(playerPx, playerPy - 10.5 + walkBob, 3.2, 0, Math.PI * 2);
+    ctx.arc(playerPx, playerPy - 11 + walkBob, 6.5, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillStyle = "#74b9ff"; // Glowing sensor lens
-    ctx.beginPath();
-    ctx.arc(playerPx, playerPy - 10.5 + walkBob, 2, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = "#ffffff";
-    ctx.fillRect(playerPx - 1, playerPy - 11.5 + walkBob, 1, 1);
-  } else if (p.dir === "left") {
-    ctx.fillStyle = "#1b2631";
-    ctx.fillRect(playerPx - 6, playerPy - 12 + walkBob, 3, 4);
-    ctx.fillStyle = "#74b9ff";
-    ctx.fillRect(playerPx - 5.5, playerPy - 11.5 + walkBob, 2, 2.5);
-  } else if (p.dir === "right") {
-    ctx.fillStyle = "#1b2631";
-    ctx.fillRect(playerPx + 3, playerPy - 12 + walkBob, 3, 4);
-    ctx.fillStyle = "#74b9ff";
-    ctx.fillRect(playerPx + 3.5, playerPy - 11.5 + walkBob, 2, 2.5);
-  } else {
-    // Up (Back of Helmet)
-    ctx.fillStyle = "#9c5e0c";
-    ctx.fillRect(playerPx - 4, playerPy - 13 + walkBob, 8, 4);
+    ctx.fillStyle = secCol;
+    ctx.fillRect(playerPx - 6, playerPy - 7 + walkBob, 12, 2.5);
+
+    // Side Respirators / Filtration Canisters
+    ctx.fillStyle = "#2d3748";
+    ctx.fillRect(playerPx - 8, playerPy - 10 + walkBob, 2.5, 4);
+    ctx.fillRect(playerPx + 5.5, playerPy - 10 + walkBob, 2.5, 4);
+
+    // Optic Sensor / Reflective Visor Lens
+    const visorGlow = helmetType === "power_visor" ? "#a855f7" : helmetType === "visor" ? "#38bdf8" : "#f59e0b";
+    if (p.dir === "down") {
+      ctx.fillStyle = "#1b2631";
+      ctx.beginPath();
+      ctx.arc(playerPx, playerPy - 10.5 + walkBob, 3.2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = visorGlow; // Glowing sensor lens
+      ctx.beginPath();
+      ctx.arc(playerPx, playerPy - 10.5 + walkBob, 2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(playerPx - 1, playerPy - 11.5 + walkBob, 1, 1);
+    } else if (p.dir === "left") {
+      ctx.fillStyle = "#1b2631";
+      ctx.fillRect(playerPx - 6, playerPy - 12 + walkBob, 3, 4);
+      ctx.fillStyle = visorGlow;
+      ctx.fillRect(playerPx - 5.5, playerPy - 11.5 + walkBob, 2, 2.5);
+    } else if (p.dir === "right") {
+      ctx.fillStyle = "#1b2631";
+      ctx.fillRect(playerPx + 3, playerPy - 12 + walkBob, 3, 4);
+      ctx.fillStyle = visorGlow;
+      ctx.fillRect(playerPx + 3.5, playerPy - 11.5 + walkBob, 2, 2.5);
+    } else {
+      // Up (Back of Helmet)
+      ctx.fillStyle = secCol;
+      ctx.fillRect(playerPx - 4, playerPy - 13 + walkBob, 8, 4);
+    }
   }
 
   // Weapon in Hands / Mining Laser targeting beam
@@ -7691,18 +7839,24 @@ export function draw(
 
   ctx.restore(); // restore viewport transform
 
-  // 9. Ambient Night/Evening Lighting filter
+  // 9. Ambient Night/Evening Lighting filter (Performance Cached Offscreen Canvas)
   if (phase !== "morning") {
-    const tempCanvas = document.createElement("canvas");
-    tempCanvas.width = viewWidth;
-    tempCanvas.height = viewHeight;
-    const tCtx = tempCanvas.getContext("2d");
+    if (!_cachedLightCanvas) {
+      _cachedLightCanvas = typeof document !== "undefined" ? document.createElement("canvas") : null;
+    }
+    if (_cachedLightCanvas) {
+      if (_cachedLightCanvas.width !== viewWidth || _cachedLightCanvas.height !== viewHeight) {
+        _cachedLightCanvas.width = viewWidth;
+        _cachedLightCanvas.height = viewHeight;
+      }
+      const tCtx = _cachedLightCanvas.getContext("2d");
 
-    if (tCtx) {
-      tCtx.fillStyle = phase === "night" ? "rgba(10, 15, 40, 0.72)" : "rgba(230, 126, 34, 0.28)";
-      tCtx.fillRect(0, 0, viewWidth, viewHeight);
+      if (tCtx) {
+        tCtx.globalCompositeOperation = "source-over";
+        tCtx.fillStyle = phase === "night" ? "rgba(10, 15, 40, 0.72)" : "rgba(230, 126, 34, 0.28)";
+        tCtx.fillRect(0, 0, viewWidth, viewHeight);
 
-      tCtx.globalCompositeOperation = "destination-out";
+        tCtx.globalCompositeOperation = "destination-out";
 
       // Player light radius
       const plViewX = playerPx - cameraX;
@@ -7742,7 +7896,397 @@ export function draw(
         }
       }
 
-      ctx.drawImage(tempCanvas, 0, 0);
+      ctx.drawImage(_cachedLightCanvas, 0, 0);
+    }
+  }
+
+  // 10. Factorio Blueprint, Stamp & Deconstruction Bounding Box Overlay
+  if (state.blueprint && state.blueprint.mode) {
+    const bp = state.blueprint;
+    const start = bp.startTile;
+    const curr = bp.currentTile || hoveredTile;
+
+    if (bp.mode === "copy" && start && curr) {
+      const minX = Math.min(start.x, curr.x);
+      const maxX = Math.max(start.x, curr.x);
+      const minY = Math.min(start.y, curr.y);
+      const maxY = Math.max(start.y, curr.y);
+
+      const bx = minX * TILE - cameraX;
+      const by = minY * TILE - cameraY;
+      const bw = (maxX - minX + 1) * TILE;
+      const bh = (maxY - minY + 1) * TILE;
+
+      ctx.fillStyle = "rgba(0, 206, 201, 0.25)";
+      ctx.fillRect(bx, by, bw, bh);
+
+      ctx.strokeStyle = "#00cec9";
+      ctx.lineWidth = 2;
+      ctx.setLineDash([6, 4]);
+      ctx.strokeRect(bx, by, bw, bh);
+      ctx.setLineDash([]);
+
+      ctx.fillStyle = "#00cec9";
+      ctx.font = "bold 11px monospace";
+      ctx.fillText(`📋 Blueprint Selection: ${maxX - minX + 1}x${maxY - minY + 1} tiles`, bx + 4, Math.max(14, by - 6));
+    } else if (bp.mode === "deconstruct" && start && curr) {
+      const minX = Math.min(start.x, curr.x);
+      const maxX = Math.max(start.x, curr.x);
+      const minY = Math.min(start.y, curr.y);
+      const maxY = Math.max(start.y, curr.y);
+
+      const bx = minX * TILE - cameraX;
+      const by = minY * TILE - cameraY;
+      const bw = (maxX - minX + 1) * TILE;
+      const bh = (maxY - minY + 1) * TILE;
+
+      ctx.fillStyle = "rgba(235, 77, 75, 0.35)";
+      ctx.fillRect(bx, by, bw, bh);
+
+      ctx.strokeStyle = "#eb4d4b";
+      ctx.lineWidth = 2.5;
+      ctx.setLineDash([4, 4]);
+      ctx.strokeRect(bx, by, bw, bh);
+      ctx.setLineDash([]);
+
+      ctx.fillStyle = "#eb4d4b";
+      ctx.font = "bold 11px monospace";
+      ctx.fillText(`✂️ Deconstruction Planner: ${maxX - minX + 1}x${maxY - minY + 1} tiles`, bx + 4, Math.max(14, by - 6));
+    } else if (bp.mode === "stamp" && bp.savedEntities && bp.savedEntities.length > 0 && hoveredTile) {
+      bp.savedEntities.forEach((ent) => {
+        const targetX = hoveredTile.x + ent.relX;
+        const targetY = hoveredTile.y + ent.relY;
+        const epx = targetX * TILE - cameraX;
+        const epy = targetY * TILE - cameraY;
+
+        ctx.fillStyle = "rgba(46, 204, 113, 0.4)";
+        ctx.fillRect(epx, epy, TILE, TILE);
+        ctx.strokeStyle = "#2ecc71";
+        ctx.lineWidth = 1;
+        ctx.strokeRect(epx, epy, TILE, TILE);
+      });
+    }
+  }
+
+  // 11. Factorio Roboport & Flying Autonomous Drone Bots Renderer
+  for (let y = startRow; y < endRow; y++) {
+    for (let x = startCol; x < endCol; x++) {
+      const t = currentGrid[y][x];
+      if (t.kind === "placed_item" && t.placedItemId === "roboport") {
+        const rpx = x * TILE + 16 - cameraX;
+        const rpy = y * TILE + 16 - cameraY;
+
+        // Render Roboport 32x32 Logistic Coverage Outer Square
+        ctx.strokeStyle = "rgba(142, 68, 173, 0.25)";
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([4, 4]);
+        ctx.strokeRect(rpx - 256, rpy - 256, 512, 512);
+        ctx.setLineDash([]);
+
+        // Render Autonomous Flying Drone Swarm Spanning from Roboport
+        const tNow = Date.now() / 1000;
+        for (let i = 0; i < 4; i++) {
+          const droneAngle = tNow * (0.8 + i * 0.2) + i * (Math.PI / 2);
+          const orbitR = 60 + Math.sin(tNow + i) * 35;
+          const dx = rpx + Math.cos(droneAngle) * orbitR;
+          const dy = rpy + Math.sin(droneAngle) * orbitR;
+
+          // Drone shadow on ground
+          ctx.fillStyle = "rgba(0, 0, 0, 0.3)";
+          ctx.beginPath();
+          ctx.ellipse(dx, dy + 18, 6, 2.5, 0, 0, Math.PI * 2);
+          ctx.fill();
+
+          // Drone body sprite
+          ctx.fillStyle = i % 2 === 0 ? "#2ecc71" : "#3498db";
+          ctx.beginPath();
+          ctx.arc(dx, dy, 4.5, 0, Math.PI * 2);
+          ctx.fill();
+
+          // Glowing Green/Blue Drone LED
+          ctx.fillStyle = "#ffffff";
+          ctx.fillRect(dx - 1, dy - 1, 2, 2);
+
+          // Drone propeller rotor lines
+          ctx.strokeStyle = "rgba(255, 255, 255, 0.7)";
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(dx - 6, dy);
+          ctx.lineTo(dx + 6, dy);
+          ctx.moveTo(dx, dy - 6);
+          ctx.lineTo(dx, dy + 6);
+          ctx.stroke();
+        }
+      }
+    }
+  }
+
+  // 12. Factorio Railway Tracks & Autonomous Diesel Locomotive Train Engine Renderer
+  for (let y = startRow; y < endRow; y++) {
+    for (let x = startCol; x < endCol; x++) {
+      const t = currentGrid[y][x];
+      if (t.kind === "placed_item" && t.placedItemId) {
+        const id = t.placedItemId;
+        const rpx = x * TILE - cameraX;
+        const rpy = y * TILE - cameraY;
+
+        if (id === "rail") {
+          // Wooden Ties & Parallel Steel Rails
+          ctx.fillStyle = "#4a3b32";
+          ctx.fillRect(rpx + 2, rpy + 4, TILE - 4, 3);
+          ctx.fillRect(rpx + 2, rpy + 14, TILE - 4, 3);
+          ctx.fillRect(rpx + 2, rpy + 24, TILE - 4, 3);
+
+          ctx.fillStyle = "#b0c4de";
+          ctx.fillRect(rpx + 8, rpy, 3, TILE);
+          ctx.fillRect(rpx + 21, rpy, 3, TILE);
+        } else if (id === "locomotive" || id === "cargo_wagon") {
+          // Steel Rail Track Underbed
+          ctx.fillStyle = "#4a3b32";
+          ctx.fillRect(rpx + 2, rpy + 4, TILE - 4, 3);
+          ctx.fillRect(rpx + 2, rpy + 14, TILE - 4, 3);
+          ctx.fillRect(rpx + 2, rpy + 24, TILE - 4, 3);
+          ctx.fillStyle = "#b0c4de";
+          ctx.fillRect(rpx + 8, rpy, 3, TILE);
+          ctx.fillRect(rpx + 21, rpy, 3, TILE);
+
+          // Animated Diesel Locomotive Engine / Cargo Wagon Sprite
+          const isLoco = id === "locomotive";
+          ctx.fillStyle = isLoco ? "#d35400" : "#7f8c8d";
+          ctx.fillRect(rpx + 4, rpy + 2, TILE - 8, TILE - 4);
+
+          ctx.fillStyle = isLoco ? "#e67e22" : "#95a5a6";
+          ctx.fillRect(rpx + 6, rpy + 4, TILE - 12, TILE - 8);
+
+          // Engine Headlight
+          if (isLoco) {
+            ctx.fillStyle = "#f1c40f";
+            ctx.fillRect(rpx + 13, rpy + 2, 6, 3);
+            // Light cone
+            ctx.fillStyle = "rgba(241, 196, 15, 0.25)";
+            ctx.beginPath();
+            ctx.moveTo(rpx + 16, rpy + 2);
+            ctx.lineTo(rpx + 4, rpy - 24);
+            ctx.lineTo(rpx + 28, rpy - 24);
+            ctx.closePath();
+            ctx.fill();
+          }
+        }
+      }
+    }
+  }
+
+  // 13. Factorio 9x9 Rocket Silo Industrial Launchpad Renderer
+  for (let y = startRow; y < endRow; y++) {
+    for (let x = startCol; x < endCol; x++) {
+      const t = currentGrid[y][x];
+      if (t.kind === "placed_item" && t.placedItemId === "rocket_silo") {
+        const rpx = x * TILE + 16 - cameraX;
+        const rpy = y * TILE + 16 - cameraY;
+
+        // Circular Silo Shaft Base
+        ctx.fillStyle = "#1e272c";
+        ctx.beginPath();
+        ctx.arc(rpx, rpy, 42, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = "#2c3e50";
+        ctx.beginPath();
+        ctx.arc(rpx, rpy, 34, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = "#11161b";
+        ctx.beginPath();
+        ctx.arc(rpx, rpy, 24, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Rocket Nose Cone in Silo Shaft
+        ctx.fillStyle = "#ecf0f1";
+        ctx.beginPath();
+        ctx.arc(rpx, rpy, 14, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = "#e67e22";
+        ctx.beginPath();
+        ctx.arc(rpx, rpy, 6, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Gantry Structural Beams & Hazard Stripes
+        ctx.strokeStyle = "#f39c12";
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.moveTo(rpx - 44, rpy);
+        ctx.lineTo(rpx + 44, rpy);
+        ctx.moveTo(rpx, rpy - 44);
+        ctx.lineTo(rpx, rpy + 44);
+        ctx.stroke();
+      }
+    }
+  }
+
+  // 14. Factorio Circuit Network 2.0 Combinators & Signal Wire Connections
+  for (let y = startRow; y < endRow; y++) {
+    for (let x = startCol; x < endCol; x++) {
+      const t = currentGrid[y][x];
+      if (t.kind === "placed_item" && t.placedItemId) {
+        const id = t.placedItemId;
+        const cpx = x * TILE + 16 - cameraX;
+        const cpy = y * TILE + 16 - cameraY;
+
+        if (id.includes("combinator")) {
+          // Microchip PCB base
+          ctx.fillStyle = id.includes("decider") ? "#2c3e50" : id.includes("arithmetic") ? "#d35400" : "#27ae60";
+          ctx.fillRect(cpx - 12, cpy - 10, 24, 20);
+
+          ctx.strokeStyle = "#f1c40f";
+          ctx.lineWidth = 1.2;
+          ctx.strokeRect(cpx - 12, cpy - 10, 24, 20);
+
+          // LED Status lights
+          ctx.fillStyle = "#2ecc71";
+          ctx.fillRect(cpx - 9, cpy - 7, 4, 4);
+
+          ctx.fillStyle = "#e74c3c";
+          ctx.fillRect(cpx + 5, cpy - 7, 4, 4);
+
+          // Symbol
+          ctx.fillStyle = "#ffffff";
+          ctx.font = "bold 9px monospace";
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          const sym = id.includes("decider") ? "⚖" : id.includes("arithmetic") ? "➕" : "123";
+          ctx.fillText(sym, cpx, cpy + 2);
+        }
+      }
+    }
+  }
+
+  // 15. Factorio Nuclear Power Grid & Uranium Centrifuge Renderer
+  for (let y = startRow; y < endRow; y++) {
+    for (let x = startCol; x < endCol; x++) {
+      const t = currentGrid[y][x];
+      if (t.kind === "placed_item" && t.placedItemId) {
+        const id = t.placedItemId;
+        const npx = x * TILE + 16 - cameraX;
+        const npy = y * TILE + 16 - cameraY;
+
+        if (id === "nuclear_reactor") {
+          // Nuclear Reactor Core Base with Cherenkov Radiation Glow
+          ctx.fillStyle = "#1e272c";
+          ctx.beginPath();
+          ctx.arc(npx, npy, 28, 0, Math.PI * 2);
+          ctx.fill();
+
+          ctx.fillStyle = "#2ecc71";
+          ctx.beginPath();
+          ctx.arc(npx, npy, 20, 0, Math.PI * 2);
+          ctx.fill();
+
+          // Pulsing Cherenkov Cyan Radiation Glow
+          const radGlow = 14 + Math.sin(Date.now() / 120) * 3;
+          ctx.fillStyle = "rgba(0, 255, 200, 0.75)";
+          ctx.beginPath();
+          ctx.arc(npx, npy, radGlow, 0, Math.PI * 2);
+          ctx.fill();
+        } else if (id === "centrifuge") {
+          // Centrifuge Cylinder Drum Base
+          ctx.fillStyle = "#16a085";
+          ctx.fillRect(npx - 12, npy - 12, 24, 24);
+
+          // Spinning Centrifuge Rotor
+          const spinA = (Date.now() / 150) % (Math.PI * 2);
+          ctx.strokeStyle = "#00ff7f";
+          ctx.lineWidth = 2.5;
+          ctx.beginPath();
+          ctx.arc(npx, npy, 8, spinA, spinA + Math.PI * 1.5);
+          ctx.stroke();
+        } else if (id === "heat_exchanger" || id === "steam_turbine") {
+          // 500°C Thermal Heat Pipe & Plasma Blue Steam Turbine
+          ctx.fillStyle = id === "heat_exchanger" ? "#d35400" : "#34495e";
+          ctx.fillRect(npx - 14, npy - 10, 28, 20);
+
+          ctx.fillStyle = "#3498db";
+          ctx.beginPath();
+          ctx.arc(npx, npy, 6, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+    }
+  }
+
+  // 16. Factorio Space Age Space Platform Hub & Orbital Cargo Drop Pod Renderer
+  for (let y = startRow; y < endRow; y++) {
+    for (let x = startCol; x < endCol; x++) {
+      const t = currentGrid[y][x];
+      if (t.kind === "placed_item" && t.placedItemId) {
+        const id = t.placedItemId;
+        const spx = x * TILE + 16 - cameraX;
+        const spy = y * TILE + 16 - cameraY;
+
+        if (id === "space_platform_hub" || id === "cargo_landing_pad") {
+          // Target Concentric Target Circles
+          ctx.strokeStyle = "#e67e22";
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(spx, spy, 22, 0, Math.PI * 2);
+          ctx.arc(spx, spy, 12, 0, Math.PI * 2);
+          ctx.stroke();
+
+          // Descending Orbital Drop Pod Sprite Animation
+          const podProgress = (Date.now() / 2000) % 1;
+          const podY = spy - 120 * (1 - podProgress);
+          const podScale = 0.4 + podProgress * 0.6;
+
+          // Re-entry Flame Trail
+          ctx.fillStyle = "rgba(230, 126, 34, 0.65)";
+          ctx.beginPath();
+          ctx.arc(spx, podY - 8, 6 * podScale, 0, Math.PI * 2);
+          ctx.fill();
+
+          // Drop Pod Capsule
+          ctx.fillStyle = "#ecf0f1";
+          ctx.beginPath();
+          ctx.arc(spx, podY, 7 * podScale, 0, Math.PI * 2);
+          ctx.fill();
+        } else if (id === "spidertron") {
+          // Spidertron Heavy Central Chassis Hull
+          ctx.fillStyle = "#e67e22";
+          ctx.beginPath();
+          ctx.arc(spx, spy, 16, 0, Math.PI * 2);
+          ctx.fill();
+
+          ctx.fillStyle = "#d35400";
+          ctx.beginPath();
+          ctx.arc(spx, spy, 10, 0, Math.PI * 2);
+          ctx.fill();
+
+          // 8 Stepping Mechanical Legs Animation
+          const legTime = Date.now() / 250;
+          ctx.strokeStyle = "#7f8c8d";
+          ctx.lineWidth = 2.5;
+          ctx.beginPath();
+          for (let i = 0; i < 8; i++) {
+            const angle = (i * Math.PI) / 4 + Math.sin(legTime + i) * 0.15;
+            const legX = spx + Math.cos(angle) * 32;
+            const legY = spy + Math.sin(angle) * 32;
+            ctx.moveTo(spx, spy);
+            ctx.lineTo(legX, legY);
+
+            // Foot Joint
+            ctx.fillStyle = "#e74c3c";
+            ctx.fillRect(legX - 2, legY - 2, 4, 4);
+          }
+          ctx.stroke();
+        } else if (id === "foundry" || id === "electromagnetic_plant" || id === "biochamber" || id === "agricultural_tower") {
+          // Space Age Vulcanus / Fulgora / Gleba Planetary Industrial Facility
+          ctx.fillStyle = id === "foundry" ? "#c0392b" : id === "electromagnetic_plant" ? "#8e44ad" : id === "biochamber" ? "#27ae60" : "#16a085";
+          ctx.fillRect(spx - 14, spy - 14, 28, 28);
+
+          ctx.strokeStyle = "#f39c12";
+          ctx.lineWidth = 1.5;
+          ctx.strokeRect(spx - 14, spy - 14, 28, 28);
+        }
+      }
     }
   }
 }

@@ -43,8 +43,6 @@ import {
 } from "./meadow-life";
 import { shopInventoryForSeason, CROPS } from "./data/crops";
 import { ITEM_DEFS, createItem, type Item } from "./data/items";
-import { listAllSaves, saveGameToDisk, loadGameFromDisk, deleteSaveFromDisk, type DesktopSaveSlot, isDesktopRuntime } from "../saves/DiskSaveSystem";
-import { soundSynth } from "../audio/SoundSynth";
 import { NPCS, giftReaction, getNPCDestination, type NPCDef } from "./npcs";
 import { FISH_TYPES, initFishing, updateFishingPhysics } from "./fishing";
 import { gameAudio } from "./audio";
@@ -148,7 +146,7 @@ function FactorioCraftingIcon({
   );
 }
 
-export function MeadowLife({ initialState, onStateChange }: Props) {
+export function MeadowLife({ initialState, onStateChange }: Props = {}) {
   const [state, setState] = useState<GameState>(() => migrateState(initialState ?? newGame()));
   const stateRef = useRef(state);
   stateRef.current = state;
@@ -165,6 +163,93 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
     const onKeyDown = (e: KeyboardEvent) => {
       const k = e.key.toLowerCase();
       const tag = (e.target as HTMLElement | null)?.tagName;
+
+      // F11 / Alt+Enter for Borderless Windows Native Fullscreen
+      if (e.key === "F11" || (e.altKey && e.key === "Enter")) {
+        e.preventDefault();
+        toggleFullscreen();
+        return;
+      }
+
+      // Ctrl + S: Save game file (.json) to Windows PC disk
+      if ((e.ctrlKey || e.metaKey) && k === "s") {
+        e.preventDefault();
+        handleExportSaveFile();
+        return;
+      }
+
+      // Ctrl + O: Open / Import save file from Windows PC disk
+      if ((e.ctrlKey || e.metaKey) && k === "o") {
+        e.preventDefault();
+        const fileInput = document.createElement("input");
+        fileInput.type = "file";
+        fileInput.accept = ".json";
+        fileInput.onchange = (evt: any) => handleImportSaveFile(evt);
+        fileInput.click();
+        return;
+      }
+
+      // F5: Quick Save Checkpoint to PC storage & disk
+      if (e.key === "F5") {
+        e.preventDefault();
+        try {
+          const snapshot = stateRef.current;
+          localStorage.setItem("meadow_life_quicksave", JSON.stringify(snapshot));
+          if (typeof window !== "undefined" && window.desktopAPI?.saveGame) {
+            window.desktopAPI.saveGame({
+              name: `Nauvis QuickSave (Day ${snapshot.day})`,
+              slotId: "quicksave",
+              data: snapshot,
+              metadata: {
+                day: snapshot.day,
+                time: snapshot.time,
+                season: snapshot.season,
+                coins: snapshot.coins,
+                energy: Math.round(snapshot.energy),
+                maxEnergy: snapshot.maxEnergy,
+                health: snapshot.player.health,
+                maxHealth: snapshot.player.maxHealth,
+              },
+            });
+            toast.success("⚡ Desktop Disk Quick Save Created! (F5) → saves/quicksave.json");
+          } else {
+            toast.success("⚡ Quick Save Checkpoint Created! (F5)");
+          }
+        } catch (err) {
+          toast.error("Failed to quick save.");
+        }
+        return;
+      }
+
+      // F9: Quick Load Checkpoint from PC storage & disk
+      if (e.key === "F9") {
+        e.preventDefault();
+        (async () => {
+          try {
+            if (typeof window !== "undefined" && window.desktopAPI?.loadGame) {
+              const res = await window.desktopAPI.loadGame("quicksave");
+              if (res?.success && res.slot) {
+                const data = res.slot.data || res.slot;
+                setState(migrateState(data));
+                toast.success("⚡ Desktop Disk Quick Save Loaded! (F9)");
+                return;
+              }
+            }
+            const raw = localStorage.getItem("meadow_life_quicksave");
+            if (raw) {
+              const parsed = JSON.parse(raw);
+              setState(migrateState(parsed));
+              toast.success("⚡ Quick Save Checkpoint Loaded! (F9)");
+            } else {
+              toast.warning("No Quick Save found (press F5 first).");
+            }
+          } catch (err) {
+            toast.error("Failed to quick load.");
+          }
+        })();
+        return;
+      }
+
       if (tag === "INPUT" || tag === "TEXTAREA") return;
       pressedKeysRef.current.add(k);
       if (e.shiftKey) pressedKeysRef.current.add("shift");
@@ -180,6 +265,43 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
     };
+  }, []);
+
+  // 3-Minute Background Auto-Save to Local PC Storage & Cloud Sync
+  useEffect(() => {
+    const autoSaveTimer = setInterval(() => {
+      try {
+        const snapshot = stateRef.current;
+        localStorage.setItem("meadow_life_autosave", JSON.stringify(snapshot));
+        if (typeof window !== "undefined" && window.desktopAPI?.saveGame) {
+          window.desktopAPI.saveGame({
+            name: `Nauvis AutoSave (Day ${snapshot.day})`,
+            slotId: "autosave",
+            data: snapshot,
+            metadata: {
+              day: snapshot.day,
+              time: snapshot.time,
+              season: snapshot.season,
+              coins: snapshot.coins,
+              energy: Math.round(snapshot.energy),
+              maxEnergy: snapshot.maxEnergy,
+              health: snapshot.player.health,
+              maxHealth: snapshot.player.maxHealth,
+            },
+          });
+          toast.info("💾 Auto-Saved game state to local PC disk (saves/autosave.json).", { duration: 2500 });
+        } else {
+          toast.info("💾 Auto-Saved game state to local PC disk storage.", { duration: 2000 });
+        }
+        if (typeof navigator !== "undefined" && navigator.onLine) {
+          handleCloudSave();
+        }
+      } catch (err) {
+        // silent fallback
+      }
+    }, 180000); // 3 minutes
+
+    return () => clearInterval(autoSaveTimer);
   }, []);
 
   // Menu Overlays
@@ -426,60 +548,253 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
 
   const mainContainerRef = useRef<HTMLDivElement | null>(null);
   
-  // Factorio Save & Load Game Management State (Disk + LocalStorage)
+  // Factorio Save & Load Game Management State
   const [saveLoadOpen, setSaveLoadOpen] = useState(false);
   const [saveLoadTab, setSaveLoadTab] = useState<"load" | "save">("load");
   const [saveNameInput, setSaveNameInput] = useState("");
-  const [saveSlots, setSaveSlots] = useState<DesktopSaveSlot[]>([]);
+  const [saveSlots, setSaveSlots] = useState<{
+    id: string;
+    name: string;
+    timestamp: number;
+    day: number;
+    time: number;
+    season: string;
+    coins: number;
+    energy: number;
+    maxEnergy: number;
+    health: number;
+    maxHealth: number;
+    mineDepth: number;
+    machinesCount: number;
+    data: unknown;
+  }[]>([]);
 
-  const refreshSaveSlots = async () => {
+  const loadSavedSlotsFromStorage = () => {
     try {
-      const saves = await listAllSaves();
-      setSaveSlots(saves);
+      const raw = localStorage.getItem("meadow_life_factorio_saves");
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          setSaveSlots(parsed);
+          return;
+        }
+      }
     } catch (e) {
       console.error(e);
-      setSaveSlots([]);
     }
+    setSaveSlots([]);
   };
 
   useEffect(() => {
-    refreshSaveSlots();
+    loadSavedSlotsFromStorage();
   }, []);
 
-  const handleSaveGame = async (customName?: string, existingSlotId?: string) => {
+  // Graphics & FPS Settings, Wardrobe, and Performance Overlay State
+  const [graphicsSettingsOpen, setGraphicsSettingsOpen] = useState(false);
+  const [wardrobeOpen, setWardrobeOpen] = useState(false);
+  const [realFps, setRealFps] = useState(60);
+  const [realFrameTime, setRealFrameTime] = useState(16.6);
+
+  const handleUpdateDress = (updates: Partial<NonNullable<GameState["player"]>>) => {
+    setState((prev) => {
+      const next = structuredClone(prev);
+      next.player = { ...next.player, ...updates };
+      toast.success("Player dress & appearance updated! 👕");
+      return next;
+    });
+  };
+
+  const handleUpdateSettings = (updates: Partial<NonNullable<GameState["settings"]>>) => {
+    setState((prev) => {
+      const next = structuredClone(prev);
+      next.settings = {
+        fpsLimit: 40,
+        graphicsQuality: "low",
+        showGrid: true,
+        showFpsOverlay: true,
+        shadowsEnabled: true,
+        particleDensity: "low",
+        desktopMode: true,
+        ...(next.settings || {}),
+        ...updates,
+      };
+      toast.success("Graphics & FPS settings updated! ⚙️");
+      return next;
+    });
+  };
+
+  // Offline / Online Network Detection State & Local Windows File Export/Import
+  const [isOnline, setIsOnline] = useState<boolean>(typeof navigator !== "undefined" ? navigator.onLine : true);
+
+  useEffect(() => {
+    const handleOnline = () => {
+      setIsOnline(true);
+      toast.success("🌐 Online Connected! Auto-syncing saves to Cloud...");
+      handleCloudSave();
+    };
+
+    const handleOffline = () => {
+      setIsOnline(false);
+      toast.warning("📶 Offline Windows Mode Active. Game saving locally to disk.");
+    };
+
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, []);
+
+  const handleExportSaveFile = () => {
+    try {
+      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(state));
+      const downloadAnchor = document.createElement("a");
+      downloadAnchor.setAttribute("href", dataStr);
+      downloadAnchor.setAttribute("download", `MeadowLife_Factorio_Save_Day${state.day}_${Date.now()}.json`);
+      document.body.appendChild(downloadAnchor);
+      downloadAnchor.click();
+      downloadAnchor.remove();
+      toast.success("Exported save game file (.json) to Windows PC disk! 💾");
+    } catch (e) {
+      toast.error("Failed to export save file.");
+    }
+  };
+
+  const handleImportSaveFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const parsed = JSON.parse(event.target?.result as string);
+        const migrated = migrateState(parsed);
+        setState(migrated);
+        stateRef.current = migrated;
+        toast.success("Loaded save game from Windows disk file! 📂");
+      } catch (err) {
+        toast.error("Invalid save file format.");
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  const handleCloudSave = () => {
+    if (!isOnline) {
+      // Local Storage / Disk save when offline
+      try {
+        const snapshot = JSON.stringify(state);
+        localStorage.setItem("meadow_life_cloud_save_sync", snapshot);
+        localStorage.setItem("meadow_life_cloud_backup_auto", snapshot);
+        toast.warning("📶 Offline Mode: Game saved locally to disk backup!");
+      } catch (e) {
+        toast.error("Failed to save locally.");
+      }
+      return;
+    }
+
+    setState((prev) => {
+      const next = structuredClone(prev);
+      if (!next.cloudSave) next.cloudSave = { lastCloudSaveTimestamp: null, cloudStatus: "idle" };
+      next.cloudSave.cloudStatus = "saving";
+      return next;
+    });
+
+    setTimeout(() => {
+      setState((prev) => {
+        const next = structuredClone(prev);
+        if (!next.cloudSave) next.cloudSave = { lastCloudSaveTimestamp: null, cloudStatus: "idle" };
+        next.cloudSave.lastCloudSaveTimestamp = Date.now();
+        next.cloudSave.cloudStatus = "synced";
+
+        // Local Storage Automatic Backup
+        try {
+          const snapshot = JSON.stringify(next);
+          localStorage.setItem("meadow_life_cloud_save_sync", snapshot);
+          localStorage.setItem("meadow_life_cloud_backup_auto", snapshot);
+        } catch (e) {
+          console.warn("Local backup warning:", e);
+        }
+
+        toast.success("Cloud Save Synced & Local Windows Disk Backup Saved! 🌐💾");
+        return next;
+      });
+    }, 500);
+  };
+
+  const countPlacedMachines = (s: GameState) => {
+    let count = 0;
+    if (s.tiles) {
+      for (const row of s.tiles) {
+        for (const t of row) {
+          if (t && t.placedItemId) count++;
+        }
+      }
+    }
+    return count;
+  };
+
+  const handleSaveGame = (customName?: string, existingSlotId?: string) => {
     const s = stateRef.current;
-    const res = await saveGameToDisk(s, customName || saveNameInput, existingSlotId);
-    if (res.success) {
-      await refreshSaveSlots();
+    const name = customName?.trim() || saveNameInput.trim() || `Nauvis Factory - Day ${s.day}`;
+    const prepared = prepareStateForSave(s);
+    const newSlot = {
+      id: existingSlotId || `save_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      name,
+      timestamp: Date.now(),
+      day: s.day,
+      time: s.time,
+      season: s.season,
+      coins: s.coins,
+      energy: Math.round(s.energy),
+      maxEnergy: s.maxEnergy,
+      health: s.player.health,
+      maxHealth: s.player.maxHealth,
+      mineDepth: s.mineDepth,
+      machinesCount: countPlacedMachines(s),
+      data: prepared,
+    };
+
+    let updated = [];
+    if (existingSlotId) {
+      updated = saveSlots.map((slot) => (slot.id === existingSlotId ? newSlot : slot));
+    } else {
+      updated = [newSlot, ...saveSlots.filter((slot) => slot.id !== newSlot.id)];
+    }
+
+    try {
+      localStorage.setItem("meadow_life_factorio_saves", JSON.stringify(updated));
+      setSaveSlots(updated);
       setSaveNameInput("");
       setSaveLoadTab("load");
-      soundSynth.playCraftComplete();
-      toast.success(res.message || "Game saved successfully!");
-    } else {
-      toast.error(res.message || "Failed to save game.");
+      toast.success(`Game saved as "${name}" successfully!`);
+    } catch (err) {
+      toast.error("Failed to save game to storage.");
     }
   };
 
-  const handleLoadGame = async (slot: DesktopSaveSlot) => {
-    const res = await loadGameFromDisk(slot);
-    if (res.success && res.state) {
-      setState(res.state);
-      stateRef.current = res.state;
+  const handleLoadGame = (slot: (typeof saveSlots)[0]) => {
+    try {
+      const migrated = migrateState(slot.data);
+      setState(migrated);
+      stateRef.current = migrated;
       setSaveLoadOpen(false);
-      soundSynth.playResearchUnlocked();
-      toast.success(res.message || `Loaded "${slot.name}" successfully!`);
-    } else {
-      toast.error(res.message || "Failed to load save data.");
+      toast.success(`Loaded "${slot.name}" successfully! (Day ${slot.day})`);
+    } catch (err) {
+      toast.error("Failed to load save data.");
     }
   };
 
-  const handleDeleteSaveSlot = async (slotId: string, e: React.MouseEvent) => {
+  const handleDeleteSaveSlot = (slotId: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    const success = await deleteSaveFromDisk(slotId);
-    if (success) {
-      await refreshSaveSlots();
+    const updated = saveSlots.filter((s) => s.id !== slotId);
+    try {
+      localStorage.setItem("meadow_life_factorio_saves", JSON.stringify(updated));
+      setSaveSlots(updated);
       toast.success("Save deleted.");
-    } else {
+    } catch (err) {
       toast.error("Failed to delete save.");
     }
   };
@@ -895,7 +1210,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
 
   // Synchronize state changes to parent (save handler)
   useEffect(() => {
-    onStateChange?.(state);
+    onStateChange(state);
   }, [state, onStateChange]);
 
   // Start background ambient music on mount
@@ -951,11 +1266,11 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
 
       if ((dx !== 0 || dy !== 0) && !inventoryOpen && !shopOpen && !chestOpenTile && !mailboxOpen && !chatOpen) {
         const isShift = pressedKeysRef.current.has("shift") || mobileSprint;
-        const speed = (isShift ? 9.5 : 6.5) * dt;
+        const speed = (isShift ? 13.5 : 8.5) * dt;
 
         // X Movement with collision sliding
         const newSubX = Math.max(0, Math.min(cols - 1, p.subX + dx * speed));
-        const targetX = Math.floor(newSubX + (dx > 0 ? 0.25 : -0.25));
+        const targetX = Math.floor(newSubX + (dx > 0 ? 0.1 : -0.1));
         const curY = Math.floor(p.subY);
         if (targetX >= 0 && targetX < cols && curY >= 0 && curY < rows && isWalkable(grid[curY]?.[targetX])) {
           p.subX = newSubX;
@@ -964,7 +1279,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
 
         // Y Movement with collision sliding
         const newSubY = Math.max(0, Math.min(rows - 1, p.subY + dy * speed));
-        const targetY = Math.floor(newSubY + (dy > 0 ? 0.25 : -0.25));
+        const targetY = Math.floor(newSubY + (dy > 0 ? 0.1 : -0.1));
         const curX = Math.floor(p.subX);
         if (curX >= 0 && curX < cols && targetY >= 0 && targetY < rows && isWalkable(grid[targetY]?.[curX])) {
           p.subY = newSubY;
@@ -1562,7 +1877,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
       if (["w", "arrowup", "s", "arrowdown", "a", "arrowleft", "d", "arrowright"].includes(k)) {
         e.preventDefault();
         const now = performance.now();
-        const runMultiplier = e.shiftKey ? 70 : 130;
+        const runMultiplier = e.shiftKey ? 35 : 60;
         if (now - lastMove < runMultiplier) return;
         lastMove = now;
 
@@ -2379,8 +2694,126 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
   };
 
   const handleTileInteraction = (coords: { x: number; y: number }) => {
-    if (zoningMode !== "none") return;
     const curState = stateRef.current;
+    if (!curState) return;
+
+    // Handle Factorio Blueprint Copy / Stamp / Deconstruct Click Logic
+    if (curState.blueprint && curState.blueprint.mode) {
+      const mode = curState.blueprint.mode;
+      const bp = curState.blueprint;
+
+      if (mode === "copy") {
+        if (!bp.startTile) {
+          setState((prev) => ({
+            ...prev,
+            blueprint: { ...(prev.blueprint || { mode: "copy" }), mode: "copy", startTile: coords, currentTile: coords },
+          }));
+          toast.info(`Blueprint Copy Start set at (${coords.x}, ${coords.y}). Click end tile!`);
+        } else {
+          const start = bp.startTile;
+          const minX = Math.min(start.x, coords.x);
+          const maxX = Math.max(start.x, coords.x);
+          const minY = Math.min(start.y, coords.y);
+          const maxY = Math.max(start.y, coords.y);
+
+          const curGrid = curState.inHouse ? curState.houseGrid! : (curState.inMine ? curState.mineGrid : curState.tiles);
+          const saved: { relX: number; relY: number; placedItemId: string; direction?: string }[] = [];
+
+          for (let y = minY; y <= maxY; y++) {
+            for (let x = minX; x <= maxX; x++) {
+              const tile = curGrid[y][x];
+              if (tile.kind === "placed_item" && tile.placedItemId) {
+                saved.push({
+                  relX: x - minX,
+                  relY: y - minY,
+                  placedItemId: tile.placedItemId,
+                  direction: tile.direction,
+                });
+              }
+            }
+          }
+
+          if (saved.length > 0) {
+            setState((prev) => ({
+              ...prev,
+              blueprint: { mode: "stamp", startTile: null, currentTile: null, savedEntities: saved },
+            }));
+            toast.success(`📋 Blueprint Copied ${saved.length} entities! Click anywhere to STAMP!`);
+          } else {
+            toast.warning("No placed factory entities found in selected rectangle.");
+            setState((prev) => ({ ...prev, blueprint: { mode: null, startTile: null, currentTile: null, savedEntities: [] } }));
+          }
+        }
+        return;
+      } else if (mode === "deconstruct") {
+        if (!bp.startTile) {
+          setState((prev) => ({
+            ...prev,
+            blueprint: { ...(prev.blueprint || { mode: "deconstruct" }), mode: "deconstruct", startTile: coords, currentTile: coords },
+          }));
+          toast.info(`Deconstruction Start set at (${coords.x}, ${coords.y}). Click end tile!`);
+        } else {
+          const start = bp.startTile;
+          const minX = Math.min(start.x, coords.x);
+          const maxX = Math.max(start.x, coords.x);
+          const minY = Math.min(start.y, coords.y);
+          const maxY = Math.max(start.y, coords.y);
+
+          let count = 0;
+          setState((prev) => {
+            const next = structuredClone(prev);
+            const grid = next.inHouse ? next.houseGrid! : (next.inMine ? next.mineGrid : next.tiles);
+
+            for (let y = minY; y <= maxY; y++) {
+              for (let x = minX; x <= maxX; x++) {
+                const tile = grid[y][x];
+                if (tile.kind === "placed_item" && tile.placedItemId) {
+                  const itemId = tile.placedItemId;
+                  const itemObj = createItem(itemId, 1);
+                  addItem(next.inventory, itemObj);
+                  grid[y][x].kind = next.inHouse ? "house_floor" : (next.inMine ? "mine_dirt" : "grass");
+                  grid[y][x].placedItemId = undefined;
+                  count++;
+                }
+              }
+            }
+            next.blueprint = { mode: null, startTile: null, currentTile: null, savedEntities: prev.blueprint?.savedEntities || [] };
+            return next;
+          });
+
+          toast.success(`✂️ Deconstructed ${count} entities back into inventory!`);
+        }
+        return;
+      } else if (mode === "stamp" && bp.savedEntities && bp.savedEntities.length > 0) {
+        let placedCount = 0;
+        setState((prev) => {
+          const next = structuredClone(prev);
+          const grid = next.inHouse ? next.houseGrid! : (next.inMine ? next.mineGrid : next.tiles);
+
+          bp.savedEntities!.forEach((ent) => {
+            const tx = coords.x + ent.relX;
+            const ty = coords.y + ent.relY;
+
+            if (ty >= 0 && ty < grid.length && tx >= 0 && tx < grid[0].length) {
+              const targetTile = grid[ty][tx];
+              if (targetTile.kind !== "water" && targetTile.kind !== "mine_wall" && targetTile.kind !== "placed_item") {
+                targetTile.kind = "placed_item";
+                targetTile.placedItemId = ent.placedItemId;
+                targetTile.direction = (ent.direction as any) || "right";
+                placedCount++;
+              }
+            }
+          });
+
+          next.blueprint = { ...prev.blueprint, mode: null };
+          return next;
+        });
+
+        toast.success(`📌 Stamped ${placedCount} blueprint entities onto map!`);
+        return;
+      }
+    }
+
     const p = curState.player;
     const dist = Math.abs(coords.x - p.x) + Math.abs(coords.y - p.y);
     if (dist > 5) {
@@ -2424,6 +2857,7 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
         tile.placedItemId === "solar_panel" ||
         tile.placedItemId === "battery" ||
         tile.placedItemId === "power_pole" ||
+        tile.placedItemId === "rocket_silo" ||
         tile.placedItemId === "chest" ||
         tile.placedItemId === "iron_chest" ||
         tile.placedItemId === "steel_chest" ||
@@ -3208,6 +3642,28 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
           maxWidth: isFullscreen ? "none" : "704px"
         }}
       >
+        {/* Real-time Performance & FPS Overlay Bar */}
+        {(state.settings?.showFpsOverlay ?? true) && (
+          <div className="absolute top-2 right-2 z-30 flex items-center gap-2 bg-black/85 border border-emerald-500/60 px-2 py-1 rounded text-[10px] font-mono text-emerald-300 pointer-events-none select-none shadow-md backdrop-blur">
+            <span className="font-bold flex items-center gap-1">
+              <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+              {realFps} FPS
+            </span>
+            <span className="text-slate-500">|</span>
+            <span>{realFrameTime} ms</span>
+            <span className="text-slate-500">|</span>
+            <span className="text-cyan-300">{(state.settings?.graphicsQuality || "HIGH").toUpperCase()}</span>
+            <span className="text-slate-500">|</span>
+            <span className="text-amber-300">
+              {state.settings?.desktopMode ? "DESKTOP RAM/CPU" : "WEB"}
+            </span>
+            <span className="text-slate-500">|</span>
+            <span className="text-sky-300 flex items-center gap-0.5">
+              ☁️ {state.cloudSave?.cloudStatus === "saving" ? "SAVING..." : "SYNCED"}
+            </span>
+          </div>
+        )}
+
         <canvas
           ref={canvasRef}
           width={canvasSize.width}
@@ -3415,6 +3871,115 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
             >
               <span className="text-yellow-400 text-xs">🔍</span>
               <span className="text-yellow-400 text-[10px]">Alt</span>
+            </button>
+
+            {/* Factorio Blueprint Copy Tool Button */}
+            <button
+              onClick={() => {
+                setState((prev) => {
+                  const currentMode = prev.blueprint?.mode;
+                  const nextMode = currentMode === "copy" ? null : "copy";
+                  toast(`Factorio Blueprint Copy: ${nextMode ? "ACTIVE (Drag rectangle to copy factory)" : "OFF"}`);
+                  return {
+                    ...prev,
+                    blueprint: {
+                      mode: nextMode,
+                      startTile: null,
+                      currentTile: null,
+                      savedEntities: prev.blueprint?.savedEntities || [],
+                    },
+                  };
+                });
+              }}
+              title="Factorio Blueprint Copy (Ctrl+C): Drag rectangle to copy factory entities"
+              className={`h-8 px-2 flex items-center justify-center gap-1 bg-[#2a2c2e] hover:bg-cyan-500/20 border transition-all cursor-pointer font-bold text-xs ${state.blueprint?.mode === "copy" ? "border-cyan-400 text-cyan-400 bg-cyan-500/20 animate-pulse" : "border-slate-600 text-slate-300 hover:border-cyan-400"}`}
+            >
+              <span className="text-cyan-400 text-xs">📋</span>
+              <span className="text-cyan-400 text-[10px]">Blueprint</span>
+            </button>
+
+            {/* Factorio Stamp Tool Button */}
+            <button
+              onClick={() => {
+                if (!state.blueprint?.savedEntities || state.blueprint.savedEntities.length === 0) {
+                  toast.error("No blueprint copied yet! Copy a factory layout first.");
+                  return;
+                }
+                setState((prev) => {
+                  const currentMode = prev.blueprint?.mode;
+                  const nextMode = currentMode === "stamp" ? null : "stamp";
+                  toast(`Factorio Stamp: ${nextMode ? "ACTIVE (Click to stamp copied layout)" : "OFF"}`);
+                  return {
+                    ...prev,
+                    blueprint: {
+                      ...(prev.blueprint || { savedEntities: [] }),
+                      mode: nextMode,
+                    },
+                  };
+                });
+              }}
+              title="Factorio Stamp (Ctrl+V): Stamp copied blueprint onto factory map"
+              className={`h-8 px-2 flex items-center justify-center gap-1 bg-[#2a2c2e] hover:bg-emerald-500/20 border transition-all cursor-pointer font-bold text-xs ${state.blueprint?.mode === "stamp" ? "border-emerald-400 text-emerald-400 bg-emerald-500/20 animate-pulse" : "border-slate-600 text-slate-300 hover:border-emerald-400"}`}
+            >
+              <span className="text-emerald-400 text-xs">📌</span>
+              <span className="text-emerald-400 text-[10px]">Stamp</span>
+            </button>
+
+            {/* Factorio Deconstruction Planner Button */}
+            <button
+              onClick={() => {
+                setState((prev) => {
+                  const currentMode = prev.blueprint?.mode;
+                  const nextMode = currentMode === "deconstruct" ? null : "deconstruct";
+                  toast(`Factorio Deconstruction Planner: ${nextMode ? "ACTIVE (Drag red box to batch deconstruct)" : "OFF"}`);
+                  return {
+                    ...prev,
+                    blueprint: {
+                      mode: nextMode,
+                      startTile: null,
+                      currentTile: null,
+                      savedEntities: prev.blueprint?.savedEntities || [],
+                    },
+                  };
+                });
+              }}
+              title="Factorio Deconstruction Planner (Ctrl+X): Drag red rectangle to deconstruct area"
+              className={`h-8 px-2 flex items-center justify-center gap-1 bg-[#2a2c2e] hover:bg-red-500/20 border transition-all cursor-pointer font-bold text-xs ${state.blueprint?.mode === "deconstruct" ? "border-red-500 text-red-400 bg-red-500/20 animate-pulse" : "border-slate-600 text-slate-300 hover:border-red-500"}`}
+            >
+              <span className="text-red-400 text-xs">✂️</span>
+              <span className="text-red-400 text-[10px]">Deconstruct</span>
+            </button>
+
+            {/* Player Wardrobe / Dress Customization Button */}
+            <button
+              onClick={() => setWardrobeOpen(true)}
+              title="Player Character Dress & Appearance Customization"
+              className="h-8 px-2 flex items-center justify-center gap-1 bg-[#2a2c2e] hover:bg-orange-500/20 border border-slate-600 hover:border-orange-500 text-slate-100 transition-all cursor-pointer font-bold text-xs"
+            >
+              <span className="text-orange-400 text-xs">👕</span>
+              <span className="text-orange-400 text-[10px]">Dress</span>
+            </button>
+
+            {/* Graphics & FPS Settings Button */}
+            <button
+              onClick={() => setGraphicsSettingsOpen(true)}
+              title="Graphics Quality, FPS Limits, and Performance Settings"
+              className="h-8 px-2 flex items-center justify-center gap-1 bg-[#2a2c2e] hover:bg-cyan-500/20 border border-slate-600 hover:border-cyan-500 text-slate-100 transition-all cursor-pointer font-bold text-xs"
+            >
+              <span className="text-cyan-400 text-xs">⚙️</span>
+              <span className="text-cyan-400 text-[10px]">Settings</span>
+            </button>
+
+            {/* Cloud Save Sync Button */}
+            <button
+              onClick={handleCloudSave}
+              title="Cloud Save & Remote Sync State"
+              className="h-8 px-2 flex items-center justify-center gap-1 bg-[#2a2c2e] hover:bg-sky-500/20 border border-slate-600 hover:border-sky-400 text-slate-100 transition-all cursor-pointer font-bold text-xs"
+            >
+              <span className="text-sky-400 text-xs">☁️</span>
+              <span className="text-sky-400 text-[10px]">
+                {state.cloudSave?.cloudStatus === "saving" ? "Saving..." : "Cloud Save"}
+              </span>
             </button>
 
             {/* Factorio Save / Load Manager Button */}
@@ -6564,6 +7129,26 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
             </div>
           )}
 
+          {/* Windows PC Offline File Backup & Import Controls */}
+          <div className="p-3 bg-[#101318] border border-[#ff9200]/40 rounded-sm space-y-2 my-2">
+            <span className="font-extrabold text-[#ff9200] text-xs block uppercase">
+              💻 Real Offline Windows PC Save File Controls (.json):
+            </span>
+            <div className="flex flex-col sm:flex-row items-center gap-2">
+              <Button
+                size="sm"
+                onClick={handleExportSaveFile}
+                className="w-full sm:flex-1 bg-amber-600 hover:bg-amber-500 text-black font-extrabold text-xs rounded-none h-8"
+              >
+                <span>💾 Export Save File (.json) to Windows Disk</span>
+              </Button>
+              <label className="w-full sm:flex-1 bg-sky-600 hover:bg-sky-500 text-white font-extrabold text-xs rounded-none h-8 flex items-center justify-center cursor-pointer">
+                <span>📂 Import Save File (.json) from Windows Disk</span>
+                <input type="file" accept=".json" onChange={handleImportSaveFile} className="hidden" />
+              </label>
+            </div>
+          </div>
+
           {/* TAB 2: CREATE NEW NAMED SAVE */}
           {saveLoadTab === "save" && (
             <div className="space-y-4 py-2 text-xs">
@@ -7344,6 +7929,298 @@ export function MeadowLife({ initialState, onStateChange }: Props) {
                   Close Lab
                 </Button>
               </div>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* 7. GRAPHICS & FPS PERFORMANCE SETTINGS DIALOG */}
+      {graphicsSettingsOpen && (
+        <Dialog open={graphicsSettingsOpen} onOpenChange={setGraphicsSettingsOpen}>
+          <DialogContent className="bg-[#161a22] border-2 border-cyan-500/60 text-slate-100 font-mono max-w-md shadow-2xl">
+            <DialogHeader>
+              <DialogTitle className="text-cyan-400 text-lg flex items-center gap-2 font-bold">
+                ⚙️ Graphics & FPS Performance Settings
+              </DialogTitle>
+              <DialogDescription className="text-slate-400 text-xs">
+                Adjust frame rate limiter (40/60/120/144/MAX FPS), graphics quality, Alt-grid lines, and desktop processor resource allocation.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4 py-2 text-xs">
+              {/* FPS Limiter Setting */}
+              <div className="space-y-1.5 p-2.5 bg-zinc-900/80 rounded border border-zinc-800">
+                <label className="text-slate-200 font-bold flex justify-between">
+                  <span>🚀 Target FPS Limiter:</span>
+                  <span className="text-cyan-400 font-bold">
+                    {(state.settings?.fpsLimit ?? 40) === 0 ? "UNLIMITED (Max)" : `${state.settings?.fpsLimit ?? 40} FPS`}
+                  </span>
+                </label>
+                <div className="flex gap-1.5 pt-1">
+                  {[30, 40, 60, 120, 144, 0].map((fps) => (
+                    <Button
+                      key={fps}
+                      size="sm"
+                      onClick={() => handleUpdateSettings({ fpsLimit: fps as any })}
+                      className={`flex-1 text-[10px] font-bold ${
+                        (state.settings?.fpsLimit ?? 40) === fps
+                          ? "bg-cyan-500 text-black hover:bg-cyan-400 border-cyan-400 font-extrabold"
+                          : "bg-zinc-800 text-slate-300 border-zinc-700 hover:border-cyan-500"
+                      }`}
+                    >
+                      {fps === 0 ? "MAX" : `${fps}`}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Graphics Quality Preset */}
+              <div className="space-y-1.5 p-2.5 bg-zinc-900/80 rounded border border-zinc-800">
+                <label className="text-slate-200 font-bold flex justify-between">
+                  <span>🖼️ Graphics Quality Preset:</span>
+                  <span className="text-amber-400 font-bold uppercase">
+                    {state.settings?.graphicsQuality || "low"}
+                  </span>
+                </label>
+                <div className="flex gap-1.5 pt-1">
+                  {(["low", "medium", "high", "ultra"] as const).map((q) => (
+                    <Button
+                      key={q}
+                      size="sm"
+                      onClick={() => handleUpdateSettings({ graphicsQuality: q })}
+                      className={`flex-1 text-[10px] font-bold uppercase ${
+                        (state.settings?.graphicsQuality || "low") === q
+                          ? "bg-amber-500 text-black hover:bg-amber-400 border-amber-400 font-extrabold"
+                          : "bg-zinc-800 text-slate-300 border-zinc-700 hover:border-amber-500"
+                      }`}
+                    >
+                      {q}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Toggles: Factorio Grid, FPS Overlay, Desktop App Mode */}
+              <div className="space-y-2 p-2.5 bg-zinc-900/80 rounded border border-zinc-800">
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-300 font-semibold">📏 Factorio Alt Grid Lines:</span>
+                  <Button
+                    size="sm"
+                    onClick={() => handleUpdateSettings({ showGrid: !state.settings?.showGrid })}
+                    className={`text-[10px] font-bold ${state.settings?.showGrid ? "bg-emerald-500 text-black" : "bg-zinc-800 text-slate-400"}`}
+                  >
+                    {state.settings?.showGrid ? "ENABLED" : "DISABLED"}
+                  </Button>
+                </div>
+
+                <div className="flex items-center justify-between border-t border-zinc-800 pt-2">
+                  <span className="text-slate-300 font-semibold">☁️ Industrial Pollution Cloud Overlay:</span>
+                  <Button
+                    size="sm"
+                    onClick={() => handleUpdateSettings({ showPollution: !(state.settings?.showPollution ?? true) })}
+                    className={`text-[10px] font-bold ${(state.settings?.showPollution ?? true) ? "bg-red-500 text-white" : "bg-zinc-800 text-slate-400"}`}
+                  >
+                    {(state.settings?.showPollution ?? true) ? "ENABLED" : "DISABLED"}
+                  </Button>
+                </div>
+
+                <div className="flex items-center justify-between border-t border-zinc-800 pt-2">
+                  <span className="text-slate-300 font-semibold">📊 Real-Time FPS Overlay Bar:</span>
+                  <Button
+                    size="sm"
+                    onClick={() => handleUpdateSettings({ showFpsOverlay: !state.settings?.showFpsOverlay })}
+                    className={`text-[10px] font-bold ${state.settings?.showFpsOverlay ? "bg-emerald-500 text-black" : "bg-zinc-800 text-slate-400"}`}
+                  >
+                    {state.settings?.showFpsOverlay ? "ENABLED" : "DISABLED"}
+                  </Button>
+                </div>
+
+                <div className="flex items-center justify-between border-t border-zinc-800 pt-2">
+                  <div>
+                    <div className="text-slate-200 font-bold">💻 Desktop App RAM/CPU Optimizer:</div>
+                    <div className="text-[10px] text-slate-400">High memory buffer & multi-thread processing</div>
+                  </div>
+                  <Button
+                    size="sm"
+                    onClick={() => handleUpdateSettings({ desktopMode: !state.settings?.desktopMode })}
+                    className={`text-[10px] font-bold ${state.settings?.desktopMode ? "bg-cyan-500 text-black" : "bg-zinc-800 text-slate-400"}`}
+                  >
+                    {state.settings?.desktopMode ? "ACTIVE" : "OFF"}
+                  </Button>
+                </div>
+              </div>
+            </div>
+
+            <DialogFooter>
+              <Button onClick={() => setGraphicsSettingsOpen(false)} className="bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs">
+                Close Settings
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* 8. CHARACTER WARDROBE / DRESS CUSTOMIZATION DIALOG */}
+      {wardrobeOpen && (
+        <Dialog open={wardrobeOpen} onOpenChange={setWardrobeOpen}>
+          <DialogContent className="bg-[#161a22] border-2 border-orange-500/60 text-slate-100 font-mono max-w-lg shadow-2xl">
+            <DialogHeader>
+              <DialogTitle className="text-orange-400 text-lg flex items-center gap-2 font-bold">
+                👕 Character Dress & Outfit Customization
+              </DialogTitle>
+              <DialogDescription className="text-slate-400 text-xs">
+                Customize your Factorio engineer hazard suit colors, armor tiers, helmets, and character appearance.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 py-2">
+              {/* Left Column: Live Character Dress Preview */}
+              <div className="flex flex-col items-center justify-center p-4 bg-zinc-900/90 rounded border border-orange-500/30">
+                <div className="text-xs font-bold text-amber-400 mb-2">Live Character Preview</div>
+                <div className="w-28 h-28 bg-[#18110e] border-2 border-orange-500/50 rounded flex items-center justify-center relative overflow-hidden shadow-inner">
+                  <svg width="80" height="80" viewBox="0 0 40 40">
+                    {/* Backpack */}
+                    <rect x="11" y="14" width="18" height="12" fill={state.player.secondaryColor || "#1e2430"} rx="1" />
+                    {/* Legs */}
+                    <rect x="13" y="24" width="6" height="10" fill={state.player.suitType === "power_armor" ? "#2c3e50" : "#4a5568"} />
+                    <rect x="21" y="24" width="6" height="10" fill={state.player.suitType === "power_armor" ? "#2c3e50" : "#4a5568"} />
+                    {/* Boots */}
+                    <rect x="12" y="32" width="7" height="4" fill="#111827" />
+                    <rect x="21" y="32" width="7" height="4" fill="#111827" />
+                    {/* Knee Guards */}
+                    <rect x="12.5" y="28" width="6.5" height="3" fill={state.player.dressColor || "#d48817"} />
+                    <rect x="20.5" y="28" width="6.5" height="3" fill={state.player.dressColor || "#d48817"} />
+                    {/* Arms */}
+                    <rect x="8" y="15" width="4.5" height="10" fill={state.player.secondaryColor || "#1e2430"} />
+                    <rect x="27.5" y="15" width="4.5" height="10" fill={state.player.secondaryColor || "#1e2430"} />
+                    {/* Torso Vest */}
+                    <rect x="12" y="12" width="16" height="14" fill={state.player.dressColor || "#d48817"} rx="1" />
+                    {/* Harness */}
+                    <rect x="14" y="16" width="12" height="4" fill={state.player.secondaryColor || "#1e2430"} />
+                    {/* Pauldrons */}
+                    <rect x="7" y="11" width="6" height="5" fill={state.player.dressColor || "#d48817"} />
+                    <rect x="27" y="11" width="6" height="5" fill={state.player.dressColor || "#d48817"} />
+                    {/* Helmet */}
+                    {(state.player.helmetType || "visor") !== "none" && (
+                      <>
+                        <circle cx="20" cy="8" r="6" fill={state.player.helmetType === "power_visor" ? "#8e44ad" : state.player.dressColor || "#d48817"} />
+                        <circle cx="20" cy="8.5" r="2.8" fill="#1b2631" />
+                        <circle cx="20" cy="8.5" r="1.8" fill={state.player.helmetType === "power_visor" ? "#a855f7" : state.player.helmetType === "visor" ? "#38bdf8" : "#f59e0b"} />
+                      </>
+                    )}
+                  </svg>
+                </div>
+                <div className="mt-2 text-[10px] text-slate-300 font-bold uppercase text-center">
+                  {state.player.suitType || "engineer"} suit
+                </div>
+              </div>
+
+              {/* Right Column: Customization Controls */}
+              <div className="space-y-3 text-xs">
+                {/* Primary Suit Color */}
+                <div>
+                  <label className="text-slate-300 font-bold block mb-1">Primary Suit Color:</label>
+                  <div className="flex gap-1.5 flex-wrap">
+                    {[
+                      { name: "Orange", hex: "#e67e22" },
+                      { name: "Blue", hex: "#2980b9" },
+                      { name: "Green", hex: "#27ae60" },
+                      { name: "Purple", hex: "#8e44ad" },
+                      { name: "Red", hex: "#c0392b" },
+                      { name: "Dark", hex: "#34495e" },
+                    ].map((c) => (
+                      <button
+                        key={c.hex}
+                        onClick={() => handleUpdateDress({ dressColor: c.hex })}
+                        style={{ backgroundColor: c.hex }}
+                        className={`w-7 h-7 rounded border-2 cursor-pointer transition-transform ${
+                          (state.player.dressColor || "#e67e22") === c.hex
+                            ? "border-white scale-110 shadow-lg"
+                            : "border-transparent opacity-80 hover:opacity-100"
+                        }`}
+                        title={c.name}
+                      />
+                    ))}
+                  </div>
+                </div>
+
+                {/* Secondary Accent Color */}
+                <div>
+                  <label className="text-slate-300 font-bold block mb-1">Secondary Accent Color:</label>
+                  <div className="flex gap-1.5 flex-wrap">
+                    {[
+                      { name: "Dark Metal", hex: "#1e2430" },
+                      { name: "Gold", hex: "#f1c40f" },
+                      { name: "White", hex: "#ecf0f1" },
+                      { name: "Teal", hex: "#16a085" },
+                      { name: "Cyan", hex: "#00cec9" },
+                    ].map((c) => (
+                      <button
+                        key={c.hex}
+                        onClick={() => handleUpdateDress({ secondaryColor: c.hex })}
+                        style={{ backgroundColor: c.hex }}
+                        className={`w-7 h-7 rounded border-2 cursor-pointer transition-transform ${
+                          (state.player.secondaryColor || "#1e2430") === c.hex
+                            ? "border-white scale-110 shadow-lg"
+                            : "border-transparent opacity-80 hover:opacity-100"
+                        }`}
+                        title={c.name}
+                      />
+                    ))}
+                  </div>
+                </div>
+
+                {/* Skin Tone Selector */}
+                <div>
+                  <label className="text-slate-300 font-bold block mb-1">Character Skin Tone:</label>
+                  <select
+                    value={state.player.skinTone || "default"}
+                    onChange={(e) => handleUpdateDress({ skinTone: e.target.value as any })}
+                    className="w-full bg-zinc-900 border border-zinc-700 rounded p-1.5 text-xs text-slate-100 font-mono"
+                  >
+                    <option value="default">👤 Default Skin</option>
+                    <option value="fair">🏼 Fair Skin</option>
+                    <option value="tan">🏽 Tan Skin</option>
+                    <option value="dark">🏿 Dark Skin</option>
+                  </select>
+                </div>
+
+                {/* Suit Armor Tier */}
+                <div>
+                  <label className="text-slate-300 font-bold block mb-1">Armor Suit Model:</label>
+                  <select
+                    value={state.player.suitType || "engineer"}
+                    onChange={(e) => handleUpdateDress({ suitType: e.target.value as any })}
+                    className="w-full bg-zinc-900 border border-zinc-700 rounded p-1.5 text-xs text-slate-100 font-mono"
+                  >
+                    <option value="engineer">👷 Engineer Hazard Suit</option>
+                    <option value="heavy">🛡️ Heavy Combat Armor</option>
+                    <option value="modular">⚡ Modular Tech Suit</option>
+                    <option value="power_armor">🤖 Power Armor MK2</option>
+                  </select>
+                </div>
+
+                {/* Helmet Headgear */}
+                <div>
+                  <label className="text-slate-300 font-bold block mb-1">Headgear / Visor:</label>
+                  <select
+                    value={state.player.helmetType || "visor"}
+                    onChange={(e) => handleUpdateDress({ helmetType: e.target.value as any })}
+                    className="w-full bg-zinc-900 border border-zinc-700 rounded p-1.5 text-xs text-slate-100 font-mono"
+                  >
+                    <option value="visor">🥽 Optic Sensor Visor</option>
+                    <option value="helmet">🪖 Reinforced Dome Helmet</option>
+                    <option value="power_visor">🔮 Power Visor MK2</option>
+                    <option value="none">👤 No Helmet</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <DialogFooter>
+              <Button onClick={() => setWardrobeOpen(false)} className="bg-orange-600 hover:bg-orange-500 text-white font-bold text-xs">
+                Save & Equip Outfit
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>

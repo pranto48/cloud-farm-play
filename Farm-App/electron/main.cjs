@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
@@ -28,6 +28,8 @@ function getSavesDir() {
 }
 
 function createWindow() {
+  const iconPath = path.join(__dirname, '../build/icon.png');
+
   mainWindow = new BrowserWindow({
     width: 1440,
     height: 900,
@@ -35,6 +37,7 @@ function createWindow() {
     minHeight: 640,
     backgroundColor: '#0f1217',
     title: 'Farm-App: Factorio Industrial Simulation',
+    icon: fs.existsSync(iconPath) ? iconPath : undefined,
     frame: true, // Native Windows frame
     autoHideMenuBar: true,
     webPreferences: {
@@ -46,7 +49,7 @@ function createWindow() {
     },
   });
 
-  const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
+  const isDev = process.env.NODE_ENV === 'development';
   if (isDev && process.env.VITE_DEV_SERVER_URL) {
     mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL);
   } else {
@@ -152,6 +155,16 @@ ipcMain.handle('saves:delete', async (_, slotId) => {
   }
 });
 
+ipcMain.handle('saves:openFolder', async () => {
+  try {
+    const dir = getSavesDir();
+    await shell.openPath(dir);
+    return { success: true, dir };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+});
+
 // App Window Controls
 ipcMain.handle('window:toggleFullscreen', () => {
   if (mainWindow) {
@@ -159,6 +172,14 @@ ipcMain.handle('window:toggleFullscreen', () => {
     return mainWindow.isFullScreen();
   }
   return false;
+});
+
+ipcMain.handle('app:getInfo', () => {
+  return {
+    version: app.getVersion(),
+    savesDir: getSavesDir(),
+    isPackaged: app.isPackaged,
+  };
 });
 
 app.whenReady().then(createWindow);

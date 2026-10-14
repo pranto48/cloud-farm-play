@@ -24,7 +24,9 @@ declare global {
       saveGame: (payload: { name: string; slotId?: string; data: unknown; metadata: Partial<DesktopSaveSlot> }) => Promise<{ success: boolean; id?: string; error?: string }>;
       loadGame: (slotId: string) => Promise<{ success: boolean; slot?: DesktopSaveSlot; error?: string }>;
       deleteSave: (slotId: string) => Promise<{ success: boolean; error?: string }>;
+      openSavesFolder: () => Promise<{ success: boolean; dir?: string; error?: string }>;
       toggleFullscreen: () => Promise<boolean>;
+      getAppInfo: () => Promise<{ version: string; savesDir: string; isPackaged: boolean }>;
     };
   }
 }
@@ -48,9 +50,9 @@ export const countPlacedMachines = (s: GameState): number => {
 
 // List all saves from Disk or LocalStorage
 export async function listAllSaves(): Promise<DesktopSaveSlot[]> {
-  if (isDesktopRuntime()) {
+  if (isDesktopRuntime() && window.desktopAPI?.listSaves) {
     try {
-      const res = await window.desktopAPI!.listSaves();
+      const res = await window.desktopAPI.listSaves();
       if (res.success && Array.isArray(res.saves)) {
         return res.saves;
       }
@@ -106,9 +108,9 @@ export async function saveGameToDisk(state: GameState, customName?: string, exis
     data: prepared,
   };
 
-  if (isDesktopRuntime()) {
+  if (isDesktopRuntime() && window.desktopAPI?.saveGame) {
     try {
-      const res = await window.desktopAPI!.saveGame({
+      const res = await window.desktopAPI.saveGame({
         name,
         slotId,
         data: prepared,
@@ -142,8 +144,8 @@ export async function saveGameToDisk(state: GameState, customName?: string, exis
 export async function loadGameFromDisk(slot: DesktopSaveSlot): Promise<{ success: boolean; state?: GameState; message?: string }> {
   try {
     let rawData = slot.data;
-    if (isDesktopRuntime()) {
-      const res = await window.desktopAPI!.loadGame(slot.id);
+    if (isDesktopRuntime() && window.desktopAPI?.loadGame) {
+      const res = await window.desktopAPI.loadGame(slot.id);
       if (res.success && res.slot) {
         rawData = res.slot.data || res.slot;
       }
@@ -157,9 +159,9 @@ export async function loadGameFromDisk(slot: DesktopSaveSlot): Promise<{ success
 
 // Delete save from Disk or LocalStorage
 export async function deleteSaveFromDisk(slotId: string): Promise<boolean> {
-  if (isDesktopRuntime()) {
+  if (isDesktopRuntime() && window.desktopAPI?.deleteSave) {
     try {
-      await window.desktopAPI!.deleteSave(slotId);
+      await window.desktopAPI.deleteSave(slotId);
       return true;
     } catch (err) {
       console.error("Desktop disk delete error:", err);
@@ -175,4 +177,17 @@ export async function deleteSaveFromDisk(slotId: string): Promise<boolean> {
   } catch (err) {
     return false;
   }
+}
+
+// Open native Windows file explorer in saves directory
+export async function openDesktopSavesFolder(): Promise<boolean> {
+  if (isDesktopRuntime() && window.desktopAPI?.openSavesFolder) {
+    try {
+      const res = await window.desktopAPI.openSavesFolder();
+      return !!res.success;
+    } catch (err) {
+      console.error("Failed to open saves folder:", err);
+    }
+  }
+  return false;
 }

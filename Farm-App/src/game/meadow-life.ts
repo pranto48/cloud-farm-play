@@ -7899,6 +7899,7 @@ export function draw(
       ctx.drawImage(_cachedLightCanvas, 0, 0);
     }
   }
+}
 
   // 10. Factorio Blueprint, Stamp & Deconstruction Bounding Box Overlay
   if (state.blueprint && state.blueprint.mode) {

@@ -152,7 +152,7 @@ export default function App() {
 
       {/* Main Game Surface */}
       <main className="flex-1 w-full h-full relative overflow-hidden">
-        <MeadowLife key={gameInstanceKey} initialState={activeSaveState} />
+        <MeadowLife key={gameInstanceKey} initialState={activeSaveState} onStateChange={() => {}} />
       </main>
 
       {/* Saves Manager Dialog */}

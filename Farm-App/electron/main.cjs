@@ -2,11 +2,8 @@ const { app, BrowserWindow, ipcMain, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
-// Enable GPU & Hardware Acceleration for 60/144 FPS smooth rendering
-app.commandLine.appendSwitch('enable-gpu-rasterization');
-app.commandLine.appendSwitch('enable-zero-copy');
-app.commandLine.appendSwitch('ignore-gpu-blocklist');
-app.commandLine.appendSwitch('disable-frame-rate-limit'); // Unlock monitor refresh rate (60/144/240Hz)
+// Stable Hardware Acceleration (Safe for Windows & OneDrive)
+app.commandLine.appendSwitch('disable-gpu-shader-disk-cache');
 
 let mainWindow = null;
 
@@ -40,20 +37,34 @@ function createWindow() {
     icon: fs.existsSync(iconPath) ? iconPath : undefined,
     frame: true, // Native Windows frame
     autoHideMenuBar: true,
+    show: false, // Don't show until ready-to-show
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       nodeIntegration: false,
       contextIsolation: true,
-      backgroundThrottling: false, // Maintain simulation speed when tabbed out
-      webSecurity: true,
+      backgroundThrottling: false,
+      webSecurity: false, // Allow local assets
     },
+  });
+
+  mainWindow.once('ready-to-show', () => {
+    mainWindow.show();
+  });
+
+  mainWindow.webContents.on('did-fail-load', (e, code, desc, url) => {
+    console.error('[Main] Failed to load URL:', url, code, desc);
+  });
+
+  mainWindow.webContents.on('console-message', (e, level, msg, line, src) => {
+    console.log(`[Renderer] ${msg} (${src}:${line})`);
   });
 
   const isDev = process.env.NODE_ENV === 'development';
   if (isDev && process.env.VITE_DEV_SERVER_URL) {
     mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL);
   } else {
-    mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
+    const indexPath = path.join(__dirname, '../dist/index.html');
+    mainWindow.loadFile(indexPath);
   }
 
   // F11 Fullscreen shortcut

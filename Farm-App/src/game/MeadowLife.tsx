@@ -1210,7 +1210,7 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
 
   // Synchronize state changes to parent (save handler)
   useEffect(() => {
-    onStateChange(state);
+    onStateChange?.(state);
   }, [state, onStateChange]);
 
   // Start background ambient music on mount

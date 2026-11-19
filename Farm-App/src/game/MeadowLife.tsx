@@ -32,6 +32,15 @@ import {
   applyLandPurchase,
   ensureMapExploration,
   getBiomeAt,
+  getDirectionVector,
+  getWorldCamera,
+  makeMap,
+  prepareStateForSave,
+  getFactoryPlacementIssue,
+  isConveyor,
+  fuelMachine,
+  dismantleTile,
+  type MultiplayerRoom,
   type BiomeInfo,
   type GameState,
   type Tile,
@@ -48,6 +57,11 @@ import { ITEM_DEFS, createItem, type Item } from "./data/items";
 import { NPCS, giftReaction, getNPCDestination, type NPCDef } from "./npcs";
 import { FISH_TYPES, initFishing, updateFishingPhysics } from "./fishing";
 import { gameAudio } from "./audio";
+import { getYardItemIcon } from "./yard-art";
+import { equippedWeapon, firePlayerWeapon, inventoryCopy, loadDefenseAmmo, pickupNearby, placeLooseItem, stepPlayer } from "./field-play";
+import { drawChart } from "./survey-chart";
+import { planHandcraft } from "./handcraft";
+import { listAllSaves, saveGameToDisk } from "../saves/DiskSaveSystem";
 
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -149,7 +163,7 @@ function FactorioCraftingIcon({
 }
 
 export function MeadowLife({ initialState, onStateChange }: Props = {}) {
-  const [state, setState] = useState<GameState>(() => migrateState(initialState ?? newGame()));
+  const [state, setState] = useState<GameState>(() => initialState ?? newGame());
   const stateRef = useRef(state);
   stateRef.current = state;
 
@@ -191,35 +205,14 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
         return;
       }
 
-      // F5: Quick Save Checkpoint to PC storage & disk
       if (e.key === "F5") {
         e.preventDefault();
-        try {
-          const snapshot = stateRef.current;
-          localStorage.setItem("meadow_life_quicksave", JSON.stringify(snapshot));
-          if (typeof window !== "undefined" && window.desktopAPI?.saveGame) {
-            window.desktopAPI.saveGame({
-              name: `Nauvis QuickSave (Day ${snapshot.day})`,
-              slotId: "quicksave",
-              data: snapshot,
-              metadata: {
-                day: snapshot.day,
-                time: snapshot.time,
-                season: snapshot.season,
-                coins: snapshot.coins,
-                energy: Math.round(snapshot.energy),
-                maxEnergy: snapshot.maxEnergy,
-                health: snapshot.player.health,
-                maxHealth: snapshot.player.maxHealth,
-              },
-            });
-            toast.success("⚡ Desktop Disk Quick Save Created! (F5) → saves/quicksave.json");
-          } else {
-            toast.success("⚡ Quick Save Checkpoint Created! (F5)");
-          }
-        } catch (err) {
-          toast.error("Failed to quick save.");
-        }
+        if (e.repeat) return;
+        const snapshot = stateRef.current;
+        void saveGameToDisk(snapshot, `Quick save · Day ${snapshot.day}`, "quicksave").then(result => {
+          if (result.success) toast.success("Quick save created.");
+          else toast.error(result.message ?? "Quick save failed.");
+        });
         return;
       }
 
@@ -237,7 +230,8 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
                 return;
               }
             }
-            const raw = localStorage.getItem("meadow_life_quicksave");
+            const slot = (await listAllSaves()).find(save => save.id === "quicksave");
+            const raw = slot ? JSON.stringify(slot.data) : localStorage.getItem("meadow_life_quicksave");
             if (raw) {
               const parsed = JSON.parse(raw);
               setState(migrateState(parsed));
@@ -269,41 +263,19 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
     };
   }, []);
 
-  // 3-Minute Background Auto-Save to Local PC Storage & Cloud Sync
   useEffect(() => {
-    const autoSaveTimer = setInterval(() => {
-      try {
-        const snapshot = stateRef.current;
-        localStorage.setItem("meadow_life_autosave", JSON.stringify(snapshot));
-        if (typeof window !== "undefined" && window.desktopAPI?.saveGame) {
-          window.desktopAPI.saveGame({
-            name: `Nauvis AutoSave (Day ${snapshot.day})`,
-            slotId: "autosave",
-            data: snapshot,
-            metadata: {
-              day: snapshot.day,
-              time: snapshot.time,
-              season: snapshot.season,
-              coins: snapshot.coins,
-              energy: Math.round(snapshot.energy),
-              maxEnergy: snapshot.maxEnergy,
-              health: snapshot.player.health,
-              maxHealth: snapshot.player.maxHealth,
-            },
-          });
-          toast.info("💾 Auto-Saved game state to local PC disk (saves/autosave.json).", { duration: 2500 });
-        } else {
-          toast.info("💾 Auto-Saved game state to local PC disk storage.", { duration: 2000 });
-        }
-        if (typeof navigator !== "undefined" && navigator.onLine) {
-          handleCloudSave();
-        }
-      } catch (err) {
-        // silent fallback
-      }
-    }, 180000); // 3 minutes
-
-    return () => clearInterval(autoSaveTimer);
+    const autosave = setInterval(() => {
+      const snapshot = stateRef.current;
+      void saveGameToDisk(snapshot, `Autosave · Day ${snapshot.day}`, "autosave").then(result => {
+        if (!result.success) toast.error(result.message ?? "Autosave failed.");
+      });
+    }, 180000);
+    const clearKeys = () => { pressedKeysRef.current.clear(); miningHold.current = false; };
+    window.addEventListener("blur", clearKeys);
+    return () => {
+      clearInterval(autosave);
+      window.removeEventListener("blur", clearKeys);
+    };
   }, []);
 
   // Biome Exploration Banner & Discovery Tracker
@@ -319,6 +291,20 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
 
   // Menu Overlays
   const [inventoryOpen, setInventoryOpen] = useState(false);
+  const [chartOpen, setChartOpen] = useState(false);
+  const [chartMode, setChartMode] = useState<"local" | "region">("local");
+  const [chartPollution, setChartPollution] = useState(false);
+  useEffect(() => {
+    if (!chartOpen) return;
+    const paint = () => {
+      if (chartRef.current) drawChart(chartRef.current, stateRef.current, chartMode, chartPollution);
+    };
+    const delay = setTimeout(paint, 70);
+    const timer = setInterval(paint, 180);
+    return () => { clearTimeout(delay); clearInterval(timer); };
+  }, [chartOpen, chartMode, chartPollution]);
+  const chartRef = useRef<HTMLCanvasElement | null>(null);
+  const [recipeSearch, setRecipeSearch] = useState("");
   const [activeTab, setActiveTab] = useState<"inventory" | "crafting" | "social" | "skills" | "workers">("inventory");
   const [shopOpen, setShopOpen] = useState(false);
   const [shopTab, setShopTab] = useState<"all_items" | "seeds" | "animals" | "upgrades" | "sell" | "hire">("all_items");
@@ -343,7 +329,7 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
     },
     {
       id: "room_factorio_2",
-      name: "🏭 Factorio Co-Op #2",
+      name: "🏭 Meadow Works Co-op",
       code: "FACTORIO-2",
       mapSeed: 202,
       isPrivate: false,
@@ -385,7 +371,7 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
       if (next.savedRoomMaps[targetRoom.id]) {
         next.tiles = next.savedRoomMaps[targetRoom.id];
       } else {
-        const newMap = makeMap(targetRoom.mapSeed);
+        const newMap = makeMap();
         next.tiles = newMap;
         next.savedRoomMaps[targetRoom.id] = newMap;
       }
@@ -506,7 +492,7 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
   const [shippingBinOpen, setShippingBinOpen] = useState(false);
   const [furnaceOpenTile, setFurnaceOpenTile] = useState<{ x: number; y: number } | null>(null);
   const [craftingCategory, setCraftingCategory] = useState<"logistics" | "production" | "intermediates" | "space" | "combat">("logistics");
-  const [craftingQueue, setCraftingQueue] = useState<{ id: string; recipeId: string; name: string; iconSymbol: string; iconColor: string; progress: number; duration: number; remainingTime: number; refundInputs?: { itemId: string; count: number }[] }[]>([]);
+  const craftingQueue = state.handcraftQueue ?? [];
   const [hoveredRecipe, setHoveredRecipe] = useState<Recipe | null>(null);
   const hoveredTileRef = useRef<{ x: number; y: number } | null>(null);
 
@@ -547,9 +533,15 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
   const [isMobile, setIsMobile] = useState(false);
   const [showTouchControls, setShowTouchControls] = useState(false);
   const [radarExpanded, setRadarExpanded] = useState(true);
-  const [campaignWidgetOpen, setCampaignWidgetOpen] = useState(true);
+
   const [campaignMinimized, setCampaignMinimized] = useState(false);
-  const [campaignTab, setCampaignTab] = useState<"basics" | "advanced">("basics");
+  const [, refreshHud] = useState(0);
+  useEffect(() => {
+    const timer = setInterval(() => refreshHud(tick => tick + 1), 350);
+    return () => clearInterval(timer);
+  }, []);
+  const beltDrag = useRef<{ x: number; y: number } | null>(null);
+  const miningHold = useRef(false);
   const [canvasSize, setCanvasSize] = useState({ width: 704, height: 480 });
   const [zoom, setZoom] = useState<number>(1.0);
   const zoomRef = useRef<number>(1.0);
@@ -607,6 +599,7 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
   const [wardrobeOpen, setWardrobeOpen] = useState(false);
   const [realFps, setRealFps] = useState(60);
   const [realFrameTime, setRealFrameTime] = useState(16.6);
+  const [realUps, setRealUps] = useState(20);
 
   const handleUpdateDress = (updates: Partial<NonNullable<GameState["player"]>>) => {
     setState((prev) => {
@@ -621,7 +614,7 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
     setState((prev) => {
       const next = structuredClone(prev);
       next.settings = {
-        fpsLimit: 40,
+        fpsLimit: 60,
         graphicsQuality: "low",
         showGrid: true,
         showFpsOverlay: true,
@@ -665,7 +658,7 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
       const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(state));
       const downloadAnchor = document.createElement("a");
       downloadAnchor.setAttribute("href", dataStr);
-      downloadAnchor.setAttribute("download", `MeadowLife_Factorio_Save_Day${state.day}_${Date.now()}.json`);
+      downloadAnchor.setAttribute("download", `MeadowLife_Save_Day${state.day}_${Date.now()}.json`);
       document.body.appendChild(downloadAnchor);
       downloadAnchor.click();
       downloadAnchor.remove();
@@ -751,7 +744,7 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
 
   const handleSaveGame = (customName?: string, existingSlotId?: string) => {
     const s = stateRef.current;
-    const name = customName?.trim() || saveNameInput.trim() || `Nauvis Factory - Day ${s.day}`;
+    const name = customName?.trim() || saveNameInput.trim() || `Meadow Works · Day ${s.day}`;
     const prepared = prepareStateForSave(s);
     const newSlot = {
       id: existingSlotId || `save_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
@@ -954,29 +947,19 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
     };
   }, []);
 
-  // Update canvas size dynamically when fullscreen or mobile viewport is active
   useEffect(() => {
-    const updateSize = () => {
-      if (isFullscreen) {
-        setCanvasSize({ width: window.innerWidth, height: window.innerHeight });
-      } else {
-        const availWidth = Math.min(window.innerWidth - 16, 704);
-        const availHeight = isMobile
-          ? Math.min(window.innerHeight - (showTouchControls ? 230 : 160), 480)
-          : 480;
-        setCanvasSize({
-          width: Math.max(320, availWidth),
-          height: Math.max(280, availHeight)
-        });
-      }
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const resize = () => {
+      const width = Math.max(1, canvas.clientWidth);
+      const height = Math.max(1, canvas.clientHeight);
+      setCanvasSize(old => old.width === width && old.height === height ? old : { width, height });
     };
-
-    updateSize();
-    window.addEventListener("resize", updateSize);
-    return () => {
-      window.removeEventListener("resize", updateSize);
-    };
-  }, [isFullscreen, isMobile, showTouchControls]);
+    const observer = new ResizeObserver(resize);
+    observer.observe(canvas);
+    resize();
+    return () => observer.disconnect();
+  }, []);
 
   const toggleFullscreen = async () => {
     const nextVal = !isFullscreen;
@@ -1002,6 +985,8 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
   };
 
   // Inventory holding slot
+  const worldActive = useRef(true);
+  worldActive.current = !inventoryOpen && !shopOpen && !chestOpenTile && !furnaceOpenTile && !factorioInspectorTile && !mailboxOpen && !chatOpen && !productionStatsOpen && !chartOpen && !graphicsSettingsOpen && !researchCenterOpen && !saveLoadOpen;
   const [heldItem, setHeldItem] = useState<{ item: Item; originalSlot: number; source: "inventory" | "chest" | "shipping" | "furnace" } | null>(null);
 
   // Spacebar trigger for Reel minigame
@@ -1021,35 +1006,11 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
     const canvasX = (clickX * scaleX) / z;
     const canvasY = (clickY * scaleY) / z;
 
-    const p = stateRef.current.player;
-    const pSubX = p.subX !== undefined ? p.subX : p.x;
-    const pSubY = p.subY !== undefined ? p.subY : p.y;
-
-    const effectiveWidth = canvasSize.width / z;
-    const effectiveHeight = canvasSize.height / z;
-
-    const gridCols = stateRef.current.inHouse ? 10 : (stateRef.current.inMine ? 24 : COLS);
-    const gridRows = stateRef.current.inHouse ? 10 : (stateRef.current.inMine ? 24 : ROWS);
-
-    let cameraX = 0;
-    if (gridCols * TILE < effectiveWidth) {
-      cameraX = -(effectiveWidth - gridCols * TILE) / 2;
-    } else {
-      cameraX = Math.max(
-        0,
-        Math.min(gridCols * TILE - effectiveWidth, pSubX * TILE + 16 - effectiveWidth / 2)
-      );
-    }
-
-    let cameraY = 0;
-    if (gridRows * TILE < effectiveHeight) {
-      cameraY = -(effectiveHeight - gridRows * TILE) / 2;
-    } else {
-      cameraY = Math.max(
-        0,
-        Math.min(gridRows * TILE - effectiveHeight, pSubY * TILE + 16 - effectiveHeight / 2)
-      );
-    }
+    const current = stateRef.current;
+    const grid = current.inHouse ? current.houseGrid! : current.inMine ? current.mineGrid : current.tiles;
+    const gridCols = grid[0]?.length ?? 0;
+    const gridRows = grid.length;
+    const { x: cameraX, y: cameraY } = getWorldCamera(current, canvasSize.width / z, canvasSize.height / z);
 
     const worldX = canvasX + cameraX;
     const worldY = canvasY + cameraY;
@@ -1057,7 +1018,7 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
     const tileX = Math.floor(worldX / TILE);
     const tileY = Math.floor(worldY / TILE);
 
-    return { x: tileX, y: tileY };
+    return tileX >= 0 && tileY >= 0 && tileX < gridCols && tileY < gridRows ? { x: tileX, y: tileY } : null;
   };
 
   const handleCanvasContextMenu = (e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -1065,6 +1026,17 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
     const coords = getMouseTileCoords(e.clientX, e.clientY);
     if (!coords) return;
     const { x: tileX, y: tileY } = coords;
+
+    const current = stateRef.current;
+    const grid = current.inHouse ? current.houseGrid! : current.inMine ? current.mineGrid : current.tiles;
+    const tile = grid[tileY]?.[tileX];
+    if (canHandMine(current, coords)) return;
+    if (tile?.placedItemId && tile.placedItemId !== "worker_cabin" && withinReach(current, coords)) {
+      setState(prev => editTile(prev, coords, (next, activeGrid) => {
+        if (!dismantleTile(next, activeGrid, tileX, tileY)) toast.warning("Make room in your inventory to dismantle this.");
+      }));
+      return;
+    }
 
     // Check if right clicked on/near a worker or their cabin
     if (state.workers) {
@@ -1092,104 +1064,63 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
       const key = e.key.toLowerCase();
       pressedKeysRef.current.add(key);
 
-      if (key === "q") {
-        // Factorio Pip-Tool (Sample cursor or clear hand)
-        if (heldItem) {
-          setHeldItem(null);
-        } else if (hoveredTileRef.current) {
-          const { x, y } = hoveredTileRef.current;
-          const g = stateRef.current.inHouse ? stateRef.current.houseGrid! : (stateRef.current.inMine ? stateRef.current.mineGrid : stateRef.current.tiles);
-          const t = g[y]?.[x];
-          if (t) {
-            const targetItemId = t.placedItemId || (t.cropId ? `${t.cropId}_seed` : null);
-            if (targetItemId) {
-              const idx = stateRef.current.inventory.findIndex((it) => it && it.id === targetItemId);
-              if (idx !== -1 && stateRef.current.inventory[idx]) {
-                setHeldItem({ item: stateRef.current.inventory[idx]!, originalSlot: idx, source: "inventory" });
-                toast(`Selected ${ITEM_DEFS[targetItemId]?.name || targetItemId} (Q)`);
-              }
-            }
-          }
-        }
-      } else if (key === "e") {
-        setInventoryOpen((prev) => !prev);
+      if (e.ctrlKey || e.metaKey || e.repeat) return;
+      if (key === "q" && worldActive.current) {
+        const pos = hoveredTileRef.current;
+        setState(prev => {
+          const grid = prev.inMine ? prev.mineGrid : prev.inHouse ? prev.houseGrid : prev.tiles;
+          const target = pos && grid?.[pos.y]?.[pos.x];
+          const id = target?.placedItemId ?? (target?.kind.startsWith("ore_") ? "burner_drill" : undefined);
+          const slot = id ? prev.inventory.findIndex(item => item?.id === id) : -1;
+          return { ...prev, hotbarIndex: slot };
+        });
+      } else if (key === "m") {
+        setChartOpen(open => !open);
+      } else if (key === "b" && worldActive.current) {
+        setState(prev => {
+          const weapons = prev.inventory.filter(item => item && ["pistol", "submachine_gun", "shotgun", "combat_shotgun"].includes(item.id));
+          if (!weapons.length) return prev;
+          const index = weapons.findIndex(item => item?.id === equippedWeapon(prev).item?.id);
+          const weapon = weapons[(index + 1) % weapons.length]!;
+          toast.info(weapon.name, { id: "active-weapon", duration: 1000 });
+          return { ...prev, hotbarIndex: -1, player: { ...prev.player, weaponId: weapon.id } };
+        });
+      } else if (key === "e" || key === "i") {
+        closeInventory(!inventoryOpen);
       } else if (key === "p") {
         setProductionStatsOpen((prev) => !prev);
-      } else if (key === "h") {
+      } else if (key === "h" && worldActive.current) {
         setAboutOpen((prev) => !prev);
-      } else if (key === "r") {
+      } else if (key === "r" && worldActive.current) {
         setState((prev) => {
           const dirs: ("right" | "down" | "left" | "up")[] = ["right", "down", "left", "up"];
           const currentIdx = dirs.indexOf(prev.placementDirection || "right");
-          const nextDir = dirs[(currentIdx + 1) % dirs.length];
+          const nextDir = dirs[(currentIdx + (e.shiftKey ? 3 : 1)) % dirs.length];
           toast(`Placement Direction: ${nextDir.toUpperCase()} 🔄`);
           return { ...prev, placementDirection: nextDir };
         });
-      } else if (key === "f") {
-        // Factorio Item Pickup Vacuum: Collect all items on belts/ground within 2.5 tiles radius
-        setState((prev) => {
-          const next = structuredClone(prev);
-          const px = Math.round(next.player.subX ?? next.player.x);
-          const py = Math.round(next.player.subY ?? next.player.y);
-          const grid = next.inHouse ? next.houseGrid! : (next.inMine ? next.mineGrid : next.tiles);
-          let pickedCount = 0;
-          let lastPickedName = "";
-
-          for (let dy = -2; dy <= 2; dy++) {
-            for (let dx = -2; dx <= 2; dx++) {
-              const tx = px + dx;
-              const ty = py + dy;
-              const t = grid[ty]?.[tx];
-              if (!t) continue;
-
-              // 1. Vacuum items off conveyor belts
-              if (t.beltItems && t.beltItems.length > 0) {
-                while (t.beltItems.length > 0) {
-                  const bItem = t.beltItems.shift();
-                  if (bItem) {
-                    addItem(next.inventory, createItem(bItem.id, 1));
-                    pickedCount++;
-                    lastPickedName = ITEM_DEFS[bItem.id]?.name || bItem.id;
-                  }
-                }
-              }
-            }
-          }
-
-          if (pickedCount > 0) {
-            toast(`+${pickedCount}x ${lastPickedName} collected (F) 🧲`);
-          } else {
-            const f = frontTile(next);
-            if (f) handleTileInteraction(f);
-          }
-          return next;
-        });
-      } else if (key === "z") {
-        // Factorio Drop Item: Drop 1 item from active hotbar onto front conveyor belt / ground
-        setState((prev) => {
-          const next = structuredClone(prev);
-          const f = frontTile(next);
-          const activeItem = next.inventory[next.hotbarIndex];
-          if (f && activeItem && activeItem.count > 0) {
-            const grid = next.inHouse ? next.houseGrid! : (next.inMine ? next.mineGrid : next.tiles);
-            const targetTile = grid[f.y]?.[f.x];
-            if (targetTile && targetTile.kind === "placed_item" && targetTile.placedItemId?.includes("belt")) {
-              if (!targetTile.beltItems) targetTile.beltItems = [];
-              if (targetTile.beltItems.length < 6) {
-                targetTile.beltItems.push({ id: activeItem.id, offset: 0, lane: Math.random() < 0.5 ? 0 : 1 });
-                activeItem.count -= 1;
-                if (activeItem.count <= 0) next.inventory[next.hotbarIndex] = null;
-                toast(`Dropped 1x ${activeItem.name} onto belt (Z) 🔽`);
-              }
-            }
-          }
-          return next;
+      } else if (key === "f" && worldActive.current) {
+        const current = stateRef.current;
+        const count = pickupNearby(current);
+        if (count) {
+          refreshHud(tick => tick + 1);
+          toast.success(`Picked up ${count} items`, { id: "field-items", duration: 1200 });
+        }
+      } else if (key === "z" && worldActive.current) {
+        const pos = hoveredTileRef.current ?? frontTile(stateRef.current);
+        if (!pos || !withinReach(stateRef.current, pos)) return;
+        setState(prev => {
+          const item = prev.inventory[prev.hotbarIndex];
+          if (!item) return prev;
+          return editTile(prev, pos, next => {
+            if (placeLooseItem(next, pos, item.id)) removeItem(next.inventory, next.hotbarIndex);
+          });
         });
       } else if (key === "alt") {
         e.preventDefault();
         setState((prev) => {
           const nextAlt = !prev.altMode;
-          toast(`Factorio Alt-Mode: ${nextAlt ? "ENABLED (Recipe & Info Overlay On) 🔍" : "DISABLED ❌"}`);
+          toast(`Machine overlay: ${nextAlt ? "ENABLED (Recipe & Info Overlay On) 🔍" : "DISABLED ❌"}`);
           return { ...prev, altMode: nextAlt };
         });
       } else if (key >= "1" && key <= "9") {
@@ -1197,20 +1128,13 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
         setState((prev) => ({ ...prev, hotbarIndex: slot }));
       } else if (key === "0") {
         setState((prev) => ({ ...prev, hotbarIndex: 9 }));
-      } else if (key === " ") {
-        e.preventDefault();
-        setIsSpacePressed(true);
-        startContinuousAction();
       }
     };
 
     const handleKeyUp = (e: KeyboardEvent) => {
       const key = e.key.toLowerCase();
       pressedKeysRef.current.delete(key);
-      if (key === " ") {
-        setIsSpacePressed(false);
-        stopContinuousAction();
-      }
+
     };
 
     window.addEventListener("keydown", handleKeyDown);
@@ -1219,7 +1143,7 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
       window.removeEventListener("keydown", handleKeyDown);
       window.removeEventListener("keyup", handleKeyUp);
     };
-  }, [heldItem]);
+  }, [heldItem, inventoryOpen]);
 
   // Synchronize state changes to parent (save handler)
   useEffect(() => {
@@ -1240,10 +1164,20 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
     if (!ctx) return;
 
     let lastTime = performance.now();
+    let lastDraw = 0;
+    let lastRadar = 0;
+    let lastPickup = 0;
+    let lastMine = 0;
+    let sampleAt = lastTime;
+    let rendered = 0;
+    let updated = 0;
+    let worst = 0;
     let raf = 0;
 
     const loop = (now: number) => {
-      const dt = Math.min((now - lastTime) / 1000, 0.05);
+      const frameMs = now - lastTime;
+      const dt = Math.min(frameMs / 1000, 0.08);
+      worst = Math.max(worst, frameMs);
       lastTime = now;
 
       const cur = stateRef.current;
@@ -1277,35 +1211,9 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
       if (p.subX === undefined) p.subX = p.x;
       if (p.subY === undefined) p.subY = p.y;
 
-      if ((dx !== 0 || dy !== 0) && !inventoryOpen && !shopOpen && !chestOpenTile && !mailboxOpen && !chatOpen && cur.harvestLiftingTimer <= 0) {
+      if ((dx !== 0 || dy !== 0) && worldActive.current && cur.harvestLiftingTimer <= 0) {
         const isShift = pressedKeysRef.current.has("shift") || mobileSprint;
-        // Modern brisk responsive speed (13.5 normal, 22.0 sprint)
-        const speed = (isShift ? 22.0 : 13.5) * dt;
-
-        // X Movement with collision sliding
-        const newSubX = Math.max(0, Math.min(cols - 1, p.subX + dx * speed));
-        const targetX = Math.floor(newSubX + (dx > 0 ? 0.2 : -0.2));
-        const curY = Math.floor(p.subY);
-        if (targetX >= 0 && targetX < cols && curY >= 0 && curY < rows && isWalkable(grid[curY]?.[targetX])) {
-          p.subX = newSubX;
-          p.x = Math.floor(newSubX);
-        }
-
-        // Y Movement with collision sliding
-        const newSubY = Math.max(0, Math.min(rows - 1, p.subY + dy * speed));
-        const targetY = Math.floor(newSubY + (dy > 0 ? 0.2 : -0.2));
-        const curX = Math.floor(p.subX);
-        if (curX >= 0 && curX < cols && targetY >= 0 && targetY < rows && isWalkable(grid[targetY]?.[curX])) {
-          p.subY = newSubY;
-          p.y = Math.floor(newSubY);
-        }
-
-        // Facing direction
-        if (Math.abs(dx) > Math.abs(dy)) {
-          p.dir = dx > 0 ? "right" : "left";
-        } else if (Math.abs(dy) > 0) {
-          p.dir = dy > 0 ? "down" : "up";
-        }
+        stepPlayer(cur, dx, dy, isShift, dt);
 
         // Sprint boot running dust particles
         if (isShift && Math.random() < 0.28) {
@@ -1335,28 +1243,6 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
             setTimeout(() => {
               setBiomeBanner(prev => (prev?.name === currentBiome.name ? null : prev));
             }, 4500);
-          }
-        }
-
-        // Vacuum Magnet: Auto-pull nearby loose items within 3 tiles
-        if (!cur.inHouse && !cur.inMine) {
-          const pTileX = p.x;
-          const pTileY = p.y;
-          for (let my = -2; my <= 2; my++) {
-            for (let mx = -2; mx <= 2; mx++) {
-              const tx = pTileX + mx;
-              const ty = pTileY + my;
-              if (tx >= 0 && tx < cols && ty >= 0 && ty < rows) {
-                const stepTile = grid[ty]?.[tx];
-                if (stepTile && stepTile.beltItems && stepTile.beltItems.length > 0 && Math.hypot(mx, my) <= 2.8) {
-                  const pulled = stepTile.beltItems.shift();
-                  if (pulled) {
-                    addItem(cur.inventory, createItem(pulled.id, 1));
-                    gameAudio.playCoin();
-                  }
-                }
-              }
-            }
           }
         }
 
@@ -1423,29 +1309,32 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
         }
       }
 
-      // Factorio Belt Riding Dynamic Physics
-      const curTile = grid[Math.floor(p.subY)]?.[Math.floor(p.subX)];
-      if (curTile && curTile.placedItemId && curTile.placedItemId.includes("belt")) {
-        const beltSpeed = (curTile.placedItemId.includes("express") ? 3.5 : curTile.placedItemId.includes("fast") ? 2.5 : 1.8) * dt;
-        const bVec = getDirectionVector(curTile.direction);
-        const pushX = Math.max(0, Math.min(cols - 1, p.subX + bVec.dx * beltSpeed));
-        const pushY = Math.max(0, Math.min(rows - 1, p.subY + bVec.dy * beltSpeed));
-        if (isWalkable(grid[Math.floor(p.subY)]?.[Math.floor(pushX)])) {
-          p.subX = pushX;
-          p.x = Math.floor(pushX);
-        }
-        if (isWalkable(grid[Math.floor(pushY)]?.[Math.floor(p.subX)])) {
-          p.subY = pushY;
-          p.y = Math.floor(pushY);
-        }
+      if (dx === 0 && dy === 0 || !worldActive.current || cur.harvestLiftingTimer > 0) {
+        p.walkSeconds = 0;
+        if (worldActive.current) stepPlayer(cur, 0, 0, false, dt, false);
+      }
+
+      if (worldActive.current && pressedKeysRef.current.has("f") && now - lastPickup > 130) {
+        lastPickup = now;
+        pickupNearby(cur);
+      }
+      if (worldActive.current && miningHold.current && now - lastMine > 260) {
+        lastMine = now;
+        const target = hoveredTileRef.current;
+        if (target && canHandMine(cur, target)) mineTile(target);
+      }
+      if (worldActive.current && pressedKeysRef.current.has(" ") && cur.inventory[cur.hotbarIndex]?.type !== "tool") {
+        if (firePlayerWeapon(cur, hoveredTileRef.current)) gameAudio.playDischarge();
       }
 
       // High Performance Throttled Entity & Machine Updates (10 Ticks / sec)
       if (!lastEntityTickRef.current) lastEntityTickRef.current = now;
-      const entityDt = (now - lastEntityTickRef.current) / 1000;
-      if (entityDt >= 0.08) {
-        updateEntities(cur, entityDt);
-        lastEntityTickRef.current = now;
+      const machineStep = 1 / 20;
+      if (now - lastEntityTickRef.current > 250) lastEntityTickRef.current = now - 250;
+      while (now - lastEntityTickRef.current >= machineStep * 1000) {
+        updateEntities(cur, machineStep);
+        updated++;
+        lastEntityTickRef.current += machineStep * 1000;
       }
 
       if (cur.animals) {
@@ -1487,7 +1376,7 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
 
       // Throttled Ambient Particle Spawning (12 Ticks / sec)
       if (!lastParticleTickRef.current) lastParticleTickRef.current = now;
-      if (now - lastParticleTickRef.current >= 80) {
+      if (cur.settings?.particleDensity !== "low" && now - lastParticleTickRef.current >= 110) {
         lastParticleTickRef.current = now;
 
         const currentGrid = stateRef.current.inMine ? stateRef.current.mineGrid : stateRef.current.tiles;
@@ -1689,7 +1578,7 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
       if (curState.fishing && curState.fishing.status === "reeling") {
         setState((prev) => {
           if (!prev.fishing) return prev;
-          const next = structuredClone(prev);
+          const next = { ...prev, fishing: { ...prev.fishing }, inventory: inventoryCopy(prev.inventory), skills: { ...prev.skills }, experience: { ...prev.experience } };
           updateFishingPhysics(next.fishing!, isSpacePressed, dt);
 
           if (next.fishing!.status === "success") {
@@ -1720,7 +1609,27 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
         });
       }
 
-      // Draw game onto canvas
+      const limit = cur.settings?.fpsLimit ?? 60;
+      const interval = limit ? 1000 / limit : 0;
+      if (now - sampleAt >= 1000) {
+        if (cur.settings?.showFpsOverlay) {
+          setRealFps(Math.round(rendered * 1000 / (now - sampleAt)));
+          setRealUps(Math.round(updated * 1000 / (now - sampleAt)));
+          setRealFrameTime(Math.round(worst * 10) / 10);
+        }
+        sampleAt = now;
+        rendered = 0;
+        updated = 0;
+        worst = 0;
+      }
+      if (interval && now - lastDraw < interval - .6) {
+        raf = requestAnimationFrame(loop);
+        return;
+      }
+      lastDraw = interval && lastDraw && now - lastDraw < interval * 2 ? now - ((now - lastDraw) % interval) : now;
+      rendered++;
+
+      // Render and simulation run independently of the selected frame limit.
       draw(ctx, stateRef.current, canvasSize.width, canvasSize.height, hoveredTileRef.current, zoomRef.current);
 
       // Draw particle overlay
@@ -1730,34 +1639,7 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
       const effectiveW = canvasSize.width / z;
       const effectiveH = canvasSize.height / z;
 
-      const playerPos = stateRef.current.player;
-      const pSubX = playerPos.subX !== undefined ? playerPos.subX : playerPos.x;
-      const pSubY = playerPos.subY !== undefined ? playerPos.subY : playerPos.y;
-      const gridCols = stateRef.current.inHouse ? 10 : (stateRef.current.inMine ? 24 : COLS);
-      const gridRows = stateRef.current.inHouse ? 10 : (stateRef.current.inMine ? 24 : ROWS);
-
-      const inBld = stateRef.current.inHouse || stateRef.current.inMine;
-      let cameraX = 0;
-      if (inBld) {
-        if (gridCols * TILE < effectiveW) {
-          cameraX = -(effectiveW - gridCols * TILE) / 2;
-        } else {
-          cameraX = Math.max(0, Math.min(gridCols * TILE - effectiveW, pSubX * TILE + 16 - effectiveW / 2));
-        }
-      } else {
-        cameraX = pSubX * TILE + 16 - effectiveW / 2;
-      }
-
-      let cameraY = 0;
-      if (inBld) {
-        if (gridRows * TILE < effectiveH) {
-          cameraY = -(effectiveH - gridRows * TILE) / 2;
-        } else {
-          cameraY = Math.max(0, Math.min(gridRows * TILE - effectiveH, pSubY * TILE + 16 - effectiveH / 2));
-        }
-      } else {
-        cameraY = pSubY * TILE + 16 - effectiveH / 2;
-      }
+      const { x: cameraX, y: cameraY } = getWorldCamera(stateRef.current, effectiveW, effectiveH);
       ctx.translate(-cameraX, -cameraY);
 
       // Draw Particles
@@ -1879,11 +1761,9 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
 
       // Draw minimap on minimap canvas
       const miniCanvas = minimapRef.current;
-      if (miniCanvas) {
-        const miniCtx = miniCanvas.getContext("2d");
-        if (miniCtx) {
-          drawMinimap(miniCtx, stateRef.current, canvasSize.width, canvasSize.height, customWaypoints);
-        }
+      if (miniCanvas && now - lastRadar >= 150) {
+        lastRadar = now;
+        drawChart(miniCanvas, cur, "radar", false, customWaypoints);
       }
 
       raf = requestAnimationFrame(loop);
@@ -2038,14 +1918,7 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
         return;
       }
 
-      // "h" toggles the about page
-      if (k === "h" && tag !== "INPUT" && tag !== "TEXTAREA" && !inventoryOpen && !shopOpen && !chatOpen) {
-        e.preventDefault();
-        setAboutOpen((o) => !o);
-        return;
-      }
-
-      if (tag === "INPUT" || tag === "TEXTAREA" || inventoryOpen || shopOpen || chestOpenTile || mailboxOpen || chatOpen) return;
+      if (e.ctrlKey || e.metaKey || tag === "INPUT" || tag === "TEXTAREA" || inventoryOpen || shopOpen || chestOpenTile || mailboxOpen || chatOpen) return;
 
       const curState = stateRef.current;
 
@@ -2053,8 +1926,8 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
       if (curState.harvestLiftingTimer > 0) return;
 
 
-      // Space / E Action Key
-      if (e.code === "Space") {
+      // Space uses the selected item.
+      if (e.code === "Space" && worldActive.current) {
         e.preventDefault();
 
         const held = curState.inventory[curState.hotbarIndex];
@@ -2092,6 +1965,12 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
           return;
         }
 
+        if (!held || held.type !== "tool") {
+          if (!e.repeat && firePlayerWeapon(curState, hoveredTileRef.current)) gameAudio.playDischarge();
+          return;
+        }
+        if (e.repeat) return;
+
         // Charged tools logic: Hoe and Watering Can
         if (held && (held.id === "hoe" || held.id === "watering_can")) {
           const tId = held.id === "watering_can" ? "watering" : "hoe";
@@ -2110,10 +1989,10 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
         }
 
         setIsSpacePressed(true);
-        setState((prev) => {
-          const next = structuredClone(prev);
-          const targetCoords = hoveredTileRef.current || frontTile(next) || next.player;
-          const act = interact(next, 1, hoveredTileRef.current || undefined);
+        const targetCoords = hoveredTileRef.current || frontTile(curState);
+        if (!targetCoords || !withinReach(curState, targetCoords)) return;
+        setState(prev => editTile(prev, targetCoords, next => {
+          const act = interact(next, 1, targetCoords);
 
           if (act.particles.length > 0) {
             particlesRef.current = [...particlesRef.current, ...act.particles];
@@ -2130,27 +2009,10 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
               maxAge: 0.8,
             });
           }
-          return next;
-        });
-      }
-      // Hotbar selection numbers
-      else if (["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"].includes(k)) {
-        const idx = k === "0" ? 9 : parseInt(k) - 1;
-        setState((prev) => ({ ...prev, hotbarIndex: idx }));
-      }
-      // 'R' Key: Rotate Placeable Object (Factorio Logistics)
-      else if (k === "r") {
-        e.preventDefault();
-        setState((prev) => {
-          const dirs: ("right" | "down" | "left" | "up")[] = ["right", "down", "left", "up"];
-          const currentIdx = dirs.indexOf(prev.placementDirection || "right");
-          const nextDir = dirs[(currentIdx + 1) % dirs.length];
-          toast(`Placement Direction: ${nextDir.toUpperCase()} 🔄`);
-          return { ...prev, placementDirection: nextDir };
-        });
+        }));
       }
       // Dialogue talk / Machine Interact
-      else if (k === "f" || k === "e") {
+      else if (k === "enter") {
         e.preventDefault();
         const f = frontTile(curState);
         if (!f) return;
@@ -2286,11 +2148,6 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
           }
         }
       }
-      // ESC / I Inventory panel
-      else if (k === "i" || k === "e" || e.code === "Escape") {
-        e.preventDefault();
-        setInventoryOpen((o) => !o);
-      }
     };
 
     const onKeyUp = (e: KeyboardEvent) => {
@@ -2305,8 +2162,9 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
 
           setState((prev) => {
             const next = structuredClone(prev);
-            const targetCoords = hoveredTileRef.current || frontTile(next) || next.player;
-            const act = interact(next, chargeLevel, hoveredTileRef.current || undefined);
+            const targetCoords = hoveredTileRef.current || frontTile(next);
+            if (!targetCoords || !withinReach(next, targetCoords)) return prev;
+            const act = interact(next, chargeLevel, targetCoords);
 
             if (act.particles.length > 0) {
               particlesRef.current = [...particlesRef.current, ...act.particles];
@@ -2392,42 +2250,23 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
   // Crafting Queue Progress Tick
   useEffect(() => {
     const queueInterval = setInterval(() => {
-      setCraftingQueue((prevQueue) => {
-        if (prevQueue.length === 0) return prevQueue;
-
-        const nextQueue = prevQueue.map((item, idx) => {
-          if (idx === 0) {
-            const timeStep = 0.1; // 100ms
-            const remaining = Math.max(0, item.remainingTime - timeStep);
-            const duration = item.duration || 2;
-            const progress = Math.round(((duration - remaining) / duration) * 100);
-            return { ...item, remainingTime: remaining, progress };
-          }
-          return item;
-        });
-
-        const active = nextQueue[0];
-        if (active.remainingTime <= 0) {
-          setState((prev) => {
-            const next = structuredClone(prev);
-            const recipe = CRAFTING_RECIPES.find((r) => r.id === active.recipeId);
-            if (recipe) {
-              const output = createItem(recipe.outputId, recipe.outputCount);
-              const success = addItem(next.inventory, output);
-              if (success) {
-                toast.success(`Crafted ${recipe.name}! 🛠️`);
-                gameAudio.playCoin();
-              } else {
-                toast.warning(`Inventory full! Added to backpack extra slots.`);
-                next.inventory.push(output);
-              }
-            }
-            return next;
-          });
-          return nextQueue.slice(1);
+      if (!stateRef.current.handcraftQueue?.length) return;
+      setState(prev => {
+        const [active, ...remaining] = prev.handcraftQueue ?? [];
+        if (!active) return prev;
+        const seconds = Math.max(0, active.remainingTime - .1);
+        if (seconds > .000001) {
+          const progress = Math.round((1 - seconds / active.duration) * 100);
+          return { ...prev, handcraftQueue: [{ ...active, remainingTime: seconds, progress }, ...remaining] };
         }
-
-        return nextQueue;
+        const inventory = inventoryCopy(prev.inventory);
+        for (const output of active.outputs) {
+          const stack = createItem(output.itemId, output.count);
+          if (!addItem(inventory, stack)) inventory.push(stack);
+        }
+        toast.success(`Crafted ${active.name}`, { id: "workbench-complete" });
+        gameAudio.playCoin();
+        return { ...prev, inventory, handcraftQueue: remaining };
       });
     }, 100);
 
@@ -2479,143 +2318,15 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
     return personalCount + (globalItem?.count || 0) >= count;
   };
 
-  const deductGlobalItems = (gameState: GameState, itemId: string, count: number) => {
-    let remaining = count;
-    for (let i = 0; i < gameState.inventory.length; i++) {
-      const itm = gameState.inventory[i];
-      if (itm && itm.id === itemId) {
-        if (itm.count >= remaining) {
-          itm.count -= remaining;
-          if (itm.count === 0) gameState.inventory[i] = null;
-          return;
-        } else {
-          remaining -= itm.count;
-          gameState.inventory[i] = null;
-        }
-      }
+  const maxCraftable = (s: GameState, recipe: Recipe) => {
+    let low = 0;
+    let high = 50;
+    while (low < high) {
+      const mid = Math.ceil((low + high) / 2);
+      if (planHandcraft(s, recipe, mid).canCraft) low = mid;
+      else high = mid - 1;
     }
-    if (remaining > 0) {
-      const grids = [gameState.tiles, gameState.houseGrid, gameState.mineGrid].filter(Boolean) as Tile[][][];
-      for (const grid of grids) {
-        for (const row of grid) {
-          for (const tile of row) {
-            if (tile.kind === "placed_item" && tile.placedItemId === "chest" && tile.chestInventory) {
-              for (let i = 0; i < tile.chestInventory.length; i++) {
-                const itm = tile.chestInventory[i];
-                if (itm && itm.id === itemId) {
-                  if (itm.count >= remaining) {
-                    itm.count -= remaining;
-                    if (itm.count === 0) tile.chestInventory[i] = null;
-                    return;
-                  } else {
-                    remaining -= itm.count;
-                    tile.chestInventory[i] = null;
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-  };
-
-  // Factorio Intermediate Auto-Crafting Resolver
-  const resolveFactorioCraftPlan = (
-    s: GameState,
-    targetRecipe: Recipe,
-    targetCount: number = 1
-  ): {
-    canCraft: boolean;
-    maxPossible: number;
-    steps: { recipe: Recipe; count: number; refundInputs: { itemId: string; count: number }[] }[];
-    missingItems: { itemId: string; need: number; has: number; canAutoCraft: boolean }[];
-  } => {
-    const isFree = s.freeCraft || s.godMode;
-    if (isFree) {
-      return {
-        canCraft: true,
-        maxPossible: 100,
-        steps: [{
-          recipe: targetRecipe,
-          count: targetCount,
-          refundInputs: []
-        }],
-        missingItems: []
-      };
-    }
-
-    // Clone available items pool
-    const pool: Record<string, number> = {};
-    for (const item of s.inventory) {
-      if (item) pool[item.id] = (pool[item.id] || 0) + item.count;
-    }
-    for (const row of s.tiles) {
-      for (const tile of row) {
-        if (tile.kind === "placed_item" && isChestBuilding(tile.placedItemId) && tile.chestInventory) {
-          for (const item of tile.chestInventory) {
-            if (item) pool[item.id] = (pool[item.id] || 0) + item.count;
-          }
-        }
-      }
-    }
-
-    const steps: { recipe: Recipe; count: number; refundInputs: { itemId: string; count: number }[] }[] = [];
-    const missing: { itemId: string; need: number; has: number; canAutoCraft: boolean }[] = [];
-
-    // Recursive helper
-    const resolveNeeds = (recipe: Recipe, multiplier: number, depth = 0): boolean => {
-      if (depth > 8) return false;
-      for (const input of recipe.inputs) {
-        const need = input.count * multiplier;
-        const have = pool[input.itemId] || 0;
-        if (have >= need) {
-          pool[input.itemId] = have - need;
-        } else {
-          const subRecipe = CRAFTING_RECIPES.find((r) => r.outputId === input.itemId);
-          if (!subRecipe) {
-            missing.push({ itemId: input.itemId, need, has: have, canAutoCraft: false });
-            return false;
-          }
-
-          if (subRecipe.techRequired && !(s.unlockedTechs || []).includes(subRecipe.techRequired)) {
-            missing.push({ itemId: input.itemId, need, has: have, canAutoCraft: false });
-            return false;
-          }
-
-          const stillNeed = need - have;
-          pool[input.itemId] = 0;
-          const subMultiplier = Math.ceil(stillNeed / (subRecipe.outputCount || 1));
-          const subSuccess = resolveNeeds(subRecipe, subMultiplier, depth + 1);
-          if (!subSuccess) {
-            missing.push({ itemId: input.itemId, need: stillNeed, has: have, canAutoCraft: true });
-            return false;
-          }
-          steps.push({
-            recipe: subRecipe,
-            count: subMultiplier,
-            refundInputs: subRecipe.inputs.map((inp) => ({ itemId: inp.itemId, count: inp.count * subMultiplier }))
-          });
-        }
-      }
-      return true;
-    };
-
-    const success = resolveNeeds(targetRecipe, targetCount, 0);
-    if (success) {
-      steps.push({
-        recipe: targetRecipe,
-        count: targetCount,
-        refundInputs: targetRecipe.inputs.map((inp) => ({ itemId: inp.itemId, count: inp.count * targetCount }))
-      });
-    }
-
-    return {
-      canCraft: success,
-      maxPossible: 1,
-      steps,
-      missingItems: missing
-    };
+    return low;
   };
 
   const handleStartCrafting = (recipe: Recipe, multiplier: number = 1, isShift: boolean = false) => {
@@ -2628,84 +2339,115 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
 
     let craftCount = multiplier;
     if (isShift) {
-      // Craft as many as possible
-      let maxCraft = 1;
-      for (let test = 2; test <= 50; test++) {
-        const testPlan = resolveFactorioCraftPlan(state, recipe, test);
-        if (testPlan.canCraft) maxCraft = test;
-        else break;
-      }
-      craftCount = maxCraft;
+      craftCount = Math.max(1, maxCraftable(state, recipe));
     }
 
-    const plan = resolveFactorioCraftPlan(state, recipe, craftCount);
+    const plan = planHandcraft(state, recipe, craftCount);
     if (!plan.canCraft) {
       const missingNames = plan.missingItems.map(m => `${ITEM_DEFS[m.itemId]?.name || m.itemId} (need ${m.need}, have ${m.has})`).join(", ");
       toast.error(`Missing ingredients: ${missingNames}`);
       return;
     }
 
-    setState((prev) => {
-      const next = structuredClone(prev);
-      if (!isFree) {
-        // Deduct raw ingredients required by all steps in plan
-        for (const step of plan.steps) {
-          for (const refund of step.refundInputs) {
-            deductGlobalItems(next, refund.itemId, refund.count);
-          }
-        }
+    const itemDef = ITEM_DEFS[recipe.outputId];
+    const id = `${recipe.id}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    setState(prev => {
+      const job = planHandcraft(prev, recipe, craftCount);
+      if (!job.canCraft) return prev;
+      const inventory = inventoryCopy(prev.inventory);
+      for (const input of job.inputs) deductItems(inventory, input.itemId, input.count);
+      return { ...prev, inventory, handcraftQueue: [...prev.handcraftQueue ?? [], {
+        id,
+        recipeId: recipe.id,
+        name: craftCount > 1 ? `${recipe.name} ×${craftCount}` : recipe.name,
+        iconSymbol: itemDef?.iconSymbol || "⚙",
+        iconColor: itemDef?.iconColor || "#94a3b8",
+        progress: 0,
+        duration: job.seconds,
+        remainingTime: job.seconds,
+        refundInputs: job.inputs,
+        outputs: job.outputs,
+      }] };
+    });
+    toast.info(`Queued ${craftCount} × ${recipe.name}${plan.intermediates ? ` (+${plan.intermediates} intermediate crafts)` : ""}`, { id: "workbench-queued" });
+  };
+
+  const handleCancelQueuedCraft = (index: number) => {
+    setState(prev => {
+      const job = prev.handcraftQueue?.[index];
+      if (!job) return prev;
+      const inventory = inventoryCopy(prev.inventory);
+      for (const input of job.refundInputs) {
+        const stack = createItem(input.itemId, input.count);
+        if (!addItem(inventory, stack)) inventory.push(stack);
       }
-
-      // Add steps to crafting queue
-      setCraftingQueue((prevQueue) => {
-        const newItems = [];
-        for (const step of plan.steps) {
-          const itemDef = ITEM_DEFS[step.recipe.outputId];
-          const duration = isFree ? 0.2 : (step.recipe.craftTimeSeconds || 0.5);
-          for (let c = 0; c < step.count; c++) {
-            newItems.push({
-              id: `${step.recipe.id}_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-              recipeId: step.recipe.id,
-              name: step.recipe.name,
-              iconSymbol: itemDef?.iconSymbol || "⚙",
-              iconColor: itemDef?.iconColor || "#94a3b8",
-              progress: 0,
-              duration,
-              remainingTime: duration,
-              refundInputs: isFree ? [] : step.recipe.inputs.map(inp => ({ itemId: inp.itemId, count: inp.count }))
-            });
-          }
-        }
-        return [...prevQueue, ...newItems];
-      });
-
-      const totalItemsQueued = plan.steps.reduce((sum, s) => sum + s.count, 0);
-      toast.info(`Queued ${craftCount}x ${recipe.name}${plan.steps.length > 1 ? ` (+${totalItemsQueued - craftCount} auto-chained intermediates)` : ""} ${isFree ? "⚡" : ""}!`);
-      return next;
+      toast.info(`Cancelled ${job.name} and refunded materials.`, { id: "workbench-cancelled" });
+      return { ...prev, inventory, handcraftQueue: prev.handcraftQueue!.filter((_, position) => position !== index) };
     });
   };
 
-  const handleCancelQueuedCraft = (idx: number) => {
-    setCraftingQueue((prev) => {
-      if (idx < 0 || idx >= prev.length) return prev;
-      const target = prev[idx];
-      setState((prevState) => {
-        const next = structuredClone(prevState);
-        if (target.refundInputs) {
-          for (const refund of target.refundInputs) {
-            addItem(next.inventory, createItem(refund.itemId, refund.count));
-          }
-          toast.info(`Cancelled ${target.name} craft — ingredients refunded! ↩️`);
-        }
-        return next;
+  const withinReach = (current: GameState, coords: { x: number; y: number }) =>
+    Math.hypot(coords.x - current.player.x, coords.y - current.player.y) <= (current.player.reachDistance ?? 8);
+
+  const canHandMine = (current: GameState, pos: { x: number; y: number }) => {
+    if (!withinReach(current, pos)) return false;
+    const tile = (current.inMine ? current.mineGrid : current.inHouse ? current.houseGrid : current.tiles)?.[pos.y]?.[pos.x];
+    const tool = current.inventory[current.hotbarIndex]?.id;
+    return Boolean(tile && (tool === "pickaxe" && (tile.kind.startsWith("ore_") || tile.kind === "debris_stone")
+      || tool === "axe" && (tile.kind === "tree" || tile.kind === "debris_branch")));
+  };
+
+  const mineTile = (pos: { x: number; y: number }) => {
+    setState(prev => {
+      if (!canHandMine(prev, pos)) return prev;
+      return editTile(prev, pos, next => {
+        const result = interact(next, 1, pos);
+        particlesRef.current.push(...result.particles);
+        if (result.message) toast(result.message, { id: "mining-result", duration: 1000 });
       });
-      return prev.filter((_, i) => i !== idx);
+    });
+  };
+
+  // Copy the affected row and inventory to avoid cloning the entire world while dragging belts.
+  const editTile = (current: GameState, coords: { x: number; y: number }, edit: (next: GameState, grid: Tile[][]) => void) => {
+    const zone = current.inMine ? "mineGrid" : current.inHouse ? "houseGrid" : "tiles";
+    const grid = current[zone]!.slice();
+    grid[coords.y] = grid[coords.y].slice();
+    if (!grid[coords.y]?.[coords.x]) return current;
+    grid[coords.y][coords.x] = structuredClone(grid[coords.y][coords.x]);
+    const next = {
+      ...current, [zone]: grid, inventory: inventoryCopy(current.inventory), player: { ...current.player },
+      experience: { ...current.experience }, skills: { ...current.skills }, quest: current.quest && { ...current.quest },
+    };
+    edit(next, grid);
+    return next;
+  };
+
+  const layBelt = (coords: { x: number; y: number }) => {
+    setState(prev => {
+      const held = prev.inventory[prev.hotbarIndex];
+      const grid = prev.inHouse ? prev.houseGrid! : prev.inMine ? prev.mineGrid : prev.tiles;
+      const tile = grid[coords.y]?.[coords.x];
+      if (!held || !isConveyor(held.id) || !tile || !withinReach(prev, coords) || getFactoryPlacementIssue(tile, held.id)) return prev;
+      return editTile(prev, coords, next => { interact(next, 1, coords); });
     });
   };
 
   const handleCanvasMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const coords = getMouseTileCoords(e.clientX, e.clientY);
     hoveredTileRef.current = coords;
+    const last = beltDrag.current;
+    if (last && (e.buttons & 1) && coords && (last.x !== coords.x || last.y !== coords.y)) {
+      const stepX = Math.sign(coords.x - last.x);
+      const stepY = Math.sign(coords.y - last.y);
+      if (stepX === 0 || stepY === 0) {
+        const distance = Math.min(20, Math.max(Math.abs(coords.x - last.x), Math.abs(coords.y - last.y)));
+        for (let i = 1; i <= distance; i++) layBelt({ x: last.x + stepX * i, y: last.y + stepY * i });
+      } else {
+        layBelt(coords);
+      }
+      beltDrag.current = coords;
+    }
 
     if (zoningMode !== "none" && isDraggingZone.current && coords) {
       const curState = stateRef.current;
@@ -2726,7 +2468,46 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
   };
 
   const handleCanvasMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    const pointer = getMouseTileCoords(e.clientX, e.clientY);
+    if (e.button === 2 && pointer && canHandMine(stateRef.current, pointer)) {
+      hoveredTileRef.current = pointer;
+      miningHold.current = true;
+      mineTile(pointer);
+      return;
+    }
     if (e.button === 0) {
+      const current = stateRef.current;
+      const coords = getMouseTileCoords(e.clientX, e.clientY);
+      const held = current.inventory[current.hotbarIndex];
+      if (e.shiftKey && coords && withinReach(current, coords)) {
+        setState(prev => editTile(prev, coords, (next, grid) => {
+          const tile = grid[coords.y][coords.x];
+          if (tile.structureHp === undefined) return;
+          const slot = next.inventory.findIndex(item => item?.id === "repair_pack");
+          if (slot < 0) {
+            toast.info("A repair pack is needed.", { id: "repair-needed" });
+            return;
+          }
+          tile.structureHp = undefined;
+          removeItem(next.inventory, slot);
+          toast.success("Structure repaired.", { id: "repair-complete" });
+        }));
+        return;
+      }
+      if (e.ctrlKey && coords && withinReach(current, coords)) {
+        setState(prev => editTile(prev, coords, (next, grid) => {
+          const tile = grid[coords.y][coords.x];
+          const loaded = tile.placedItemId === "gun_turret" ? loadDefenseAmmo(tile, next.inventory) : fuelMachine(tile, next.inventory);
+          if (loaded > 0) toast.success(`Loaded ${loaded} ${tile.placedItemId === "gun_turret" ? "rounds" : "fuel"}.`);
+          else toast.info(tile.placedItemId === "gun_turret" ? "Ammo slot full or no compatible ammunition." : "Fuel slot full or no compatible fuel.");
+        }));
+        return;
+      }
+      if (zoningMode === "none" && !current.blueprint?.mode && held && isConveyor(held.id) && coords) {
+        beltDrag.current = coords;
+        layBelt(coords);
+        return;
+      }
       if (zoningMode !== "none") {
         isDraggingZone.current = true;
         const coords = getMouseTileCoords(e.clientX, e.clientY);
@@ -2746,18 +2527,20 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
             });
           }
         }
-      } else {
-        startContinuousAction();
       }
     }
   };
 
   const handleCanvasMouseUp = () => {
+    miningHold.current = false;
+    beltDrag.current = null;
     isDraggingZone.current = false;
     stopContinuousAction();
   };
 
   const handleCanvasMouseLeave = () => {
+    miningHold.current = false;
+    beltDrag.current = null;
     hoveredTileRef.current = null;
     isDraggingZone.current = false;
     stopContinuousAction();
@@ -2796,7 +2579,7 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
           const maxY = Math.max(start.y, coords.y);
 
           const curGrid = curState.inHouse ? curState.houseGrid! : (curState.inMine ? curState.mineGrid : curState.tiles);
-          const saved: { relX: number; relY: number; placedItemId: string; direction?: string }[] = [];
+          const saved: NonNullable<NonNullable<GameState["blueprint"]>["savedEntities"]> = [];
 
           for (let y = minY; y <= maxY; y++) {
             for (let x = minX; x <= maxX; x++) {
@@ -2807,6 +2590,7 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
                   relY: y - minY,
                   placedItemId: tile.placedItemId,
                   direction: tile.direction,
+                  recipeId: tile.assemblerRecipeId,
                 });
               }
             }
@@ -2817,7 +2601,7 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
               ...prev,
               blueprint: { mode: "stamp", startTile: null, currentTile: null, savedEntities: saved },
             }));
-            toast.success(`📋 Blueprint Copied ${saved.length} entities! Click anywhere to STAMP!`);
+            toast.success(`📋 Blueprint Copied ${saved.length} entities! Choose the top-left tile to build it!`);
           } else {
             toast.warning("No placed factory entities found in selected rectangle.");
             setState((prev) => ({ ...prev, blueprint: { mode: null, startTile: null, currentTile: null, savedEntities: [] } }));
@@ -2838,64 +2622,54 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
           const minY = Math.min(start.y, coords.y);
           const maxY = Math.max(start.y, coords.y);
 
-          let count = 0;
-          setState((prev) => {
+          setState(prev => {
             const next = structuredClone(prev);
-            const grid = next.inHouse ? next.houseGrid! : (next.inMine ? next.mineGrid : next.tiles);
-
+            const grid = next.inHouse ? next.houseGrid! : next.inMine ? next.mineGrid : next.tiles;
+            let count = 0;
             for (let y = minY; y <= maxY; y++) {
               for (let x = minX; x <= maxX; x++) {
-                const tile = grid[y][x];
-                if (tile.kind === "placed_item" && tile.placedItemId) {
-                  const itemId = tile.placedItemId;
-                  const itemObj = createItem(itemId, 1);
-                  addItem(next.inventory, itemObj);
-                  grid[y][x].kind = next.inHouse ? "house_floor" : (next.inMine ? "mine_dirt" : "grass");
-                  grid[y][x].placedItemId = undefined;
-                  count++;
-                }
+                if (withinReach(next, { x, y }) && dismantleTile(next, grid, x, y)) count++;
               }
             }
             next.blueprint = { mode: null, startTile: null, currentTile: null, savedEntities: prev.blueprint?.savedEntities || [] };
+            toast.info(count ? `Dismantled ${count} entities.` : "No machines dismantled. Check reach and inventory space.", { id: "blueprint-dismantle" });
             return next;
           });
-
-          toast.success(`✂️ Deconstructed ${count} entities back into inventory!`);
         }
         return;
       } else if (mode === "stamp" && bp.savedEntities && bp.savedEntities.length > 0) {
-        let placedCount = 0;
-        setState((prev) => {
+        setState(prev => {
           const next = structuredClone(prev);
-          const grid = next.inHouse ? next.houseGrid! : (next.inMine ? next.mineGrid : next.tiles);
+          const grid = next.inHouse ? next.houseGrid! : next.inMine ? next.mineGrid : next.tiles;
+          const originalSlot = next.hotbarIndex;
+          const originalDirection = next.placementDirection;
+          let placedCount = 0;
 
-          bp.savedEntities!.forEach((ent) => {
-            const tx = coords.x + ent.relX;
-            const ty = coords.y + ent.relY;
-
-            if (ty >= 0 && ty < grid.length && tx >= 0 && tx < grid[0].length) {
-              const targetTile = grid[ty][tx];
-              if (targetTile.kind !== "water" && targetTile.kind !== "mine_wall" && targetTile.kind !== "placed_item") {
-                targetTile.kind = "placed_item";
-                targetTile.placedItemId = ent.placedItemId;
-                targetTile.direction = (ent.direction as any) || "right";
-                placedCount++;
-              }
+          for (const ent of bp.savedEntities!) {
+            const position = { x: coords.x + ent.relX, y: coords.y + ent.relY };
+            const target = grid[position.y]?.[position.x];
+            const slot = next.inventory.findIndex(item => item?.id === ent.placedItemId);
+            if (slot < 0 || !target || !withinReach(next, position) || getFactoryPlacementIssue(target, ent.placedItemId)) continue;
+            next.hotbarIndex = slot;
+            next.placementDirection = ent.direction;
+            interact(next, 1, position);
+            if (target.placedItemId === ent.placedItemId) {
+              if (ent.recipeId) target.assemblerRecipeId = ent.recipeId;
+              placedCount++;
             }
-          });
+          }
 
+          next.hotbarIndex = originalSlot;
+          next.placementDirection = originalDirection;
           next.blueprint = { ...prev.blueprint, mode: null };
+          toast.info(`Built ${placedCount} / ${bp.savedEntities!.length} blueprint entities. Check materials and reach for incomplete placements.`, { id: "blueprint-placement" });
           return next;
         });
-
-        toast.success(`📌 Stamped ${placedCount} blueprint entities onto map!`);
         return;
       }
     }
 
-    const p = curState.player;
-    const dist = Math.abs(coords.x - p.x) + Math.abs(coords.y - p.y);
-    if (dist > 5) {
+    if (!withinReach(curState, coords)) {
       toast.error("Target tile is out of reach!");
       return;
     }
@@ -2952,7 +2726,7 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
     const hasEntity = clickedAnimal || clickedPet || clickedWorker || clickedNpc;
     const isTool = held && (held.type === "tool" || held.id === "fishing_rod");
 
-    if ((isInteractive || hasEntity) && !isTool) {
+    if ((isInteractive || hasEntity) && (!isTool || tile?.kind === "placed_item")) {
       if (clickedAnimal) {
         setState((prev) => {
           const next = structuredClone(prev);
@@ -3046,8 +2820,7 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
         }
       }
     } else {
-      setState((prev) => {
-        const next = structuredClone(prev);
+      setState(prev => editTile(prev, coords, next => {
         const act = interact(next, 1, coords);
         if (act.particles.length > 0) {
           particlesRef.current = [...particlesRef.current, ...act.particles];
@@ -3063,13 +2836,19 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
             maxAge: 0.8,
           });
         }
-        return next;
-      });
+      }));
     }
   };
 
   const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (zoningMode !== "none") return;
+    if (zoningMode !== "none" || e.ctrlKey || e.shiftKey) return;
+    const current = stateRef.current;
+    if (!current.blueprint?.mode && isConveyor(current.inventory[current.hotbarIndex]?.id)) {
+      const tilePos = getMouseTileCoords(e.clientX, e.clientY);
+      const grid = current.inMine ? current.mineGrid : current.inHouse ? current.houseGrid! : current.tiles;
+      const target = tilePos && grid[tilePos.y]?.[tilePos.x];
+      if (!target?.placedItemId || isConveyor(target.placedItemId)) return;
+    }
     const coords = getMouseTileCoords(e.clientX, e.clientY);
     if (coords) handleTileInteraction(coords);
   };
@@ -3092,8 +2871,23 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
     });
   };
 
+  const closeInventory = (open: boolean) => {
+    if (!open && heldItem) {
+      setState(prev => {
+        const inventory = inventoryCopy(prev.inventory);
+        if (!addItem(inventory, heldItem.item)) inventory.push(heldItem.item);
+        return { ...prev, inventory };
+      });
+      setHeldItem(null);
+    }
+    setInventoryOpen(open);
+  };
+
+  const getSlotTile = () => factorioInspectorTile ?? chestOpenTile;
+
   // Inventory slot clicks
   const handleSlotClick = (index: number, source: "inventory" | "chest" | "shipping" | "furnace", e?: React.MouseEvent) => {
+    const chestOpenTile = getSlotTile();
     if (e && e.shiftKey && chestOpenTile && (source === "inventory" || source === "chest")) {
       e.preventDefault();
       setState(prev => {
@@ -3291,6 +3085,7 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
   };
 
   const handleSlotRightClick = (e: React.MouseEvent, index: number, source: "inventory" | "chest" | "shipping" | "furnace") => {
+    const chestOpenTile = getSlotTile();
     e.preventDefault(); // Prevent context menu
     let curGrid = state.inventory;
     if (source === "inventory") {
@@ -3701,32 +3496,20 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
   };
 
 
+  const loadout = equippedWeapon(state);
+
   return (
     <div
       ref={mainContainerRef}
-      className={`flex flex-col items-center justify-center transition-all duration-300 ${isFullscreen
-          ? "fixed inset-0 z-[100] w-screen h-[100dvh] p-0 m-0 bg-[#18110e] text-slate-200 overflow-hidden"
-          : "w-full max-w-4xl px-2"
-        }`}
+      className={isFullscreen ? "fixed inset-0 z-[100] overflow-hidden bg-[#242b22]" : "h-full w-full overflow-hidden bg-[#242b22]"}
     >
-      {/* Game Screen Frame */}
-      <div
-        className={`relative overflow-hidden bg-black transition-all duration-300 ${isFullscreen
-            ? "border-0 rounded-none w-screen h-[100dvh]"
-            : "rounded-xl border-4 border-[#2d3033] bg-[#141517] shadow-2xl"
-          }`}
-        style={{
-          height: isFullscreen ? "100dvh" : `${canvasSize.height}px`,
-          width: isFullscreen ? "100vw" : "704px",
-          maxWidth: isFullscreen ? "none" : "704px"
-        }}
-      >
+      <div className="relative h-full w-full overflow-hidden">
         {/* Real-time Performance & FPS Overlay Bar */}
         {(state.settings?.showFpsOverlay ?? true) && (
           <div className="absolute top-2 right-2 z-30 flex items-center gap-2 bg-black/85 border border-emerald-500/60 px-2 py-1 rounded text-[10px] font-mono text-emerald-300 pointer-events-none select-none shadow-md backdrop-blur">
             <span className="font-bold flex items-center gap-1">
               <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-              {realFps} FPS
+              {realFps} FPS · {realUps} UPS
             </span>
             <span className="text-slate-500">|</span>
             <span>{realFrameTime} ms</span>
@@ -3744,6 +3527,7 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
         )}
 
         <canvas
+          aria-label="MeadowLife world"
           ref={canvasRef}
           width={canvasSize.width}
           height={canvasSize.height}
@@ -3779,7 +3563,7 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
 
         {/* Dynamic Exploration Compass & Waypoint Bar */}
         {!state.inMine && !state.inHouse && (
-          <div className="absolute top-3 left-1/2 -translate-x-1/2 z-20 hidden md:flex items-center gap-1.5 bg-black/80 border border-slate-700/80 px-3 py-1 rounded-full text-[10px] font-mono text-slate-200 backdrop-blur shadow-lg select-none">
+          <div className="absolute bottom-3 left-3 z-20 hidden xl:flex items-center gap-1.5 bg-black/80 border border-slate-700/80 px-3 py-1 rounded-full text-[10px] font-mono text-slate-200 backdrop-blur shadow-lg select-none">
             <span className="text-amber-400 font-bold flex items-center gap-1">
               🧭 COMPASS
             </span>
@@ -3860,104 +3644,46 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
           </div>
         )}
 
-        {/* Factorio Campaign / Starter & Advanced Mission Widget */}
-        {campaignWidgetOpen && (
-          <div className="absolute top-14 left-3 z-20 max-w-[290px] bg-[#161a22]/95 border-2 border-orange-500/80 rounded-lg p-2.5 shadow-2xl backdrop-blur text-slate-100 font-mono text-xs select-none">
-            <div className="flex items-center justify-between border-b border-orange-500/40 pb-1 mb-1.5">
-              <div className="flex items-center gap-1">
-                <button
-                  onClick={() => setCampaignTab("basics")}
-                  className={`text-[10px] font-bold px-1.5 py-0.5 rounded transition-all cursor-pointer ${campaignTab === "basics" ? "bg-orange-500 text-black" : "text-slate-400 hover:text-slate-200"}`}
-                >
-                  🚀 Basics
-                </button>
-                <button
-                  onClick={() => setCampaignTab("advanced")}
-                  className={`text-[10px] font-bold px-1.5 py-0.5 rounded transition-all cursor-pointer ${campaignTab === "advanced" ? "bg-orange-500 text-black" : "text-slate-400 hover:text-slate-200"}`}
-                >
-                  ⚙️ Advanced
-                </button>
-              </div>
-              <div className="flex items-center gap-1">
-                <button
-                  onClick={() => setCampaignMinimized(prev => !prev)}
-                  title={campaignMinimized ? "Expand" : "Minimize"}
-                  className="text-slate-400 hover:text-slate-100 px-1 text-[10px] cursor-pointer"
-                >
-                  {campaignMinimized ? "➕" : "➖"}
-                </button>
-                <button
-                  onClick={() => setCampaignWidgetOpen(false)}
-                  title="Close Widget"
-                  className="text-slate-400 hover:text-red-400 px-1 text-[10px] cursor-pointer"
-                >
-                  ✕
-                </button>
-              </div>
+        {!state.inMine && !state.inHouse && (
+          <section className="yard-brief absolute top-14 left-3 z-20 select-none" aria-label="Ironworks commissioning">
+            <div className="yard-brief__heading">
+              <span>Meadow Works</span>
+              <button onClick={() => setCampaignMinimized(value => !value)} aria-label={campaignMinimized ? "Expand work order" : "Collapse work order"}>{campaignMinimized ? "+" : "−"}</button>
             </div>
-
-            {!campaignMinimized && campaignTab === "basics" && (
+            {!campaignMinimized && (
               <>
-                <p className="text-[10px] text-amber-200/90 mb-1.5 leading-snug">
-                  As an introduction to crafting, let's craft some simple iron plates.
-                </p>
-                <div className="space-y-1 text-[9.5px]">
-                  <div className="p-1 bg-zinc-900/80 rounded border border-zinc-800">
-                    <span className="text-orange-400 font-bold">1. </span>
-                    <span className="text-slate-200">Place a <b>Burner mining drill</b> onto an <b>Iron ore</b> field.</span>
-                  </div>
-                  <div className="p-1 bg-zinc-900/80 rounded border border-zinc-800">
-                    <span className="text-orange-400 font-bold">2. </span>
-                    <span className="text-slate-200">Place a <b>Stone furnace</b> directly in front of the drill output.</span>
-                  </div>
-                  <div className="p-1 bg-zinc-900/80 rounded border border-zinc-800">
-                    <span className="text-orange-400 font-bold">3. </span>
-                    <span className="text-slate-200">Fill both the drill and furnace with <b>Fuel (Coal or Logs)</b>.</span>
-                  </div>
-                  <div className="p-1 bg-zinc-900/80 rounded border border-zinc-800">
-                    <span className="text-orange-400 font-bold">4. </span>
-                    <span className="text-slate-200">Collect smelted <b>Iron plates</b> manually (<kbd className="bg-zinc-800 px-1 rounded text-orange-300">F</kbd>) or with an <b>Inserter</b>.</span>
-                  </div>
+                <h2>Commission the ironworks</h2>
+                <div className="yard-progress" role="progressbar" aria-label="Iron plates smelted" aria-valuemin={0} aria-valuemax={10} aria-valuenow={Math.min(10, state.productionStats?.produced.iron_bar ?? 0)}>
+                  <span style={{ width: `${Math.min(100, (state.productionStats?.produced.iron_bar ?? 0) * 10)}%` }} />
                 </div>
-                <div className="mt-1.5 pt-1 border-t border-zinc-800 text-[9px] text-slate-400 italic">
-                  💡 This entire process is referred to as 'smelting'. Copper ore must also be smelted.
-                </div>
+                <p className="yard-brief__count">{Math.min(10, state.productionStats?.produced.iron_bar ?? 0)} / 10 iron plates smelted</p>
+                {(state.productionStats?.produced.iron_bar ?? 0) < 10 ? (
+                  <>
+                    <p>Find the gray iron seam east of the farmhouse. Build a drill there and point it toward a belt.</p>
+                    <p>Run the belt into a furnace. <kbd>Ctrl</kbd> + click each burner machine to load fuel.</p>
+                    <p>Put a burner inserter between the furnace and a chest, facing the chest.</p>
+                  </>
+                ) : (
+                  <p>{(state.patrol?.repelled ?? 0) === 0 ? "Iron line commissioned. Build a wall and turret. Ctrl-click the gun turret to load it, and open Survey to check its coverage." : "Perimeter secured. Feed science packs to a powered lab and use a second line for copper."}</p>
+                )}
               </>
             )}
-
-            {!campaignMinimized && campaignTab === "advanced" && (
-              <>
-                <p className="text-[10px] text-orange-300 mb-1.5 leading-snug">
-                  Crafting of items can be automated using Assembling machines.
-                </p>
-                <div className="space-y-1 text-[9.5px]">
-                  <div className="p-1 bg-zinc-900/80 rounded border border-zinc-800">
-                    <span className="text-orange-400 font-bold">1. </span>
-                    <span className="text-slate-200">Place an <b>Assembling machine</b> and select your desired recipe.</span>
-                  </div>
-                  <div className="p-1 bg-zinc-900/80 rounded border border-zinc-800">
-                    <span className="text-orange-400 font-bold">2. </span>
-                    <span className="text-slate-200">Supply ingredients continuously via <b>Belts & Inserters</b> into input slots.</span>
-                  </div>
-                  <div className="p-1 bg-zinc-900/80 rounded border border-zinc-800">
-                    <span className="text-orange-400 font-bold">3. </span>
-                    <span className="text-slate-200"><b>No Auto-Chain:</b> Each craft step needs a dedicated machine (e.g. Lamp needs Copper cable + Iron stick + Circuit assemblers).</span>
-                  </div>
-                  <div className="p-1 bg-zinc-900/80 rounded border border-zinc-800">
-                    <span className="text-orange-400 font-bold">4. </span>
-                    <span className="text-slate-200">Extract crafted items with <b>Output Inserters</b> for downstream usage.</span>
-                  </div>
-                </div>
-                <div className="mt-1.5 pt-1 border-t border-zinc-800 text-[9px] text-slate-400 italic">
-                  💡 Higher tiers of assembling machines are required for complex recipes & fluids.
-                </div>
-              </>
-            )}
-          </div>
+          </section>
         )}
 
+        {!state.inMine && !state.inHouse && (
+          <div className={`field-alert ${state.patrol?.active ? "field-alert--active" : ""}`} role="status">
+            {state.patrol?.active ? "Perimeter breach · Defend the yard" : (state.productionStats?.pollutionTotal ?? 0) >= (state.patrol?.nextAt ?? 1100) * .70 ? "Scouts approaching · Prepare defenses" : (state.patrol?.repelled ?? 0) > 0 ? `${state.patrol!.repelled} raids repelled` : ""}
+          </div>
+        )}
+        <div className="field-loadout">
+          <span>{loadout.item?.name ?? "Unarmed"}</span>
+          {loadout.item && <span>{loadout.rounds} ammo</span>}
+          <kbd>B</kbd>
+        </div>
+
         {/* Floating Top-Left Action Bar (Separated Mobile & Desktop View) */}
-        <div className="absolute top-3 left-3 z-20 flex items-center gap-1 bg-[#202224]/85 border border-slate-700 p-1 font-mono shadow-md select-none">
+        <div className="absolute top-3 left-3 z-20 flex items-center gap-1 bg-[#222922]/95 border border-[#656853] p-1 font-mono shadow-md select-none">
           {/* Mobile Quick Menu Hamburger Button */}
           <button
             onClick={() => setMobileQuickMenuOpen(true)}
@@ -3966,15 +3692,6 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
           >
             <span>☰</span>
             <span className="text-[10px] uppercase tracking-wider hidden sm:inline">MENU</span>
-          </button>
-
-          {/* Touch Controls Toggle Button */}
-          <button
-            onClick={() => setShowTouchControls((prev) => !prev)}
-            title="Toggle Mobile Touch Controls"
-            className={`w-8 h-8 flex items-center justify-center bg-[#2a2c2e] hover:bg-[#ff9200]/20 border transition-all cursor-pointer font-bold text-xs ${showTouchControls ? "border-emerald-500 text-emerald-400 bg-emerald-500/10" : "border-slate-600 text-slate-300"}`}
-          >
-            📱
           </button>
 
           {/* Quick Backpack Button */}
@@ -3988,33 +3705,12 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
 
           {/* Desktop Only Buttons */}
           <div className="hidden md:flex items-center gap-1">
-            {/* Pierre's Shop Button */}
-            <button
-              onClick={() => setShopOpen(true)}
-              title="Pierre's Shop"
-              className="w-8 h-8 flex items-center justify-center bg-[#2a2c2e] hover:bg-[#ff9200]/20 border border-slate-600 hover:border-[#ff9200] text-slate-100 transition-all cursor-pointer font-bold text-xs"
-            >
-              <Coins className="h-4 w-4 text-yellow-500" />
-            </button>
-
-            {/* Multiplayer Rooms Button */}
-            <button
-              onClick={() => setMultiplayerOpen(true)}
-              title="Multiplayer Rooms & Separate Maps"
-              className="h-8 px-2 flex items-center justify-center gap-1 bg-[#2a2c2e] hover:bg-[#38b2ac]/20 border border-slate-600 hover:border-[#38b2ac] text-slate-100 transition-all cursor-pointer font-bold text-xs"
-            >
-              <Users className="h-4 w-4 text-[#38b2ac]" />
-              <span className="text-[#38b2ac] text-[10px]">
-                {state.currentRoomCode ? `[${state.currentRoomCode}]` : "Rooms"}
-              </span>
-            </button>
-
             {/* Factorio Alt-Mode Toggle Button */}
             <button
               onClick={() => {
                 setState((prev) => {
                   const nextAlt = !prev.altMode;
-                  toast(`Factorio Alt-Mode: ${nextAlt ? "ENABLED (Info Overlay On) 🔍" : "DISABLED ❌"}`);
+                  toast(`Machine overlay: ${nextAlt ? "ENABLED (Info Overlay On) 🔍" : "DISABLED ❌"}`);
                   return { ...prev, altMode: nextAlt };
                 });
               }}
@@ -4031,7 +3727,7 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
                 setState((prev) => {
                   const currentMode = prev.blueprint?.mode;
                   const nextMode = currentMode === "copy" ? null : "copy";
-                  toast(`Factorio Blueprint Copy: ${nextMode ? "ACTIVE (Drag rectangle to copy factory)" : "OFF"}`);
+                  toast(`Blueprint copy: ${nextMode ? "ACTIVE (Drag rectangle to copy factory)" : "OFF"}`);
                   return {
                     ...prev,
                     blueprint: {
@@ -4043,7 +3739,7 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
                   };
                 });
               }}
-              title="Factorio Blueprint Copy (Ctrl+C): Drag rectangle to copy factory entities"
+              title="Copy a rectangular area (Ctrl+C)"
               className={`h-8 px-2 flex items-center justify-center gap-1 bg-[#2a2c2e] hover:bg-cyan-500/20 border transition-all cursor-pointer font-bold text-xs ${state.blueprint?.mode === "copy" ? "border-cyan-400 text-cyan-400 bg-cyan-500/20 animate-pulse" : "border-slate-600 text-slate-300 hover:border-cyan-400"}`}
             >
               <span className="text-cyan-400 text-xs">📋</span>
@@ -4060,7 +3756,7 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
                 setState((prev) => {
                   const currentMode = prev.blueprint?.mode;
                   const nextMode = currentMode === "stamp" ? null : "stamp";
-                  toast(`Factorio Stamp: ${nextMode ? "ACTIVE (Click to stamp copied layout)" : "OFF"}`);
+                  toast(`Blueprint placement: ${nextMode ? "ACTIVE (Click to stamp copied layout)" : "OFF"}`);
                   return {
                     ...prev,
                     blueprint: {
@@ -4070,7 +3766,7 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
                   };
                 });
               }}
-              title="Factorio Stamp (Ctrl+V): Stamp copied blueprint onto factory map"
+              title="Place the copied layout (Ctrl+V)"
               className={`h-8 px-2 flex items-center justify-center gap-1 bg-[#2a2c2e] hover:bg-emerald-500/20 border transition-all cursor-pointer font-bold text-xs ${state.blueprint?.mode === "stamp" ? "border-emerald-400 text-emerald-400 bg-emerald-500/20 animate-pulse" : "border-slate-600 text-slate-300 hover:border-emerald-400"}`}
             >
               <span className="text-emerald-400 text-xs">📌</span>
@@ -4083,7 +3779,7 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
                 setState((prev) => {
                   const currentMode = prev.blueprint?.mode;
                   const nextMode = currentMode === "deconstruct" ? null : "deconstruct";
-                  toast(`Factorio Deconstruction Planner: ${nextMode ? "ACTIVE (Drag red box to batch deconstruct)" : "OFF"}`);
+                  toast(`Batch dismantle: ${nextMode ? "ACTIVE (Drag red box to batch deconstruct)" : "OFF"}`);
                   return {
                     ...prev,
                     blueprint: {
@@ -4095,21 +3791,11 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
                   };
                 });
               }}
-              title="Factorio Deconstruction Planner (Ctrl+X): Drag red rectangle to deconstruct area"
+              title="Dismantle a rectangular area (Ctrl+X)"
               className={`h-8 px-2 flex items-center justify-center gap-1 bg-[#2a2c2e] hover:bg-red-500/20 border transition-all cursor-pointer font-bold text-xs ${state.blueprint?.mode === "deconstruct" ? "border-red-500 text-red-400 bg-red-500/20 animate-pulse" : "border-slate-600 text-slate-300 hover:border-red-500"}`}
             >
               <span className="text-red-400 text-xs">✂️</span>
               <span className="text-red-400 text-[10px]">Deconstruct</span>
-            </button>
-
-            {/* Player Wardrobe / Dress Customization Button */}
-            <button
-              onClick={() => setWardrobeOpen(true)}
-              title="Player Character Dress & Appearance Customization"
-              className="h-8 px-2 flex items-center justify-center gap-1 bg-[#2a2c2e] hover:bg-orange-500/20 border border-slate-600 hover:border-orange-500 text-slate-100 transition-all cursor-pointer font-bold text-xs"
-            >
-              <span className="text-orange-400 text-xs">👕</span>
-              <span className="text-orange-400 text-[10px]">Dress</span>
             </button>
 
             {/* Graphics & FPS Settings Button */}
@@ -4120,28 +3806,6 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
             >
               <span className="text-cyan-400 text-xs">⚙️</span>
               <span className="text-cyan-400 text-[10px]">Settings</span>
-            </button>
-
-            {/* Cloud Save Sync Button */}
-            <button
-              onClick={handleCloudSave}
-              title="Cloud Save & Remote Sync State"
-              className="h-8 px-2 flex items-center justify-center gap-1 bg-[#2a2c2e] hover:bg-sky-500/20 border border-slate-600 hover:border-sky-400 text-slate-100 transition-all cursor-pointer font-bold text-xs"
-            >
-              <span className="text-sky-400 text-xs">☁️</span>
-              <span className="text-sky-400 text-[10px]">
-                {state.cloudSave?.cloudStatus === "saving" ? "Saving..." : "Cloud Save"}
-              </span>
-            </button>
-
-            {/* Factorio Save / Load Manager Button */}
-            <button
-              onClick={() => { setSaveLoadOpen(true); loadSavedSlotsFromStorage(); }}
-              title="Save & Load Games (Manage Chosen Saves)"
-              className="h-8 px-2 flex items-center justify-center gap-1 bg-[#2a2c2e] hover:bg-emerald-500/20 border border-slate-600 hover:border-emerald-500 text-slate-100 transition-all cursor-pointer font-bold text-xs"
-            >
-              <span className="text-emerald-400 text-xs">💾</span>
-              <span className="text-emerald-400 text-[10px]">Saves</span>
             </button>
 
             {/* Sleep (Save & Grow) Button */}
@@ -4163,24 +3827,17 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
               <span className="text-[#22d3ee] text-[10px]">Guide (H)</span>
             </button>
 
+            <button onClick={() => setChartOpen(true)} title="Survey map (M)" className="yard-command h-8 px-2">Survey <kbd>M</kbd></button>
             {/* Production Statistics Button (P) */}
             <button
               onClick={() => setProductionStatsOpen(true)}
-              title="Factorio Production Statistics (P)"
+              title="Production statistics (P)"
               className="h-8 px-2 flex items-center justify-center gap-1 bg-[#2a2c2e] hover:bg-orange-500/20 border border-slate-600 hover:border-orange-500 text-slate-100 transition-all cursor-pointer font-bold text-xs font-mono"
             >
               <span className="text-orange-400 text-sm">📊</span>
               <span className="text-orange-400 text-[10px]">Stats (P)</span>
             </button>
 
-            {/* Cheat Console Button */}
-            <button
-              onClick={() => { setChatOpen(true); setTimeout(() => chatInputRef.current?.focus(), 50); }}
-              title="Cheat Console (/)"
-              className={`w-8 h-8 flex items-center justify-center bg-[#2a2c2e] hover:bg-[#a78bfa]/20 border transition-all cursor-pointer font-bold text-xs font-mono ${state.godMode ? "border-amber-500 bg-amber-500/10 animate-pulse" : "border-slate-600 hover:border-[#a78bfa]"}`}
-            >
-              <span className={`text-sm font-black ${state.godMode ? "text-amber-400" : "text-[#a78bfa]"}`}>/</span>
-            </button>
             {/* Zoom Controls */}
             <div className="flex items-center bg-[#202224] border border-slate-700">
               <button
@@ -4273,7 +3930,7 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
                 <span className="text-2xl">⚙️</span>
                 <div>
                   <div className="font-bold text-xs text-orange-400">Crafting</div>
-                  <div className="text-[9px] text-slate-400">Factorio Logistics</div>
+                  <div className="text-[9px] text-slate-400">Factory logistics</div>
                 </div>
               </button>
 
@@ -4527,11 +4184,14 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
           <div className="flex items-center gap-0.5 sm:gap-1 bg-[#202224]/90 border border-slate-700 p-0.5 sm:p-1 shadow-2xl">
             {state.inventory.slice(0, 10).map((item, idx) => {
               const selected = state.hotbarIndex === idx;
+              const icon = item && getYardItemIcon(item.id);
               const slotKey = idx === 9 ? "0" : (idx + 1).toString();
               return (
                 <button
                   key={idx}
                   onClick={() => setState((prev) => ({ ...prev, hotbarIndex: idx }))}
+                  title={item ? `${item.name} (${slotKey})` : `Empty slot (${slotKey})`}
+                  aria-pressed={selected}
                   className={`relative flex flex-col items-center justify-center w-[30px] h-[30px] sm:w-[44px] sm:h-[44px] transition-all cursor-pointer select-none rounded-none ${selected
                       ? "border-2 border-[#ff9200] bg-[#ff9200]/20 scale-[1.06] shadow-[0_0_8px_rgba(255,146,0,0.5)] z-10"
                       : "border border-slate-700 bg-[#141517] hover:bg-slate-800"
@@ -4544,9 +4204,9 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
 
                   {item ? (
                     <>
-                      <span className="text-sm sm:text-2xl mt-0.5 sm:mt-1 select-none" style={{ textShadow: "1px 1px 0px rgba(0,0,0,0.5)" }}>
-                        {item.iconSymbol || "🎁"}
-                      </span>
+                      {icon ? <img src={icon} alt="" className="h-7 w-7 object-contain" draggable={false} /> : (
+                        <span className="text-sm sm:text-xl mt-0.5 select-none">{item.iconSymbol || item.name.slice(0, 1)}</span>
+                      )}
                       {item.count > 1 && (
                         <span className="absolute bottom-0 right-0.5 px-0.5 bg-black/85 text-[7px] sm:text-[8px] font-bold text-white font-mono leading-none">
                           {item.count}
@@ -4826,7 +4486,7 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
         )}
 
         {/* Floating monospaced guide helper in bottom left */}
-        <div className="absolute bottom-1 left-3 z-10 hidden sm:flex flex-col text-[8px] font-mono text-slate-500 leading-normal bg-black/30 p-1 pointer-events-none select-none">
+        <div className="hidden flex-col text-[8px] font-mono text-slate-500 leading-normal bg-black/30 p-1 pointer-events-none select-none">
           <span>KEYS 1-0: SELECT SLOT</span>
           <span>SHIFT: SPRINT</span>
         </div>
@@ -5516,16 +5176,39 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
         )}
       </Dialog>
 
+      <Dialog open={chartOpen} onOpenChange={setChartOpen}>
+        <DialogContent container={mainContainerRef.current} className="survey-sheet max-w-[850px] w-[96vw]">
+          <DialogHeader>
+            <DialogTitle>Meadow Basin Survey</DialogTitle>
+            <DialogDescription>Locate resources and check the perimeter.</DialogDescription>
+          </DialogHeader>
+          <div className="survey-tools">
+            <button className="yard-command" aria-pressed={chartMode === "local"} onClick={() => setChartMode("local")}>Yard</button>
+            <button className="yard-command" aria-pressed={chartMode === "region"} onClick={() => setChartMode("region")}>Region</button>
+            <button className="yard-command" aria-pressed={chartPollution} onClick={() => setChartPollution(on => !on)}>Emissions</button>
+            <span>E {state.player.x} · N {state.player.y}</span>
+          </div>
+          <canvas className="survey-canvas" ref={chartRef} width={780} height={460} aria-label="Terrain survey" />
+          <div className="survey-key">
+            <span><i style={{background: "#f7edb9"}} />Engineer</span>
+            <span><i style={{background: "#bcb8a6"}} />Iron</span>
+            <span><i style={{background: "#c48965"}} />Copper</span>
+            <span><i style={{background: "#292b23"}} />Coal</span>
+            <span><i style={{background: "#ed8a72"}} />Scouts</span>
+            <span><i style={{background: "#cbb972"}} />Turret range</span>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* D. FACTORIO CHARACTER & LOGISTICS JOURNAL GUI */}
-      <Dialog open={inventoryOpen} onOpenChange={setInventoryOpen}>
-        <DialogContent container={mainContainerRef.current} className="w-[98vw] max-w-5xl max-h-[92dvh] bg-[#1d2127] border-[3px] border-[#3a4454] text-slate-100 rounded-sm font-mono shadow-[0_10px_35px_rgba(0,0,0,0.95)] overflow-hidden p-3 sm:p-4 select-none">
+      {inventoryOpen && (<Dialog open={inventoryOpen} onOpenChange={closeInventory}>
+        <DialogContent container={mainContainerRef.current} className="w-[98vw] max-w-5xl max-h-[92dvh] bg-[#1d2127] border-[3px] border-[#3a4454] text-slate-100 rounded-sm font-mono shadow-[0_10px_35px_rgba(0,0,0,0.95)] overflow-y-auto p-3 sm:p-4 select-none">
           {/* Factorio Steel Bevel Header Bar */}
           <DialogHeader className="m-0 p-0">
             <DialogTitle className="text-xs sm:text-sm font-black uppercase tracking-wider flex items-center justify-between text-[#ff9200] border-b-2 border-[#2d3542] pb-2 bg-[#161a20] -mt-3 -mx-3 sm:-mt-4 sm:-mx-4 px-3 sm:px-4 pt-2.5">
               <div className="flex items-center gap-2">
                 <span className="text-base">🏭</span>
                 <span className="text-slate-100 font-extrabold">CHARACTER & CRAFTING</span>
-                <span className="text-[10px] text-amber-400 bg-amber-950/80 px-2 py-0.5 border border-amber-600/60 rounded">FACTORIO GUI</span>
               </div>
               <div className="flex items-center gap-3 text-xs">
                 <span className="text-yellow-400 font-bold">🪙 {state.coins}G</span>
@@ -5544,38 +5227,17 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
               <div>
                 {/* Character Equipment Bar */}
                 <div className="flex flex-wrap items-center justify-between gap-1.5 p-1.5 bg-[#12151a] border border-[#27303d] rounded-sm mb-2">
-                  <div className="flex items-center gap-1.5">
-                    {/* Armor Slot */}
-                    <div className="flex flex-col items-center" title="Equipped Armor Suit">
-                      <span className="text-[7px] font-bold text-zinc-400 uppercase">Armor</span>
-                      <div className="w-8 h-8 bg-[#1d222b] border border-slate-600 rounded-sm flex items-center justify-center text-sm shadow-inner">
-                        🛡️
-                      </div>
-                    </div>
-                    {/* Weapon 1 + Ammo */}
-                    <div className="flex flex-col items-center" title="Primary Weapon & Ammo">
-                      <span className="text-[7px] font-bold text-zinc-400 uppercase">Gun</span>
-                      <div className="flex gap-0.5">
-                        <div className="w-8 h-8 bg-[#1d222b] border border-amber-500/80 rounded-sm flex items-center justify-center text-xs shadow-inner">
-                          🔫
-                        </div>
-                        <div className="w-6 h-8 bg-[#14181f] border border-zinc-700 rounded-sm flex items-center justify-center text-[10px] shadow-inner">
-                          🧰
-                        </div>
-                      </div>
-                    </div>
-                    {/* Weapon 2 */}
-                    <div className="flex flex-col items-center" title="Secondary Weapon & Ammo">
-                      <span className="text-[7px] font-bold text-zinc-400 uppercase">Heavy</span>
-                      <div className="flex gap-0.5">
-                        <div className="w-8 h-8 bg-[#1d222b] border border-zinc-700 rounded-sm flex items-center justify-center text-xs shadow-inner">
-                          💥
-                        </div>
-                        <div className="w-6 h-8 bg-[#14181f] border border-zinc-700 rounded-sm flex items-center justify-center text-[10px] shadow-inner">
-                          🚀
-                        </div>
-                      </div>
-                    </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-stone-400 text-[10px]">Loadout</span>
+                    <select aria-label="Equipped weapon" className="yard-command" value={loadout.item?.id ?? ""} onChange={e => {
+                      const weaponId = e.target.value;
+                      setState(prev => ({ ...prev, player: { ...prev.player, weaponId } }));
+                    }}>
+                      {loadout.item ? [...new Set(state.inventory.filter(item => item?.type === "weapon").map(item => item!.id))]
+                        .filter(id => ["pistol", "submachine_gun", "shotgun", "combat_shotgun"].includes(id))
+                        .map(id => <option key={id} value={id}>{ITEM_DEFS[id].name}</option>) : <option value="">Unarmed</option>}
+                    </select>
+                    {loadout.item && <span className="text-amber-300 text-xs">{loadout.rounds} ammo</span>}
                   </div>
 
                   {/* Right action controls */}
@@ -5585,7 +5247,14 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
                         size="sm"
                         variant="outline"
                         className="text-[9px] h-6 px-1.5 bg-amber-950/80 border-amber-500 text-amber-300 hover:bg-amber-900 rounded-none font-mono"
-                        onClick={() => setHeldItem(null)}
+                        onClick={() => {
+                          setState(prev => {
+                            const inventory = inventoryCopy(prev.inventory);
+                            if (!addItem(inventory, heldItem.item)) inventory.push(heldItem.item);
+                            return { ...prev, inventory };
+                          });
+                          setHeldItem(null);
+                        }}
                       >
                         Clear (Q)
                       </Button>
@@ -5604,7 +5273,7 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
                 {/* Factorio 40-Slot Character Grid (10 columns x 4 rows) */}
                 <div className="bg-[#101318] p-1.5 border border-[#27303d] rounded-sm">
                   <div className="grid grid-cols-10 gap-1">
-                    {state.inventory.slice(0, 40).map((item, idx) => (
+                    {state.inventory.map((item, idx) => (
                       <button
                         key={idx}
                         onClick={(e) => handleSlotClick(idx, "inventory", e)}
@@ -5667,7 +5336,8 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
             {/* ======================================================== */}
             <div className="bg-[#16191f] p-2.5 border-2 border-[#2c3543] rounded-sm flex flex-col justify-between space-y-2">
               <div className="space-y-1.5">
-                {/* Category Buttons Strip */}
+                <input type="search" className="yard-recipe-search" aria-label="Search recipes" placeholder="Search all recipes" value={recipeSearch} onChange={event => setRecipeSearch(event.target.value)} />
+                {/* Recipe categories */}
                 <div className="flex flex-wrap gap-1 border-b border-[#2d3542] pb-1.5">
                   {([
                     { id: "logistics", label: "Logistics", icon: "🚜" },
@@ -5675,7 +5345,6 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
                     { id: "intermediates", label: "Intermediates", icon: "⚙️" },
                     { id: "space", label: "Space", icon: "🚀" },
                     { id: "combat", label: "Combat", icon: "⚔️" },
-                    { id: "cheats", label: "Cheats", icon: "⚡" },
                   ] as const).map((cat) => (
                     <button
                       key={cat.id}
@@ -5694,43 +5363,15 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
 
                 {/* Compact Factorio 8-Column Recipe Grid */}
                 <div className="grid grid-cols-6 sm:grid-cols-8 gap-1 p-1 bg-[#101318] rounded-sm border border-[#27303d] max-h-[220px] overflow-y-auto">
-                  {(craftingCategory as any) === "cheats" ? (
-                    Object.values(ITEM_DEFS).map((itemDef) => (
-                      <button
-                        key={itemDef.id}
-                        onClick={() => {
-                          setState((prev) => {
-                            const next = structuredClone(prev);
-                            addItem(next.inventory, createItem(itemDef.id, 50));
-                            return next;
-                          });
-                        }}
-                        title={`Spawn 50x ${itemDef.name}`}
-                        className="relative flex flex-col items-center justify-center h-10 w-10 rounded-sm border bg-purple-950/40 border-amber-500/60 hover:bg-amber-950/60 text-amber-200 cursor-pointer"
-                      >
-                        <span className="text-lg">{itemDef.iconSymbol || "📦"}</span>
-                        <span className="absolute bottom-0 right-0.5 text-[7.5px] font-bold text-amber-300">+50</span>
-                      </button>
-                    ))
-                  ) : (
-                    (recipesByCategory[craftingCategory] || []).map((recipe) => {
+                  {(recipeSearch.trim() ? CRAFTING_RECIPES.filter(recipe => recipe.name.toLowerCase().includes(recipeSearch.trim().toLowerCase()))
+                    : (recipesByCategory[craftingCategory] || [])).map((recipe) => {
                       const itemDef = ITEM_DEFS[recipe.outputId];
                       const isFree = state.freeCraft || state.godMode;
                       const isTechLocked = !isFree && recipe.techRequired && !(state.unlockedTechs || []).includes(recipe.techRequired);
-                      const plan = resolveFactorioCraftPlan(state, recipe, 1);
+                      const plan = planHandcraft(state, recipe, 1);
                       const canCraft = isFree || (!isTechLocked && plan.canCraft);
 
-                      let maxCount = 0;
-                      if (canCraft) {
-                        if (isFree) maxCount = 100;
-                        else {
-                          for (let c = 1; c <= 50; c++) {
-                            const test = resolveFactorioCraftPlan(state, recipe, c);
-                            if (test.canCraft) maxCount = c;
-                            else break;
-                          }
-                        }
-                      }
+                      const maxCount = canCraft ? (isFree ? 100 : maxCraftable(state, recipe)) : 0;
 
                       return (
                         <FactorioCraftingIcon
@@ -5748,8 +5389,7 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
                           onContextMenu={() => handleStartCrafting(recipe, 5, false)}
                         />
                       );
-                    })
-                  )}
+                    })}
                 </div>
               </div>
 
@@ -5758,7 +5398,7 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
                 {hoveredRecipe ? (() => {
                   const itemDef = ITEM_DEFS[hoveredRecipe.outputId];
                   const isTechLocked = hoveredRecipe.techRequired && !(state.unlockedTechs || []).includes(hoveredRecipe.techRequired);
-                  const plan = resolveFactorioCraftPlan(state, hoveredRecipe, 1);
+                  const plan = planHandcraft(state, hoveredRecipe, 1);
 
                   return (
                     <div className="space-y-1">
@@ -5772,7 +5412,7 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
                       {/* Ingredient Flow Diagram */}
                       <div className="flex items-center gap-1 overflow-x-auto py-1">
                         {hoveredRecipe.inputs.map((inp) => {
-                          const playerHas = getGlobalItemCount(state, inp.itemId);
+                          const playerHas = getGlobalItemCount(state.inventory, inp.itemId);
                           const hasDirect = playerHas >= inp.count;
                           return (
                             <div key={inp.itemId} className={`px-1.5 py-0.5 rounded-sm border flex items-center gap-1 ${hasDirect ? "border-green-800 bg-green-950/30 text-green-300" : "border-amber-800 bg-amber-950/30 text-amber-300"}`}>
@@ -5824,12 +5464,12 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
           </div>
 
           <DialogFooter className="border-t border-[#2d3542] pt-2 mt-2 flex justify-end">
-            <Button variant="outline" className="text-xs bg-[#161a20] border-slate-600 text-slate-300 hover:bg-[#202836] rounded-none font-mono" onClick={() => setInventoryOpen(false)}>
+            <Button variant="outline" className="text-xs bg-[#161a20] border-slate-600 text-slate-300 hover:bg-[#202836] rounded-none font-mono" onClick={() => closeInventory(false)}>
               Back to Game (E)
             </Button>
           </DialogFooter>
         </DialogContent>
-      </Dialog>
+      </Dialog>)}
 
       {/* E. CHEST STORAGE INTERFACE */}
       {chestOpenTile && (() => {
@@ -6161,11 +5801,11 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
             : isLab
               ? "Science Research Lab"
               : isPower
-                ? (id === "generator" ? "Steam Power Generator (500kW)" : id === "solar_panel" ? "Solar Panel (60kW)" : id === "battery" ? "Accumulator Battery (5MJ)" : "Electric Power Pole")
+                ? (id === "generator" ? "Steam Generator (900 kW)" : id === "solar_panel" ? "Solar Panel (60kW)" : id === "battery" ? "Accumulator Battery (5MJ)" : "Electric Power Pole")
                 : "Industrial Machine";
 
         const powerStats = state.powerGridStats || { capacityKw: 0, demandKw: 0, satisfaction: 1.0 };
-        const powerPct = Math.round((powerStats.satisfaction || 1.0) * 100);
+        const powerPct = Math.round(powerStats.satisfaction * 100);
 
         return (
           <Dialog open={true} onOpenChange={() => setFactorioInspectorTile(null)}>
@@ -6197,6 +5837,9 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
                   </div>
                 </div>
 
+                {(id === "boiler" || id === "generator") && (
+                  <p className="text-xs text-stone-300">Place the boiler within three tiles of water and the steam generator. Ctrl + click the boiler to refuel.</p>
+                )}
                 {/* 1. ASSEMBLING MACHINE RECIPE & INVENTORY */}
                 {isAssembler && (
                   <div className="space-y-3">
@@ -6304,13 +5947,22 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
                   <div className="space-y-3 bg-[#111419] p-3 rounded-xs border border-[#263140]">
                     <div className="flex items-center justify-between text-xs">
                       <span className="text-stone-300 font-bold">Target Ore Deposit:</span>
-                      <span className="text-amber-400 font-extrabold uppercase">{tile.drillTargetOre || "stone"}</span>
+                      <span className="text-amber-400 font-extrabold">{ITEM_DEFS[tile.drillTargetOre ?? "stone"]?.name}{tile.depositRemaining !== undefined && ` · ${tile.depositRemaining} left`}</span>
                     </div>
                     <div className="flex items-center justify-between text-xs">
                       <span className="text-stone-300 font-bold">Ejection Direction:</span>
                       <span className="text-emerald-400 font-extrabold uppercase">{tile.direction || "right"}</span>
                     </div>
 
+                    <p className="text-[11px] text-stone-400 capitalize">{tile.machineStatus ?? "idle"} · {Math.round((tile.drillTimer ?? 0) * 100)}% of next extraction</p>
+                    {tile.chestInventory?.[2] && (
+                      <button type="button" className="text-emerald-300 underline" onClick={() => {
+                        setState(prev => editTile(prev, factorioInspectorTile, (next, grid) => {
+                          const inv = grid[factorioInspectorTile.y][factorioInspectorTile.x].chestInventory!;
+                          if (inv[2] && addItem(next.inventory, inv[2])) inv[2] = null;
+                        }));
+                      }}>Take {tile.chestInventory[2].count} × {tile.chestInventory[2].name}</button>
+                    )}
                     {id === "burner_drill" && (
                       <div>
                         <span className="text-[10px] text-stone-400 font-bold block mb-1">COAL FUEL SLOT</span>
@@ -6555,14 +6207,14 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
               <DialogHeader>
                 <DialogTitle className="text-lg font-bold flex items-center gap-2 text-orange-400 border-b border-zinc-700 pb-2">
                   <Flame className={`h-5 w-5 ${isActive ? "text-orange-500 animate-pulse" : "text-zinc-500"}`} />
-                  <span>Stone Furnace</span>
+                  <span>{ITEM_DEFS[tile.placedItemId ?? "stone_furnace"]?.name ?? "Furnace"}</span>
                 </DialogTitle>
               </DialogHeader>
 
               <div className="space-y-6 py-2">
                 <div className="flex items-center justify-between bg-zinc-950 p-4 rounded border border-zinc-800">
                   <div className="flex flex-col items-center gap-1">
-                    <span className="text-[10px] text-zinc-500 font-bold">INPUT (3 Ores)</span>
+                    <span className="text-[10px] text-zinc-500 font-bold">ORE INPUT</span>
                     <button
                       onClick={() => handleSlotClick(0, "furnace")}
                       onContextMenu={(e) => handleSlotRightClick(e, 0, "furnace")}
@@ -7032,28 +6684,27 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
               <div className="grid grid-cols-2 gap-2 text-center">
                 <div className="p-2 bg-emerald-950/40 border border-emerald-800/60 rounded">
                   <span className="text-emerald-400 font-bold block text-sm">PRODUCTION FLOW</span>
-                  <span className="text-[10px] text-zinc-400">Total items synthesized per minute</span>
+                  <span className="text-[10px] text-zinc-400">Items produced by machines</span>
                 </div>
                 <div className="p-2 bg-red-950/40 border border-red-800/60 rounded">
                   <span className="text-red-400 font-bold block text-sm">CONSUMPTION FLOW</span>
-                  <span className="text-[10px] text-zinc-400">Total raw materials processed</span>
+                  <span className="text-[10px] text-zinc-400">Materials and fuel used</span>
                 </div>
               </div>
 
               {/* Items Table */}
               <div className="bg-zinc-950 p-2 rounded border border-zinc-800 space-y-1.5 max-h-[360px] overflow-y-auto">
-                {[
-                  { id: "iron_bar", name: "Iron Plate", prod: 120, cons: 85, icon: "🔩" },
-                  { id: "copper_bar", name: "Copper Plate", prod: 90, cons: 60, icon: "🟫" },
-                  { id: "copper_wire", name: "Copper Cable", prod: 180, cons: 150, icon: "🧵" },
-                  { id: "iron_gear", name: "Iron Gear Wheel", prod: 60, cons: 45, icon: "⚙️" },
-                  { id: "electronic_circuit", name: "Electronic Circuit (Green)", prod: 45, cons: 30, icon: "🟩" },
-                  { id: "advanced_circuit", name: "Advanced Circuit (Red)", prod: 15, cons: 10, icon: "🟥" },
-                  { id: "steel_plate", name: "Steel Plate", prod: 24, cons: 18, icon: "🛡️" },
-                  { id: "automation_science_pack", name: "Automation Science (Red)", prod: 12, cons: 12, icon: "🧪" },
-                  { id: "logistic_science_pack", name: "Logistic Science (Green)", prod: 10, cons: 10, icon: "🧪" },
-                ].map((row) => {
-                  const maxRate = Math.max(row.prod, row.cons, 1);
+                {!state.productionStats || Object.keys(state.productionStats.produced).length + Object.keys(state.productionStats.consumed).length === 0 ? (
+                  <p className="p-3 text-zinc-400">Production and consumption totals appear when machinery starts running.</p>
+                ) : [...new Set([...Object.keys(state.productionStats.produced), ...Object.keys(state.productionStats.consumed)])].map(id => {
+                  const row = {
+                    id,
+                    name: ITEM_DEFS[id]?.name ?? id,
+                    icon: ITEM_DEFS[id]?.iconSymbol ?? "•",
+                    prod: state.productionStats!.produced[id] ?? 0,
+                    cons: state.productionStats!.consumed[id] ?? 0,
+                  };
+                  const maxCount = Math.max(row.prod, row.cons, 1);
                   return (
                     <div key={row.id} className="flex items-center gap-3 p-1.5 bg-zinc-900/60 rounded border border-zinc-800 text-[11px]">
                       <span className="text-xl shrink-0">{row.icon}</span>
@@ -7062,15 +6713,15 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
                       {/* Production & Consumption Bars */}
                       <div className="flex-1 flex flex-col gap-1">
                         <div className="flex items-center gap-1.5">
-                          <span className="text-[9px] text-emerald-400 font-bold w-12 text-right">+{row.prod}/m</span>
+                          <span className="text-[9px] text-emerald-400 font-bold w-12 text-right">+{row.prod}</span>
                           <div className="flex-1 bg-zinc-800 h-2 rounded-none overflow-hidden">
-                            <div className="bg-emerald-500 h-full" style={{ width: `${(row.prod / maxRate) * 100}%` }} />
+                            <div className="bg-emerald-500 h-full" style={{ width: `${(row.prod / maxCount) * 100}%` }} />
                           </div>
                         </div>
                         <div className="flex items-center gap-1.5">
-                          <span className="text-[9px] text-red-400 font-bold w-12 text-right">-{row.cons}/m</span>
+                          <span className="text-[9px] text-red-400 font-bold w-12 text-right">−{row.cons}</span>
                           <div className="flex-1 bg-zinc-800 h-2 rounded-none overflow-hidden">
-                            <div className="bg-red-500 h-full" style={{ width: `${(row.cons / maxRate) * 100}%` }} />
+                            <div className="bg-red-500 h-full" style={{ width: `${(row.cons / maxCount) * 100}%` }} />
                           </div>
                         </div>
                       </div>
@@ -7087,56 +6738,19 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
               <div className="p-3 bg-zinc-950 border border-zinc-800 rounded space-y-2">
                 <div className="flex justify-between items-center text-sm font-bold text-amber-400">
                   <span>POWER SATISFACTION</span>
-                  <span>{Math.round((state.powerGridStats?.satisfaction || 1.0) * 100)}%</span>
+                  <span>{Math.round((state.powerGridStats?.satisfaction ?? 1.0) * 100)}%</span>
                 </div>
                 <div className="w-full bg-zinc-800 h-3 border border-zinc-700 overflow-hidden">
                   <div
                     className="bg-gradient-to-r from-emerald-500 to-green-400 h-full transition-all"
-                    style={{ width: `${Math.min(100, (state.powerGridStats?.satisfaction || 1.0) * 100)}%` }}
+                    style={{ width: `${Math.min(100, (state.powerGridStats?.satisfaction ?? 1.0) * 100)}%` }}
                   />
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
-                {/* Generation breakdown */}
-                <div className="p-3 bg-emerald-950/30 border border-emerald-800/60 rounded space-y-2">
-                  <h4 className="font-extrabold text-emerald-300 text-xs flex justify-between">
-                    <span>⚡ POWER GENERATION</span>
-                    <span>{state.powerGridStats?.capacityKw || 900} kW</span>
-                  </h4>
-                  <div className="space-y-1 text-[11px] text-zinc-300">
-                    <div className="flex justify-between">
-                      <span>Steam Engine Generators</span>
-                      <span className="font-bold text-emerald-400">900 kW</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Solar Array (Daylight)</span>
-                      <span className="font-bold text-emerald-400">60 kW</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Demand breakdown */}
-                <div className="p-3 bg-red-950/30 border border-red-800/60 rounded space-y-2">
-                  <h4 className="font-extrabold text-red-300 text-xs flex justify-between">
-                    <span>⚡ FACTORY CONSUMPTION</span>
-                    <span>{state.powerGridStats?.demandKw || 350} kW</span>
-                  </h4>
-                  <div className="space-y-1 text-[11px] text-zinc-300">
-                    <div className="flex justify-between">
-                      <span>Electric Mining Drills</span>
-                      <span className="font-bold text-red-400">180 kW</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Assembling Machines</span>
-                      <span className="font-bold text-red-400">150 kW</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Robotic Inserters</span>
-                      <span className="font-bold text-red-400">20 kW</span>
-                    </div>
-                  </div>
-                </div>
+                <div className="p-3 border border-emerald-800/60 rounded text-emerald-300">Generation · {Math.round(state.powerGridStats?.capacityKw ?? 0)} kW</div>
+                <div className="p-3 border border-red-800/60 rounded text-red-300">Demand · {Math.round(state.powerGridStats?.demandKw ?? 0)} kW</div>
               </div>
             </div>
           )}
@@ -7148,7 +6762,7 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
                 <div className="p-3 bg-red-950/40 border border-red-800/80 rounded space-y-1.5">
                   <span className="text-red-400 font-extrabold text-xs block">🌫️ TOTAL EMITTED POLLUTION</span>
                   <div className="text-2xl font-black text-white font-mono">
-                    {Math.round(state.productionStats?.pollutionTotal || 240)} <span className="text-xs text-red-400 font-normal">units</span>
+                    {Math.round(state.productionStats?.pollutionTotal ?? 0)} <span className="text-xs text-red-400 font-normal">units</span>
                   </div>
                   <span className="text-[9px] text-zinc-400">Boilers, Furnaces & Drills contribute to global cloud</span>
                 </div>
@@ -7172,7 +6786,7 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
             <DialogTitle className="text-base sm:text-lg font-black uppercase tracking-wider flex items-center justify-between text-[#ff9200]">
               <div className="flex items-center gap-2">
                 <span className="text-xl">💾</span>
-                <span>FACTORIO SAVE & LOAD MANAGER</span>
+                <span>MEADOWLIFE SAVES</span>
               </div>
               <span className="text-[10px] text-amber-300 bg-amber-950/80 px-2 py-0.5 border border-amber-600/50 rounded">
                 LOCAL STORAGE SAVES
@@ -7330,7 +6944,7 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
                     type="text"
                     value={saveNameInput}
                     onChange={(e) => setSaveNameInput(e.target.value)}
-                    placeholder={`e.g. Nauvis Main Base - Day ${state.day}`}
+                    placeholder={`e.g. Meadow Works - Day ${state.day}`}
                     className="flex-1 bg-[#101318] border border-slate-600 focus:border-[#ff9200] px-3 py-2 text-slate-100 text-xs font-mono outline-none rounded-none"
                   />
                   <Button
@@ -7389,7 +7003,7 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
             <div className="p-3 bg-[#181a1f] border-2 border-orange-500/70 rounded-lg space-y-2.5 shadow-md">
               <div className="flex items-center justify-between border-b border-orange-500/30 pb-1.5">
                 <h3 className="font-extrabold text-orange-400 text-sm flex items-center gap-2">
-                  <span>🚀</span> FACTORIO BASICS — INTRODUCTION TO CRAFTING & SMELTING
+                  <span>🚀</span> Crafting and smelting
                 </h3>
                 <span className="text-[10px] text-orange-300 font-mono bg-orange-950/60 px-2 py-0.5 rounded border border-orange-500/30">
                   wiki.factorio.com/Crafting
@@ -7437,7 +7051,7 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
             <div className="p-3 bg-[#181a1f] border-2 border-emerald-500/70 rounded-lg space-y-2.5 shadow-md">
               <div className="flex items-center justify-between border-b border-emerald-500/30 pb-1.5">
                 <h3 className="font-extrabold text-emerald-400 text-sm flex items-center gap-2">
-                  <span>⚙️</span> FACTORIO ADVANCED — AUTOMATED ASSEMBLY & CHAIN CRAFTING
+                  <span>⚙️</span> Assembly and production chains
                 </h3>
                 <span className="text-[10px] text-emerald-300 font-mono bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-500/30">
                   wiki.factorio.com/Assembling_machine
@@ -7485,7 +7099,7 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
             <div className="p-3 bg-[#181a1f] border-2 border-amber-500/50 rounded-lg space-y-3 shadow-md">
               <div className="flex items-center justify-between border-b border-amber-500/30 pb-1.5">
                 <h3 className="font-extrabold text-amber-400 text-sm flex items-center gap-2">
-                  <span>📊</span> FACTORIO CHEAT SHEET — GOLDEN RATIOS
+                  <span>📊</span> Factory planning
                 </h3>
                 <span className="text-[10px] text-zinc-400 font-mono bg-zinc-900 px-2 py-0.5 rounded border border-zinc-800">
                   factoriocheatsheet.com
@@ -8122,17 +7736,17 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
                 <label className="text-slate-200 font-bold flex justify-between">
                   <span>🚀 Target FPS Limiter:</span>
                   <span className="text-cyan-400 font-bold">
-                    {(state.settings?.fpsLimit ?? 40) === 0 ? "UNLIMITED (Max)" : `${state.settings?.fpsLimit ?? 40} FPS`}
+                    {(state.settings?.fpsLimit ?? 60) === 0 ? "UNLIMITED (Max)" : `${state.settings?.fpsLimit ?? 60} FPS`}
                   </span>
                 </label>
                 <div className="flex gap-1.5 pt-1">
-                  {[30, 40, 60, 120, 144, 0].map((fps) => (
+                  {[30, 60, 120, 144, 0].map((fps) => (
                     <Button
                       key={fps}
                       size="sm"
                       onClick={() => handleUpdateSettings({ fpsLimit: fps as any })}
                       className={`flex-1 text-[10px] font-bold ${
-                        (state.settings?.fpsLimit ?? 40) === fps
+                        (state.settings?.fpsLimit ?? 60) === fps
                           ? "bg-cyan-500 text-black hover:bg-cyan-400 border-cyan-400 font-extrabold"
                           : "bg-zinc-800 text-slate-300 border-zinc-700 hover:border-cyan-500"
                       }`}
@@ -8395,195 +8009,7 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
         </Dialog>
       )}
 
-      {/* 6. INFO CARD */}
-      <div className="w-full max-w-[704px] p-4 bg-[#0d1117] border-2 border-[#1e293b] text-xs text-slate-300 leading-relaxed rounded-lg shadow-md font-mono">
-        <p className="font-bold text-[#ff9200] mb-1 flex items-center justify-between">
-          <span>🏭 Factorio & Farming Controls</span>
-          <span className="text-[10px] text-emerald-400 font-bold">Direction: {(state.placementDirection || "right").toUpperCase()}</span>
-        </p>
-        <div className="grid grid-cols-3 gap-x-4 gap-y-0.5 text-slate-400 text-[11px]">
-          <span><kbd className="bg-slate-800 px-1 rounded text-white text-[9px]">WASD</kbd> Move</span>
-          <span><kbd className="bg-slate-800 px-1 rounded text-white text-[9px]">E/Space</kbd> Interact / Place</span>
-          <span><kbd className="bg-[#ff9200] text-black font-extrabold px-1 rounded text-[9px]">R</kbd> Rotate Belts / Drills</span>
-          <span><kbd className="bg-slate-800 px-1 rounded text-white text-[9px]">I/Esc</kbd> Crafting & Bag</span>
-          <span><kbd className="bg-slate-800 px-1 rounded text-white text-[9px]">F</kbd> Inspect Machine</span>
-          <span><kbd className="bg-slate-800 px-1 rounded text-white text-[9px]">/</kbd> Cheat Console</span>
-        </div>
-      </div>
     </div>
   );
 
-}
-
-let _cachedMinimapCanvas: HTMLCanvasElement | null = null;
-let _lastMinimapTerrainRender = 0;
-let _cachedMinimapMode = "";
-
-function drawMinimap(
-  ctx: CanvasRenderingContext2D,
-  state: GameState,
-  viewWidth: number,
-  viewHeight: number,
-  customWaypoints?: Array<{ id: string; name: string; icon: string; x: number; y: number; color: string }>
-) {
-  const isMine = state.inMine;
-  const grid = isMine ? state.mineGrid : state.tiles;
-  if (!grid || grid.length === 0) return;
-  const rows = grid.length;
-  const cols = grid[0]?.length || 0;
-  if (cols === 0) return;
-
-  const w = ctx.canvas.width;
-  const h = ctx.canvas.height;
-  const currentMode = `${isMine ? "mine_" + state.mineDepth : "farm"}_${rows}x${cols}`;
-  const now = performance.now();
-
-  if (!_cachedMinimapCanvas) {
-    _cachedMinimapCanvas = document.createElement("canvas");
-  }
-  if (_cachedMinimapCanvas.width !== w || _cachedMinimapCanvas.height !== h) {
-    _cachedMinimapCanvas.width = w;
-    _cachedMinimapCanvas.height = h;
-    _lastMinimapTerrainRender = 0;
-  }
-
-  // Only re-rasterize tiles once every 1500ms or when changing map/floors
-  if (now - _lastMinimapTerrainRender > 1500 || _cachedMinimapMode !== currentMode) {
-    _lastMinimapTerrainRender = now;
-    _cachedMinimapMode = currentMode;
-
-    const offCtx = _cachedMinimapCanvas.getContext("2d");
-    if (offCtx) {
-      const imgData = offCtx.createImageData(w, h);
-      const data32 = new Uint32Array(imgData.data.buffer);
-      const stepX = cols / w;
-      const stepY = rows / h;
-
-      for (let py = 0; py < h; py++) {
-        const gy = Math.floor(py * stepY);
-        const row = grid[gy];
-        const rowOffset = py * w;
-        for (let px = 0; px < w; px++) {
-          const gx = Math.floor(px * stepX);
-          const tile = row?.[gx];
-          let color = 0xff171514; // #141517
-          if (tile) {
-            if (tile.kind === "grass") {
-              const b = getBiomeAt(gx, gy);
-              switch (b.kind) {
-                case "mountain": color = b.name.includes("Frosted") ? 0xfff0e6dc : 0xff6f675d; break;
-                case "badlands": color = 0xff3a5aab; break;
-                case "swamp": color = 0xff284839; break;
-                case "forest": color = 0xff265732; break;
-                case "beach": color = 0xff77bad2; break;
-                default: color = 0xff388d4f; break;
-              }
-            } else {
-              switch (tile.kind) {
-                case "water": color = 0xff423812; break; // #123842
-                case "path": color = 0xff695547; break; // #475569
-                case "soil": color = 0xff222e3a; break; // #3a2e22
-                case "watered": color = 0xff141c24; break; // #241c14
-                case "tree": color = 0xff2f3e2d; break; // #2d3e2f
-                case "house":
-                case "shop": color = 0xff5e4934; break; // #34495e
-                case "mine_cave": color = 0xff000000; break;
-                case "mine_dirt": color = 0xff2a313d; break; // #3d312a
-                case "mine_wall": color = 0xff21252b; break; // #2b2521
-                case "mine_ladder": color = 0xff00d7ff; break; // #ffd700
-                case "debris_weed": color = 0xff68554a; break; // #4a5568
-                case "debris_branch": color = 0xff32485c; break; // #5c4832
-                case "debris_stone": color = 0xff8d8c7f; break; // #7f8c8d
-                case "ore_copper": color = 0xff227ee6; break; // #e67e22
-                case "ore_iron": color = 0xffdb9834; break; // #3498db
-                case "ore_coal": color = 0xff2a2017; break; // #17202a
-                case "ore_uranium": color = 0xff71cc2e; break; // #2ecc71
-                case "ore_gold": color = 0xff0fc4f1; break; // #f1c40f
-                case "placed_item":
-                  if (tile.placedItemId === "mailbox") color = 0xff5e4934;
-                  else if (tile.placedItemId === "chest") color = 0xff0054d3;
-                  else if (tile.placedItemId && tile.placedItemId.startsWith("sprinkler")) color = 0xffdb9834;
-                  else color = 0xffbc47ab;
-                  break;
-              }
-            }
-          }
-          data32[rowOffset + px] = color;
-        }
-      }
-      offCtx.putImageData(imgData, 0, 0);
-    }
-  }
-
-  // Blit pre-rendered background in 1 ultra-fast draw call!
-  ctx.drawImage(_cachedMinimapCanvas, 0, 0);
-
-  const scaleX = w / cols;
-  const scaleY = h / rows;
-
-  if (state.workers) {
-    ctx.fillStyle = "#f39c12";
-    state.workers.forEach((w) => {
-      ctx.fillRect(w.x * scaleX, w.y * scaleY, Math.max(2, scaleX * 1.2), Math.max(2, scaleY * 1.2));
-    });
-  }
-
-  if (state.animals) {
-    ctx.fillStyle = "#f1f1f1";
-    state.animals.forEach((a) => {
-      ctx.fillRect(a.x * scaleX, a.y * scaleY, Math.max(2, scaleX * 1.2), Math.max(2, scaleY * 1.2));
-    });
-  }
-
-  // Draw custom waypoints pins on minimap
-  if (customWaypoints && !isMine) {
-    for (const wp of customWaypoints) {
-      const wx = (wp.x + 0.5) * scaleX;
-      const wy = (wp.y + 0.5) * scaleY;
-      ctx.fillStyle = wp.color || "#e74c3c";
-      ctx.beginPath();
-      ctx.arc(wx, wy, 3.5, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.strokeStyle = "#ffffff";
-      ctx.lineWidth = 1;
-      ctx.stroke();
-    }
-  }
-
-  const flash = Math.floor(Date.now() / 250) % 2 === 0;
-  ctx.fillStyle = flash ? "#ff3d00" : "#ffeb3b";
-  const px = state.player.x;
-  const py = state.player.y;
-  ctx.beginPath();
-  ctx.arc((px + 0.5) * scaleX, (py + 0.5) * scaleY, Math.max(3, scaleX * 1.5), 0, Math.PI * 2);
-  ctx.fill();
-
-  const TILE = 32;
-  const gridCols = isMine ? 24 : COLS;
-  const gridRows = isMine ? 24 : ROWS;
-  const p = state.player;
-  const pSubX = p.subX !== undefined ? p.subX : p.x;
-  const pSubY = p.subY !== undefined ? p.subY : p.y;
-  const cameraX = Math.max(
-    0,
-    Math.min(gridCols * TILE - viewWidth, pSubX * TILE + 16 - viewWidth / 2)
-  );
-  const cameraY = Math.max(
-    0,
-    Math.min(gridRows * TILE - viewHeight, pSubY * TILE + 16 - viewHeight / 2)
-  );
-
-  const startCol = cameraX / TILE;
-  const endCol = (cameraX + viewWidth) / TILE;
-  const startRow = cameraY / TILE;
-  const endRow = (cameraY + viewHeight) / TILE;
-
-  ctx.strokeStyle = "#ffffff";
-  ctx.lineWidth = 1.2;
-  ctx.strokeRect(
-    startCol * scaleX,
-    startRow * scaleY,
-    (endCol - startCol) * scaleX,
-    (endRow - startRow) * scaleY
-  );
 }

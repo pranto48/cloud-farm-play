@@ -1,7 +1,7 @@
 {
-  "name": "farm-app",
-  "version": "1.0.0",
-  "description": "Factorio Industrial Automation & Farming Simulation - Windows Desktop Game",
+  "name": "meadowlife",
+  "version": "1.2.0",
+  "description": "MeadowLife industrial automation and farming simulation",
   "main": "electron/main.cjs",
   "scripts": {
     "dev": "vite",
@@ -9,7 +9,9 @@
     "desktop:start": "electron .",
     "start": "vite build && electron .",
     "desktop:dev": "concurrently \"vite\" \"wait-on tcp:5173 && electron .\"",
-    "desktop:build": "vite build && electron-builder --win portable"
+    "desktop:build": "vite build && electron-builder --win nsis --x64",
+    "desktop:portable": "vite build && electron-builder --win portable --x64",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.23",
@@ -30,7 +32,7 @@
     "autoprefixer": "^10.4.20",
     "concurrently": "^9.1.0",
     "electron": "^33.2.1",
-    "electron-builder": "^25.1.8",
+    "electron-builder": "26.9.0",
     "postcss": "^8.4.49",
     "tailwindcss": "^3.4.17",
     "typescript": "~5.6.2",
@@ -38,23 +40,31 @@
     "wait-on": "^8.0.1"
   },
   "build": {
-    "appId": "com.farm.app.factorio",
-    "productName": "Farm-App",
+    "appId": "com.meadowworks.meadowlife",
+    "productName": "MeadowLife",
     "directories": {
       "output": "dist-electron"
     },
     "win": {
-      "target": "portable",
+      "target": "nsis",
       "icon": "build/icon.png"
     },
     "portable": {
-      "artifactName": "Farm-App.exe"
+      "artifactName": "MeadowLife-Portable.exe"
     },
     "files": [
       "dist/**/*",
       "electron/**/*",
-      "saves/**/*",
       "package.json"
-    ]
+    ],
+    "nsis": {
+      "artifactName": "MeadowLife-Setup-${version}-x64.exe",
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "MeadowLife"
+    }
   }
 }

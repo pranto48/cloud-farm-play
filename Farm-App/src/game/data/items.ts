@@ -1,6 +1,9 @@
+import { CROPS } from "./crops";
+
 export type ItemType =
   | "tool"
   | "resource"
+  | "seed"
   | "weapon"
   | "armor"
   | "furniture"
@@ -26,6 +29,10 @@ export interface Item {
 }
 
 export const ITEM_DEFS: Record<string, Omit<Item, "count">> = {
+  pickaxe: { id: "pickaxe", name: "Pickaxe", type: "tool", description: "Breaks rock and mines ore by hand.", price: 0, iconColor: "#9d9c91", iconSymbol: "⛏️" },
+  axe: { id: "axe", name: "Axe", type: "tool", description: "Harvests wood from trees and branches.", price: 0, iconColor: "#a77554", iconSymbol: "🪓" },
+  hoe: { id: "hoe", name: "Hoe", type: "tool", description: "Prepares ground for planting.", price: 0, iconColor: "#a68d69", iconSymbol: "⚒" },
+  watering_can: { id: "watering_can", name: "Watering Can", type: "tool", description: "Waters planted crops.", price: 0, iconColor: "#7da0a4", iconSymbol: "💧" },
   // ==========================================
   // 1. LOGISTICS (Factorio data.raw Category 1)
   // ==========================================
@@ -2503,6 +2510,18 @@ export const ITEM_DEFS: Record<string, Omit<Item, "count">> = {
 };
 
 export function createItem(id: string, count = 1): Item {
+  const crop = CROPS[id.replace(/_seed$/, "")];
+  if (crop && !ITEM_DEFS[id]) {
+    const seed = id.endsWith("_seed");
+    return {
+      id, count, type: seed ? "seed" : "crop",
+      name: seed ? `${crop.name} Seeds` : crop.name,
+      description: seed ? "Plant in prepared soil." : "Harvested crop.",
+      price: seed ? Math.floor(crop.seedPrice / 2) : crop.sellPrice,
+      iconColor: crop.accent,
+      iconSymbol: seed ? "🌱" : "🌿",
+    };
+  }
   const def = ITEM_DEFS[id];
   if (!def) {
     return {

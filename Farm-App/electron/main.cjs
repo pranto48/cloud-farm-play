@@ -7,25 +7,49 @@ app.commandLine.appendSwitch('disable-gpu-shader-disk-cache');
 
 let mainWindow = null;
 
-// Determine Saves Directory (Portable saves next to exe if possible, else AppData)
+let savesDir;
 function getSavesDir() {
-  const portableDir = path.join(process.cwd(), 'saves');
-  try {
-    if (!fs.existsSync(portableDir)) {
-      fs.mkdirSync(portableDir, { recursive: true });
+  if (!savesDir) {
+    savesDir = path.join(app.getPath("userData"), "saves");
+    fs.mkdirSync(savesDir, { recursive: true });
+
+    // Import the former desktop build's saves once. Preserve both copies.
+    const marker = path.join(savesDir, ".legacy-imported");
+    if (!fs.existsSync(marker)) {
+      const legacyDirs = [
+        path.join(app.getPath("appData"), "Farm-App", "saves"),
+        path.join(app.getPath("appData"), "farm-app", "saves"),
+        path.join(process.cwd(), "saves"),
+        ...(process.env.PORTABLE_EXECUTABLE_DIR ? [path.join(process.env.PORTABLE_EXECUTABLE_DIR, "saves")] : []),
+      ];
+      for (const dir of new Set(legacyDirs)) {
+        if (path.resolve(dir).toLowerCase() === path.resolve(savesDir).toLowerCase() || !fs.existsSync(dir)) continue;
+        try {
+          for (const file of fs.readdirSync(dir, { withFileTypes: true })) {
+            if (!file.isFile() || !/^[a-zA-Z0-9_-]+\.json$/.test(file.name)) continue;
+            try {
+              fs.copyFileSync(path.join(dir, file.name), path.join(savesDir, file.name), fs.constants.COPYFILE_EXCL);
+            } catch (error) {
+              if (error.code !== "EEXIST") throw error;
+            }
+          }
+        } catch (error) {
+          console.warn("Could not import legacy saves:", error.message);
+        }
+      }
+      fs.writeFileSync(marker, "");
     }
-    return portableDir;
-  } catch (err) {
-    const fallbackDir = path.join(app.getPath('userData'), 'saves');
-    if (!fs.existsSync(fallbackDir)) {
-      fs.mkdirSync(fallbackDir, { recursive: true });
-    }
-    return fallbackDir;
   }
+  return savesDir;
+}
+
+function getSavePath(slotId) {
+  if (typeof slotId !== "string" || !/^[a-zA-Z0-9_-]{1,100}$/.test(slotId)) throw new Error("Invalid save slot");
+  return path.join(getSavesDir(), `${slotId}.json`);
 }
 
 function createWindow() {
-  const iconPath = path.join(__dirname, '../build/icon.png');
+  const iconPath = path.join(__dirname, '../dist/icon.png');
 
   mainWindow = new BrowserWindow({
     width: 1440,
@@ -33,7 +57,7 @@ function createWindow() {
     minWidth: 1024,
     minHeight: 640,
     backgroundColor: '#0f1217',
-    title: 'Farm-App: Factorio Industrial Simulation',
+    title: 'MeadowLife',
     icon: fs.existsSync(iconPath) ? iconPath : undefined,
     frame: true, // Native Windows frame
     autoHideMenuBar: true,
@@ -43,7 +67,6 @@ function createWindow() {
       nodeIntegration: false,
       contextIsolation: true,
       backgroundThrottling: false,
-      webSecurity: false, // Allow local assets
     },
   });
 
@@ -55,8 +78,8 @@ function createWindow() {
     console.error('[Main] Failed to load URL:', url, code, desc);
   });
 
-  mainWindow.webContents.on('console-message', (e, level, msg, line, src) => {
-    console.log(`[Renderer] ${msg} (${src}:${line})`);
+  mainWindow.webContents.on('console-message', (_event, level, message, line, source) => {
+    if (level >= 2) console.warn(`[Renderer] ${message} (${source}:${line})`);
   });
 
   const isDev = process.env.NODE_ENV === 'development';
@@ -102,12 +125,12 @@ ipcMain.handle('saves:list', async () => {
           time: data.time || 360,
           season: data.season || 'spring',
           coins: data.coins || 0,
-          energy: data.energy || 100,
+          energy: data.energy ?? 100,
           maxEnergy: data.maxEnergy || 100,
-          health: data.health || 100,
+          health: data.health ?? 100,
           maxHealth: data.maxHealth || 100,
           machinesCount: data.machinesCount || 0,
-          data: data.data || data,
+
         };
       } catch (e) {
         return null;
@@ -121,17 +144,22 @@ ipcMain.handle('saves:list', async () => {
 
 ipcMain.handle('saves:save', async (_, { name, slotId, data, metadata }) => {
   try {
-    const dir = getSavesDir();
-    const cleanId = (slotId || `save_${Date.now()}`).replace(/[^a-zA-Z0-9_-]/g, '_');
-    const filePath = path.join(dir, `${cleanId}.json`);
+    const cleanId = slotId || `save_${Date.now()}`;
+    const filePath = getSavePath(cleanId);
     const payload = {
       id: cleanId,
-      name: name || 'Nauvis Base',
+      name: name || 'Meadow Works',
       timestamp: Date.now(),
       ...metadata,
       data,
     };
-    fs.writeFileSync(filePath, JSON.stringify(payload, null, 2), 'utf8');
+    const temporary = `${filePath}.tmp`;
+    try {
+      fs.writeFileSync(temporary, JSON.stringify(payload), 'utf8');
+      fs.renameSync(temporary, filePath);
+    } finally {
+      if (fs.existsSync(temporary)) fs.unlinkSync(temporary);
+    }
     return { success: true, id: cleanId, filePath };
   } catch (err) {
     return { success: false, error: err.message };
@@ -140,8 +168,7 @@ ipcMain.handle('saves:save', async (_, { name, slotId, data, metadata }) => {
 
 ipcMain.handle('saves:load', async (_, slotId) => {
   try {
-    const dir = getSavesDir();
-    const filePath = path.join(dir, `${slotId}.json`);
+    const filePath = getSavePath(slotId);
     if (!fs.existsSync(filePath)) {
       return { success: false, error: 'File not found' };
     }
@@ -155,8 +182,7 @@ ipcMain.handle('saves:load', async (_, slotId) => {
 
 ipcMain.handle('saves:delete', async (_, slotId) => {
   try {
-    const dir = getSavesDir();
-    const filePath = path.join(dir, `${slotId}.json`);
+    const filePath = getSavePath(slotId);
     if (fs.existsSync(filePath)) {
       fs.unlinkSync(filePath);
     }
@@ -169,8 +195,8 @@ ipcMain.handle('saves:delete', async (_, slotId) => {
 ipcMain.handle('saves:openFolder', async () => {
   try {
     const dir = getSavesDir();
-    await shell.openPath(dir);
-    return { success: true, dir };
+    const error = await shell.openPath(dir);
+    return error ? { success: false, error } : { success: true, dir };
   } catch (err) {
     return { success: false, error: err.message };
   }
@@ -193,7 +219,16 @@ ipcMain.handle('app:getInfo', () => {
   };
 });
 
-app.whenReady().then(createWindow);
+if (app.requestSingleInstanceLock()) {
+  app.on('second-instance', () => {
+    if (!mainWindow) return;
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.focus();
+  });
+  app.whenReady().then(createWindow);
+} else {
+  app.quit();
+}
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {

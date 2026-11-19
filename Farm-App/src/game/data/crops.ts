@@ -29,6 +29,17 @@ export type CropDef = {
 };
 
 export const CROPS: Record<string, CropDef> = {
+  carrot: {
+    id: "carrot",
+    name: "Meadow Carrot",
+    seedPrice: 8,
+    sellPrice: 20,
+    growDays: 2,
+    seasons: ["spring", "summer", "fall"],
+    tier: 1,
+    accent: "#c37843",
+    stem: "#708252",
+  },
   yumako: {
     id: "yumako",
     name: "Yumako Fruit",
@@ -86,7 +97,7 @@ export const CROPS: Record<string, CropDef> = {
   },
   tree_seed: {
     id: "tree_seed",
-    name: "Nauvis Tree Sapling",
+    name: "Meadow Pine Sapling",
     seedPrice: 10,
     sellPrice: 25,
     growDays: 2,

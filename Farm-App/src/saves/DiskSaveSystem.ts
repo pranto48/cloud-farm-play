@@ -13,7 +13,7 @@ export interface DesktopSaveSlot {
   health: number;
   maxHealth: number;
   machinesCount: number;
-  data: unknown;
+  data?: unknown;
 }
 
 declare global {
@@ -76,7 +76,7 @@ export async function listAllSaves(): Promise<DesktopSaveSlot[]> {
 
 // Save current game to Disk or LocalStorage
 export async function saveGameToDisk(state: GameState, customName?: string, existingSlotId?: string): Promise<{ success: boolean; slot?: DesktopSaveSlot; message?: string }> {
-  const name = customName?.trim() || `Nauvis Factory - Day ${state.day}`;
+  const name = customName?.trim() || `Meadow Works ? Day ${state.day}`;
   const slotId = existingSlotId || `save_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
   const prepared = prepareStateForSave(state);
 
@@ -116,23 +116,17 @@ export async function saveGameToDisk(state: GameState, customName?: string, exis
         data: prepared,
         metadata,
       });
-      if (res.success) {
-        return { success: true, slot: newSlot, message: `Saved directly to disk: saves/${slotId}.json` };
-      }
-    } catch (err) {
-      console.error("Desktop disk save error:", err);
+      if (res.success) return { success: true, slot: newSlot, message: `Saved "${name}"` };
+      return { success: false, message: res.error ?? "Disk write failed." };
+    } catch (error) {
+      return { success: false, message: error instanceof Error ? error.message : "Disk write failed." };
     }
   }
 
   // Fallback to localStorage
   try {
     const current = await listAllSaves();
-    let updated: DesktopSaveSlot[] = [];
-    if (existingSlotId) {
-      updated = current.map((s) => (s.id === existingSlotId ? newSlot : s));
-    } else {
-      updated = [newSlot, ...current.filter((s) => s.id !== slotId)];
-    }
+    const updated = [newSlot, ...current.filter(save => save.id !== slotId)];
     localStorage.setItem("farm_app_factorio_saves", JSON.stringify(updated));
     return { success: true, slot: newSlot, message: `Saved locally as "${name}"` };
   } catch (err) {
@@ -146,10 +140,10 @@ export async function loadGameFromDisk(slot: DesktopSaveSlot): Promise<{ success
     let rawData = slot.data;
     if (isDesktopRuntime() && window.desktopAPI?.loadGame) {
       const res = await window.desktopAPI.loadGame(slot.id);
-      if (res.success && res.slot) {
-        rawData = res.slot.data || res.slot;
-      }
+      if (!res.success || !res.slot) return { success: false, message: res.error ?? "Save file unavailable." };
+      rawData = res.slot.data ?? res.slot;
     }
+    if (!rawData || typeof rawData !== "object") return { success: false, message: "No game data in this save." };
     const migrated = migrateState(rawData);
     return { success: true, state: migrated, message: `Loaded save "${slot.name}" successfully!` };
   } catch (err) {
@@ -161,8 +155,7 @@ export async function loadGameFromDisk(slot: DesktopSaveSlot): Promise<{ success
 export async function deleteSaveFromDisk(slotId: string): Promise<boolean> {
   if (isDesktopRuntime() && window.desktopAPI?.deleteSave) {
     try {
-      await window.desktopAPI.deleteSave(slotId);
-      return true;
+      return (await window.desktopAPI.deleteSave(slotId)).success;
     } catch (err) {
       console.error("Desktop disk delete error:", err);
     }

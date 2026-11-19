@@ -156,6 +156,26 @@ export const gameAudio = {
     noise.stop(now + 0.15);
   },
 
+  playDischarge() {
+    const c = getContext();
+    if (!c) return;
+    const length = Math.ceil(c.sampleRate * .095);
+    const buffer = c.createBuffer(1, length, c.sampleRate);
+    const waveform = buffer.getChannelData(0);
+    for (let i = 0; i < length; i++) {
+      waveform[i] = (Math.random() * 2 - 1) * Math.exp(-8 * i / length);
+    }
+    const source = c.createBufferSource();
+    const filter = c.createBiquadFilter();
+    const volume = c.createGain();
+    source.buffer = buffer;
+    filter.type = "bandpass";
+    filter.frequency.value = 680;
+    volume.gain.value = .15;
+    source.connect(filter).connect(volume).connect(c.destination);
+    source.start();
+  },
+
   playMine() {
     const c = getContext();
     if (!c) return;

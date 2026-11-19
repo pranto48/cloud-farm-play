@@ -12,6 +12,7 @@ import {
   Maximize,
   Minimize,
   HardDrive,
+  Factory,
   FolderOpen,
   HelpCircle,
   Save,
@@ -64,8 +65,7 @@ export default function App() {
 
   const handleOpenFolder = async () => {
     if (isDesktop) {
-      await openDesktopSavesFolder();
-      toast.info("Opened saves directory in Windows File Explorer.");
+      if (!await openDesktopSavesFolder()) toast.error("Could not open the saves folder.");
     } else {
       toast.warning("Folder open is only supported in native Windows Desktop runner.");
     }
@@ -85,7 +85,10 @@ export default function App() {
 
   const handleDeleteSlot = async (slotId: string, name: string) => {
     if (window.confirm(`Delete save "${name}" from disk?`)) {
-      await deleteSaveFromDisk(slotId);
+      if (!await deleteSaveFromDisk(slotId)) {
+        toast.error("Could not delete the save.");
+        return;
+      }
       await refreshSaves();
       toast.info(`Save "${name}" deleted.`);
     }
@@ -93,17 +96,11 @@ export default function App() {
 
   return (
     <div className="w-screen h-screen flex flex-col bg-[#0b0e14] text-slate-100 overflow-hidden select-none font-mono">
-      {/* Native Desktop Factorio Steel Titlebar Header */}
-      <header className="h-8 bg-[#141820] border-b border-[#252d3a] flex items-center justify-between px-3 z-40 shrink-0 text-xs shadow-md">
+      {/* Desktop title bar */}
+      <header className="h-8 bg-[#242b24] border-b border-[#5c6151] flex items-center justify-between px-3 z-40 shrink-0 text-xs shadow-md">
         <div className="flex items-center gap-2.5">
-          <span className="text-base select-none">🏭</span>
-          <span className="font-black text-[#ff9200] tracking-wider text-xs">
-            FARM-APP <span className="text-slate-400 font-medium">| FACTORIO DESKTOP EDITION</span>
-          </span>
-          <span className="text-[10px] bg-emerald-950/80 text-emerald-400 px-2 py-0.5 border border-emerald-600/60 rounded flex items-center gap-1 font-semibold">
-            <HardDrive className="w-3 h-3" />
-            <span>PORTABLE DISK SAVES</span>
-          </span>
+          <Factory className="h-4 w-4 text-[#d2ad76]" aria-hidden="true" />
+          <span className="text-sm font-bold tracking-wide text-[#f0dfbe]">MeadowLife</span>
         </div>
 
         <div className="flex items-center gap-2 text-slate-300">
@@ -152,7 +149,7 @@ export default function App() {
 
       {/* Main Game Surface */}
       <main className="flex-1 w-full h-full relative overflow-hidden">
-        <MeadowLife key={gameInstanceKey} initialState={activeSaveState} onStateChange={() => {}} />
+        <MeadowLife key={gameInstanceKey} initialState={activeSaveState} />
       </main>
 
       {/* Saves Manager Dialog */}
@@ -162,7 +159,7 @@ export default function App() {
             <div className="p-3 bg-[#1a202c] border-b border-[#2d3748] flex items-center justify-between">
               <div className="flex items-center gap-2 text-amber-400 font-bold text-sm">
                 <HardDrive className="w-4 h-4" />
-                <span>LOCAL DISK SAVES (Farm-App/saves/*.json)</span>
+                <span>Local saves</span>
               </div>
               <button
                 onClick={() => setSavesOpen(false)}
@@ -243,7 +240,7 @@ export default function App() {
 
             <div className="p-3 bg-[#1a202c] border-t border-[#2d3748] flex items-center justify-between text-xs">
               <span className="text-slate-400 text-[11px]">
-                Files saved in: <code className="text-amber-300 font-mono">Farm-App/saves/</code>
+                Saves are stored in your Windows profile.
               </span>
               <div className="flex items-center gap-2">
                 {isDesktop && (
@@ -292,7 +289,7 @@ export default function App() {
                 </div>
                 <div className="p-2 bg-[#0d1017] border border-[#2d3748] rounded">
                   <div className="font-bold text-amber-400">Shift + Movement</div>
-                  <div className="text-slate-400">Sprint Mode (9.5 tiles/sec velocity)</div>
+                  <div className="text-slate-400">Sprint</div>
                 </div>
                 <div className="p-2 bg-[#0d1017] border border-[#2d3748] rounded">
                   <div className="font-bold text-amber-400">F5</div>
@@ -320,19 +317,39 @@ export default function App() {
                 </div>
                 <div className="p-2 bg-[#0d1017] border border-[#2d3748] rounded">
                   <div className="font-bold text-amber-400">R</div>
-                  <div className="text-slate-400">Rotate machine / belt / inserter</div>
+                  <div className="text-slate-400">Rotate placement (Shift reverses)</div>
                 </div>
                 <div className="p-2 bg-[#0d1017] border border-[#2d3748] rounded">
                   <div className="font-bold text-amber-400">F / Z</div>
-                  <div className="text-slate-400">Item Vacuum (F) / Drop Item (Z)</div>
+                  <div className="text-slate-400">Pick up nearby items or drop one at the cursor</div>
                 </div>
                 <div className="p-2 bg-[#0d1017] border border-[#2d3748] rounded">
                   <div className="font-bold text-amber-400">E / I</div>
-                  <div className="text-slate-400">Open Factorio Inventory & Crafting GUI</div>
+                  <div className="text-slate-400">Open inventory and crafting</div>
                 </div>
                 <div className="p-2 bg-[#0d1017] border border-[#2d3748] rounded">
                   <div className="font-bold text-amber-400">P</div>
                   <div className="text-slate-400">Electric Grid & Production Statistics</div>
+                </div>
+                <div className="p-2 bg-[#0d1017] border border-[#2d3748] rounded">
+                  <div className="font-bold text-amber-400">Ctrl + Left Click</div>
+                  <div className="text-slate-400">Load burner fuel or turret ammunition</div>
+                </div>
+                <div className="p-2 bg-[#0d1017] border border-[#2d3748] rounded">
+                  <div className="font-bold text-amber-400">Right Click</div>
+                  <div className="text-slate-400">Hold to mine with a tool. Right-click a building to dismantle it.</div>
+                </div>
+                <div className="p-2 bg-[#0d1017] border border-[#2d3748] rounded">
+                  <div className="font-bold text-amber-400">M</div>
+                  <div className="text-slate-400">Open the survey map</div>
+                </div>
+                <div className="p-2 bg-[#0d1017] border border-[#2d3748] rounded">
+                  <div className="font-bold text-amber-400">B / Space</div>
+                  <div className="text-slate-400">Cycle weapons or fire near the cursor</div>
+                </div>
+                <div className="p-2 bg-[#0d1017] border border-[#2d3748] rounded">
+                  <div className="font-bold text-amber-400">Shift + Left Click</div>
+                  <div className="text-slate-400">Repair damaged machinery with a repair pack</div>
                 </div>
               </div>
             </div>

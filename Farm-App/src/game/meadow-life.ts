@@ -1,3 +1,5 @@
+import { tickDefense, type Patrol, type Signal, type Wildlife } from "./field-play";
+import { drawConveyor, drawGroundDetail, drawYardMachine } from "./yard-art";
 import { ITEM_DEFS, createItem, type Item } from "./data/items";
 import { shopInventoryForSeason, CROPS, type CropDef, type Season } from "./data/crops";
 import { NPCS, getNPCDestination, type NPCDef } from "./npcs";
@@ -41,6 +43,8 @@ export type TileKind =
   | "house_door"
   | "placed_item";
 
+type BeltItem = { id: string; offset: number; lane: 0 | 1 };
+
 export interface Tile {
   kind: TileKind;
   /** Watered days for growing crops. */
@@ -54,8 +58,17 @@ export interface Tile {
   direction?: "up" | "down" | "left" | "right";
   chestInventory?: (Item | null)[];
   chestBarLimit?: number;
-  /** Factorio Transport Belt item queue */
-  beltItems?: { id: string; offset: number; lane: 0 | 1 }[];
+  beltItems?: BeltItem[];
+  looseItems?: Item[];
+  structureHp?: number;
+  aimAngle?: number;
+  fireCooldown?: number;
+  foundation?: TileKind;
+  depositRemaining?: number;
+  fuelSeconds?: number;
+  splitterOutput?: 0 | 1;
+  labSeconds?: number;
+  machineStatus?: "running" | "idle" | "blocked" | "fuel" | "power" | "depleted" | "damaged";
   /** Factorio Robotic Inserter state */
   inserterArmAngle?: number;
   inserterHolding?: Item | null;
@@ -105,7 +118,7 @@ export interface Particle {
   color: string;
   age: number;
   maxAge: number;
-  type?: "leaf" | "stone" | "water" | "smoke" | "heart" | "dust";
+  type?: "leaf" | "stone" | "water" | "smoke" | "heart" | "dust" | "spark";
 }
 
 export interface FloatingText {
@@ -176,6 +189,19 @@ export interface FarmWorker {
   workEndHour?: number;
 }
 
+export interface HandcraftJob {
+  id: string;
+  recipeId: string;
+  name: string;
+  iconSymbol: string;
+  iconColor: string;
+  progress: number;
+  duration: number;
+  remainingTime: number;
+  refundInputs: { itemId: string; count: number }[];
+  outputs: { itemId: string; count: number }[];
+}
+
 export interface GameState {
   version: 1;
   player: {
@@ -190,6 +216,10 @@ export interface GameState {
     maxShield?: number;
     reachDistance?: number;
     lastDamageTime?: number;
+    walkSeconds?: number;
+    actionSeconds?: number;
+    shotCooldown?: number;
+    weaponId?: string;
     isCharacterDetached?: boolean;
     dressColor?: string;
     secondaryColor?: string;
@@ -222,11 +252,12 @@ export interface GameState {
     mode: "copy" | "stamp" | "deconstruct" | null;
     startTile?: { x: number; y: number } | null;
     currentTile?: { x: number; y: number } | null;
-    savedEntities?: { relX: number; relY: number; placedItemId: string; direction?: string }[];
+    savedEntities?: { relX: number; relY: number; placedItemId: string; direction?: Tile["direction"]; recipeId?: string }[];
   } | null;
   day: number;
   time: number;
   inventory: (Item | null)[];
+  handcraftQueue?: HandcraftJob[];
   hotbarIndex: number;
   coins: number;
   tiles: Tile[][];
@@ -315,19 +346,9 @@ export interface GameState {
     powerConsumedKw: number;
     pollutionTotal: number;
   };
-  /** Factorio Biters */
-  biters?: {
-    id: string;
-    x: number;
-    y: number;
-    subX: number;
-    subY: number;
-    hp: number;
-    maxHp: number;
-    type: "small" | "medium" | "big" | "behemoth";
-    targetX?: number;
-    targetY?: number;
-  }[];
+  biters?: Wildlife[];
+  patrol?: Patrol;
+  combatFx?: Signal[];
   placementDirection?: "up" | "down" | "left" | "right";
   activeInspectorTile?: { x: number; y: number } | null;
   /** Factorio Alt-Mode info overlay toggle */
@@ -561,12 +582,12 @@ export const TECHNOLOGIES: TechDef[] = [
   // Factorio Research Tech Tree
   {
     id: "tech_factorio_logistics",
-    name: "Factorio Logistics 1",
-    description: "Unlocks Iron Gear Wheels, Copper Cables, Transport Belts, and Burner Mining Drills.",
+    name: "Yard Logistics",
+    description: "Unlocks expanded burner extraction and opens the electronics branch.",
     icon: "⏩",
     cost: 150,
     prerequisites: ["tech_advanced_tools"],
-    unlocks: "Iron Gear, Copper Cable, Transport Belt, Burner Drill recipes",
+    unlocks: "Burner drill recipes and electronics research",
   },
   {
     id: "tech_electronics",
@@ -663,7 +684,6 @@ export const CRAFTING_RECIPES: Recipe[] = [
     inputs: [{ itemId: "iron_gear", count: 1 }, { itemId: "iron_bar", count: 1 }],
     outputId: "transport_belt",
     outputCount: 2,
-    techRequired: "tech_factorio_logistics",
     craftTimeSeconds: 0.5,
   },
   {
@@ -868,11 +888,10 @@ export const CRAFTING_RECIPES: Recipe[] = [
   {
     id: "science_lab",
     name: "Science Research Lab",
-    description: "Factorio research lab that consumes Science Packs to unlock advanced industrial technologies.",
-    inputs: [{ itemId: "electronic_circuit", count: 10 }, { itemId: "iron_gear", count: 10 }, { itemId: "transport_belt", count: 4 }],
+    description: "An early research bench that processes science packs and requires 60 kW.",
+    inputs: [{ itemId: "copper_wire", count: 6 }, { itemId: "iron_gear", count: 6 }, { itemId: "iron_bar", count: 5 }],
     outputId: "science_lab",
     outputCount: 1,
-    techRequired: "tech_electronics",
     craftTimeSeconds: 3.0,
   },
 
@@ -931,10 +950,9 @@ export const CRAFTING_RECIPES: Recipe[] = [
     id: "solar_panel",
     name: "Solar Panel",
     description: "Generates 60kW clean electricity during daylight hours.",
-    inputs: [{ itemId: "electronic_circuit", count: 5 }, { itemId: "copper_bar", count: 5 }, { itemId: "steel_plate", count: 5 }],
+    inputs: [{ itemId: "copper_wire", count: 8 }, { itemId: "copper_bar", count: 4 }, { itemId: "iron_bar", count: 6 }],
     outputId: "solar_panel",
     outputCount: 1,
-    techRequired: "tech_electricity",
     craftTimeSeconds: 2.0,
   },
   {
@@ -956,7 +974,6 @@ export const CRAFTING_RECIPES: Recipe[] = [
     inputs: [{ itemId: "iron_bar", count: 2 }],
     outputId: "iron_gear",
     outputCount: 1,
-    techRequired: "tech_factorio_logistics",
     craftTimeSeconds: 0.5,
   },
   {
@@ -966,7 +983,6 @@ export const CRAFTING_RECIPES: Recipe[] = [
     inputs: [{ itemId: "copper_bar", count: 1 }],
     outputId: "copper_wire",
     outputCount: 2,
-    techRequired: "tech_factorio_logistics",
     craftTimeSeconds: 0.5,
   },
   {
@@ -1088,7 +1104,6 @@ export const CRAFTING_RECIPES: Recipe[] = [
     inputs: [{ itemId: "copper_bar", count: 1 }, { itemId: "iron_gear", count: 1 }],
     outputId: "automation_science_pack",
     outputCount: 1,
-    techRequired: "tech_electronics",
     craftTimeSeconds: 1.0,
   },
   {
@@ -1330,7 +1345,7 @@ export const CRAFTING_RECIPES: Recipe[] = [
   {
     id: "energy_shield",
     name: "Energy Shield",
-    type: "furniture" as any,
+    description: "Personal energy shielding for modular armor.",
     inputs: [{ itemId: "steel_plate", count: 10 }, { itemId: "advanced_circuit", count: 5 }],
     outputId: "energy_shield",
     outputCount: 1,
@@ -2714,7 +2729,6 @@ export function applyLandPurchase(tiles: Tile[][], parcel: LandParcel): void {
 }
 
 // Global persistent noise generator for Minecraft-style procedural world
-const worldGenNoise = new ImprovedNoise();
 
 export type BiomeKind = "ocean" | "beach" | "river" | "mountain" | "badlands" | "swamp" | "forest" | "plains";
 
@@ -2846,7 +2860,7 @@ export function getBiomeAt(x: number, y: number): BiomeInfo {
   // Default Lush Plains
   return {
     kind: "plains",
-    name: "Sunburst Meadow",
+    name: "Meadow Basin",
     nameBn: "সবুজ ফুলের সমভূমি",
     subtitle: "Lush green grasslands and wildflowers",
     groundColor: "#4f8d38",
@@ -2947,7 +2961,7 @@ export function generateProceduralTile(worldX: number, worldY: number, season?: 
   return generateMinecraftWorldTile(worldX, worldY, season);
 }
 
-function makeMap(): Tile[][] {
+export function makeMap(): Tile[][] {
   // Generate massive 500x500 procedural Minecraft world
   const t: Tile[][] = Array.from({ length: ROWS }, (_, y) =>
     Array.from({ length: COLS }, (_, x) => generateMinecraftWorldTile(x, y))
@@ -2965,6 +2979,33 @@ function makeMap(): Tile[][] {
   // 2. Farm zone starter plot
   for (let y = 32; y <= 42; y++) {
     for (let x = 8; x <= 22; x++) t[y][x].kind = "soil";
+  }
+
+  // A clear work apron and three accessible seams beside the original farm.
+  for (let y = 25; y <= 39; y++) {
+    for (let x = 22; x <= 39; x++) {
+      t[y][x] = { kind: y === 31 || (x === 22 && y <= 33) ? "path" : "grass", age: -1, watered: false };
+    }
+  }
+  const yardDeposits = [
+    { x: 25, y: 28, kind: "ore_iron" },
+    { x: 31, y: 36, kind: "ore_copper" },
+    { x: 37, y: 28, kind: "ore_coal" },
+  ] as const;
+  for (const seam of yardDeposits) {
+    for (let dy = -2; dy <= 2; dy++) {
+      for (let dx = -2; dx <= 2; dx++) {
+        if (Math.hypot(dx, dy) > 2.25) continue;
+        t[seam.y + dy][seam.x + dx] = { kind: seam.kind, age: 0, watered: false };
+      }
+    }
+  }
+
+  for (let x = 16; x <= 22; x++) {
+    t[30][x] = { kind: "path", age: -1, watered: false };
+  }
+  for (const [x, y] of [[10, 22], [10, 23], [9, 24], [5, 29], [20, 25], [20, 23], [21, 24], [19, 23], [6, 33], [5, 35]]) {
+    t[y][x] = { kind: "tree", age: -1, watered: false };
   }
 
   // 3. Spawn house
@@ -3377,24 +3418,23 @@ export function generateHouseInterior(): Tile[][] {
   return grid;
 }
 
-export function newGame(): GameState {
+export function newGame(tiles?: Tile[][]): GameState {
   const inv = Array.from({ length: 30 }, () => null as Item | null);
 
-  // Equip standard Factorio starter package
-  inv[0] = createItem("pistol");
-  inv[1] = createItem("firearm_magazine", 20);
-  inv[2] = createItem("burner_drill", 2);
-  inv[3] = createItem("stone_furnace", 2);
-  inv[4] = createItem("iron_bar", 15);
-  inv[5] = createItem("copper_bar", 10);
-  inv[6] = createItem("coal", 15);
-  inv[7] = createItem("wood", 20);
+  const supplies: [string, number][] = [
+    ["burner_drill", 2], ["stone_furnace", 2], ["transport_belt", 30],
+    ["burner_inserter", 2], ["chest", 2], ["coal", 30],
+    ["pickaxe", 1], ["axe", 1], ["hoe", 1], ["watering_can", 1],
+    ["iron_bar", 15], ["copper_bar", 10], ["wood", 20],
+    ["pistol", 1], ["firearm_magazine", 32], ["carrot_seed", 8], ["gun_turret", 1], ["stone_wall", 12], ["shotgun", 1], ["shotgun_shells", 8], ["repair_pack", 5],
+  ];
+  supplies.forEach(([id, count], index) => { inv[index] = createItem(id, count); });
 
   const initialLetters: MailLetter[] = [
     {
       id: "factorio_welcome",
-      sender: "Engineering Command",
-      content: "Crash landing protocol complete. Use your burner drill and stone furnace to automate iron and copper production. Research automation in the Lab to expand your factory!",
+      sender: "Meadow Works",
+      content: "The east yard is ready. Get the iron line running, then bring the copper and coal seams into production.",
       giftItemId: "iron_bar",
       giftCount: 20,
       claimed: false,
@@ -3414,7 +3454,8 @@ export function newGame(): GameState {
       shield: 0,
       maxShield: 100,
       reachDistance: 10,
-      dressColor: "#e67e22",
+      weaponId: "pistol",
+      dressColor: "#b4774e",
       secondaryColor: "#1e2430",
       suitType: "engineer",
       helmetType: "visor",
@@ -3422,18 +3463,18 @@ export function newGame(): GameState {
     },
     characterCorpses: [],
     settings: {
-      fpsLimit: 40,
-      graphicsQuality: "low",
-      showGrid: true,
-      showPollution: true,
-      showFpsOverlay: true,
+      fpsLimit: 60,
+      graphicsQuality: "high",
+      showGrid: false,
+      showPollution: false,
+      showFpsOverlay: false,
       shadowsEnabled: true,
-      particleDensity: "low",
+      particleDensity: "medium",
       desktopMode: true,
     },
     cloudSave: {
-      lastCloudSaveTimestamp: Date.now(),
-      cloudStatus: "synced",
+      lastCloudSaveTimestamp: null,
+      cloudStatus: "idle",
     },
     blueprint: {
       mode: null,
@@ -3442,11 +3483,12 @@ export function newGame(): GameState {
       savedEntities: [],
     },
     day: 1,
-    time: DAY_START_MINUTES,
+    time: DAY_START_MINUTES + 90,
     inventory: inv,
     hotbarIndex: 0,
+    altMode: true,
     coins: 200, // starting funds
-    tiles: makeMap(),
+    tiles: tiles ?? makeMap(),
     season: "spring",
     weather: "sunny",
     energy: 270,
@@ -3460,7 +3502,7 @@ export function newGame(): GameState {
     npcFriendships: { robin: 0, haley: 0, lewis: 0 },
     shippingBin: Array.from({ length: 12 }, () => null),
     quest: {
-      description: "Automate Iron Smelting: Extract Iron Ore with Burner Drill and smelt Iron Plates.",
+      description: "Commission the ironworks. Smelt 10 iron plates in a furnace.",
       targetType: "craft",
       targetId: "iron_bar",
       targetCount: 10,
@@ -3492,7 +3534,7 @@ export function newGame(): GameState {
 const TILE_KINDS = new Set<TileKind>([
   "grass", "soil", "watered", "water", "tree", "house", "path", "shop", "npc",
   "mine_cave", "mine_dirt", "mine_wall", "mine_ladder", "debris_weed", "debris_branch",
-  "ore_stone", "ore_copper", "ore_iron", "ore_gold", "ore_silver", "ore_coal",
+  "debris_stone", "ore_aluminum", "ore_copper", "ore_iron", "ore_gold", "ore_silver", "ore_coal",
   "ore_uranium", "ore_crude_oil", "house_wall", "house_floor", "house_bed", "house_door", "placed_item",
 ]);
 
@@ -3503,6 +3545,23 @@ function serializeTile(tile: Tile): Partial<Tile> {
   if (tile.watered) minTile.watered = true;
   if (tile.cropId) minTile.cropId = tile.cropId;
   if (tile.placedItemId) minTile.placedItemId = tile.placedItemId;
+  if (tile.foundation) minTile.foundation = tile.foundation;
+  if (tile.depositRemaining !== undefined) minTile.depositRemaining = tile.depositRemaining;
+  if (tile.direction) minTile.direction = tile.direction;
+  if (tile.beltItems?.length) minTile.beltItems = tile.beltItems;
+  if (tile.looseItems?.length) minTile.looseItems = tile.looseItems;
+  if (tile.structureHp !== undefined) minTile.structureHp = tile.structureHp;
+  if (tile.aimAngle !== undefined) minTile.aimAngle = tile.aimAngle;
+  if (tile.inserterHolding) minTile.inserterHolding = tile.inserterHolding;
+  if (tile.inserterArmAngle !== undefined) minTile.inserterArmAngle = tile.inserterArmAngle;
+  if (tile.assemblerRecipeId) minTile.assemblerRecipeId = tile.assemblerRecipeId;
+  if (tile.assemblerProgress !== undefined) minTile.assemblerProgress = tile.assemblerProgress;
+  if (tile.drillTargetOre) minTile.drillTargetOre = tile.drillTargetOre;
+  if (tile.drillTimer !== undefined) minTile.drillTimer = tile.drillTimer;
+  if (tile.fuelSeconds !== undefined) minTile.fuelSeconds = tile.fuelSeconds;
+  if (tile.labSeconds !== undefined) minTile.labSeconds = tile.labSeconds;
+  if (tile.splitterOutput !== undefined) minTile.splitterOutput = tile.splitterOutput;
+  if (tile.chestBarLimit !== undefined) minTile.chestBarLimit = tile.chestBarLimit;
   if (tile.chestInventory && tile.chestInventory.some((item) => item !== null)) {
     minTile.chestInventory = tile.chestInventory;
   }
@@ -3533,11 +3592,7 @@ export function encodeGridRLE(grid: Tile[][]): unknown {
     for (let x = 0; x < cols; x++) {
       const tile = row[x] || { kind: "grass", age: -1, watered: false };
       const minTile = serializeTile(tile);
-      const key = (tile.kind === "grass" && !tile.placedItemId && !tile.cropId && !tile.watered)
-        ? "grass"
-        : (tile.kind === "water" && !tile.placedItemId)
-        ? "water"
-        : JSON.stringify(minTile);
+      const key = Object.keys(minTile).length === 1 ? tile.kind : JSON.stringify(minTile);
 
       if (key === currentRunTileKey) {
         currentRunCount++;
@@ -3565,6 +3620,7 @@ export function decodeGridRLE(data: unknown, fallbackKind: TileKind = "grass"): 
 
   const rows = obj.rows;
   const cols = obj.cols;
+  if (!Number.isInteger(rows) || !Number.isInteger(cols) || rows < 1 || cols < 1 || rows > ROWS || cols > COLS) return null;
   const grid: Tile[][] = Array.from({ length: rows }, () => new Array(cols));
 
   let currentRunIdx = 0;
@@ -3584,7 +3640,7 @@ export function decodeGridRLE(data: unknown, fallbackKind: TileKind = "grass"): 
         kind: currentTile.kind || fallbackKind,
         age: currentTile.age ?? -1,
         watered: !!currentTile.watered,
-        ...currentTile,
+        ...(currentTile.placedItemId || currentTile.beltItems || currentTile.looseItems ? structuredClone(currentTile) : currentTile),
       };
       currentRunRemaining--;
     }
@@ -3631,6 +3687,7 @@ export function normalizeGrid(
 export function prepareStateForSave(rawState: unknown): unknown {
   if (!rawState || typeof rawState !== "object") return rawState;
   const s = { ...(rawState as Record<string, any>) };
+  delete s.combatFx;
   if (Array.isArray(s.tiles)) {
     s.tiles = encodeGridRLE(s.tiles);
   }
@@ -3649,17 +3706,37 @@ export function prepareStateForSave(rawState: unknown): unknown {
  * Call this whenever you load a state from cloud storage.
  */
 export function migrateState(raw: unknown): GameState {
-  // Start from a fresh baseline so every field is guaranteed to exist
-  const base = newGame();
-  if (!raw || typeof raw !== "object") return base;
+  if (!raw || typeof raw !== "object") return newGame();
 
   const s = raw as Record<string, unknown>;
+  const decodedWorld = decodeGridRLE(s.tiles, "grass");
+  const savedWorld = decodedWorld ?? s.tiles;
+  const world = decodedWorld?.length === ROWS && decodedWorld[0]?.length === COLS
+    ? decodedWorld : Array.isArray(savedWorld)
+      ? normalizeGrid(savedWorld, ROWS, COLS, { kind: "grass", age: 0, watered: false }, true)
+      : undefined;
+  const base = newGame(world);
 
   // Shallow-merge top-level scalar fields from the saved state
   const merged: GameState = {
     ...base,
     // Scalars / simple overrides
     version: 1,
+    settings: { ...base.settings!, ...(s.settings as Partial<GameState["settings"]>) },
+    placementDirection: (s.placementDirection as GameState["placementDirection"]) ?? base.placementDirection,
+    altMode: typeof s.altMode === "boolean" ? s.altMode : base.altMode,
+    productionStats: (s.productionStats as GameState["productionStats"]) ?? base.productionStats,
+    pollutionGrid: (s.pollutionGrid as GameState["pollutionGrid"]) ?? base.pollutionGrid,
+    powerGridStats: (s.powerGridStats as GameState["powerGridStats"]) ?? base.powerGridStats,
+    evolutionFactor: (s.evolutionFactor as GameState["evolutionFactor"]) ?? base.evolutionFactor,
+    biters: (s.biters as GameState["biters"]) ?? base.biters,
+    patrol: (s.patrol as GameState["patrol"]) ?? {
+      nextAt: Math.max(1100, ((s.productionStats as GameState["productionStats"])?.pollutionTotal ?? 0) + 600),
+      waves: 0, repelled: 0, active: false,
+    },
+    handcraftQueue: Array.isArray(s.handcraftQueue) ? s.handcraftQueue as HandcraftJob[] : [],
+    characterCorpses: (s.characterCorpses as GameState["characterCorpses"]) ?? base.characterCorpses,
+    blueprint: base.blueprint && { ...base.blueprint, savedEntities: (s.blueprint as GameState["blueprint"])?.savedEntities ?? [] },
     day:          typeof s.day === "number"          ? s.day          : base.day,
     time:         typeof s.time === "number"         ? s.time         : base.time,
     coins:        typeof s.coins === "number"        ? s.coins        : base.coins,
@@ -3679,7 +3756,10 @@ export function migrateState(raw: unknown): GameState {
     // entries that Firestore may have stored (e.g. from serialization bugs).
     inventory: (() => {
       const savedInv = Array.isArray(s.inventory) ? (s.inventory as (Item | null)[]) : base.inventory;
-      return Array.from({ length: 30 }, (_, idx) => savedInv[idx] ?? null);
+      return Array.from({ length: Math.max(30, savedInv.length) }, (_, idx) => {
+        const item = savedInv[idx];
+        return item?.type === "trash" && item.description === "Unknown item" ? createItem(item.id, item.count) : item ?? null;
+      });
     })(),
     shippingBin:  Array.isArray(s.shippingBin)   ? (s.shippingBin as (Item | null)[])                   : base.shippingBin,
     mineEnemies:  Array.isArray(s.mineEnemies)   ? (s.mineEnemies as Enemy[]).filter(Boolean)           : base.mineEnemies,
@@ -3698,10 +3778,7 @@ export function migrateState(raw: unknown): GameState {
     purchasedLands: Array.isArray(s.purchasedLands) ? (s.purchasedLands as string[]) : [],
     // Tiles: filter null rows, and within each row, replace null tiles with a safe default
     // Always restore a complete rectangular farm grid. Older saves can have
-    tiles: (() => {
-      const decoded = decodeGridRLE(s.tiles, "grass");
-      return normalizeGrid(decoded ?? s.tiles, ROWS, COLS, { kind: "grass", age: 0, watered: false }, true);
-    })(),
+    tiles: base.tiles,
     mineGrid: decodeGridRLE(s.mineGrid, "mine_dirt") ?? (
       Array.isArray(s.mineGrid) && s.mineGrid.length > 0
         ? normalizeGrid(s.mineGrid, s.mineGrid.length, Math.max(1, ...s.mineGrid.map((row: any) => Array.isArray(row) ? row.length : 0)), { kind: "mine_dirt", age: -1, watered: false })
@@ -3769,9 +3846,7 @@ export function isWalkable(t: Tile): boolean {
   if (t.kind === "placed_item") {
     const id = t.placedItemId;
     if (
-      id === "transport_belt" ||
-      id === "fast_transport_belt" ||
-      id === "express_transport_belt" ||
+      isConveyor(id) ||
       id === "stone_path" ||
       id === "concrete_path" ||
       id === "chicken_egg" ||
@@ -3793,12 +3868,6 @@ export function isWalkable(t: Tile): boolean {
     t.kind !== "mine_wall" &&
     t.kind !== "debris_stone" &&
     t.kind !== "debris_branch" &&
-    t.kind !== "ore_copper" &&
-    t.kind !== "ore_iron" &&
-    t.kind !== "ore_gold" &&
-    t.kind !== "ore_uranium" &&
-    t.kind !== "ore_silver" &&
-    t.kind !== "ore_coal" &&
     t.kind !== "house_wall" &&
     t.kind !== "house_bed"
   );
@@ -3876,466 +3945,337 @@ export function getChestSlotCount(placedItemId?: string): number {
   return 12;
 }
 
-export function tickFurnace(tile: Tile, dt: number, powerSatisfaction = 1.0): void {
-  if (!tile.chestInventory) {
-    tile.chestInventory = Array.from({ length: 3 }, () => null);
+const SMELTING: Record<string, { output: string; seconds: number; count?: number }> = {
+  iron_ore: { output: "iron_bar", seconds: 3.2 },
+  copper_ore: { output: "copper_bar", seconds: 3.2 },
+  silver_ore: { output: "silver_bar", seconds: 3.5 },
+  gold_ore: { output: "gold_bar", seconds: 4 },
+  uranium_ore: { output: "uranium_bar", seconds: 6 },
+  iron_bar: { output: "steel_plate", seconds: 5, count: 5 },
+};
+
+const DEPOSITS: Partial<Record<TileKind, string>> = {
+  ore_iron: "iron_ore", ore_copper: "copper_ore", ore_coal: "coal",
+  ore_uranium: "uranium_ore", ore_gold: "gold_ore", ore_silver: "silver_ore",
+  ore_aluminum: "iron_ore", debris_stone: "stone",
+};
+
+const FUEL_SECONDS: Record<string, number> = { coal: 24, wood: 10, solid_fuel: 48 };
+export function fuelMachine(tile: Tile, inventory: (Item | null)[]): number {
+  const id = tile.placedItemId ?? "";
+  const slot = isFurnace(id) && id !== "electric_furnace" ? 1
+    : ["burner_drill", "burner_inserter", "boiler"].includes(id) ? 0 : -1;
+  if (slot < 0) return 0;
+  const target = tile.chestInventory ??= Array(isFurnace(id) ? 3 : id === "burner_drill" ? 3 : 1).fill(null);
+  const existing = target[slot];
+  const limit = 5 - (existing?.count ?? 0);
+  const index = inventory.findIndex(item => item && FUEL_SECONDS[item.id] && (!existing || existing.id === item.id));
+  if (limit <= 0 || index < 0) return 0;
+  const fuel = inventory[index]!;
+  const count = Math.min(limit, fuel.count);
+  if (existing) existing.count += count;
+  else target[slot] = createItem(fuel.id, count);
+  removeItem(inventory, index, count);
+  return count;
+}
+
+const RECIPE_BY_ID = new Map(CRAFTING_RECIPES.map(recipe => [recipe.id, recipe]));
+
+export function isConveyor(id = ""): boolean {
+  return id.includes("belt") || id.includes("loader") || id.includes("splitter");
+}
+
+export function isFurnace(id = ""): boolean {
+  return id === "furnace" || id.endsWith("_furnace");
+}
+
+function isProcessor(id = ""): boolean {
+  return /assembling_machine|chemical_plant|oil_refinery|centrifuge|electromagnetic|cryogenic|foundry|biochamber/.test(id);
+}
+
+type ProductionStats = NonNullable<GameState["productionStats"]>;
+
+function record(stats: ProductionStats | undefined, category: "produced" | "consumed", id: string, count = 1) {
+  if (!stats) return;
+  stats[category][id] = (stats[category][id] ?? 0) + count;
+}
+
+function workingTime(tile: Tile, dt: number, slot: number, stats?: ProductionStats): number {
+  const inventory = tile.chestInventory!;
+  const fuel = inventory[slot];
+  if ((tile.fuelSeconds ?? 0) <= 0 && fuel && FUEL_SECONDS[fuel.id]) {
+    tile.fuelSeconds = FUEL_SECONDS[fuel.id];
+    record(stats, "consumed", fuel.id);
+    removeItem(inventory, slot);
+  }
+  const elapsed = Math.min(tile.fuelSeconds ?? 0, dt);
+  tile.fuelSeconds = (tile.fuelSeconds ?? 0) - elapsed;
+  return elapsed;
+}
+
+function acceptsStack(item: Item | null | undefined, id: string, count = 1): boolean {
+  return !item || (item.id === id && item.count + count <= 99);
+}
+
+export function tickFurnace(tile: Tile, dt: number, power = 1, stats?: ProductionStats): string | undefined {
+  const inv = tile.chestInventory ??= [null, null, null];
+  const input = inv[0];
+  const recipe = input && SMELTING[input.id];
+  const output = tile.smeltActive ? tile.smeltOutputId : recipe?.output;
+  tile.machineStatus = "idle";
+  if (!output || (!tile.smeltActive && (!recipe || input!.count < (recipe.count ?? 1)))) return;
+  if (!acceptsStack(inv[2], output)) {
+    tile.machineStatus = "blocked";
+    return;
   }
 
-  const input = tile.chestInventory[0];
-  const fuel = tile.chestInventory[1];
+  const electric = tile.placedItemId === "electric_furnace";
+  const speed = electric ? 2.5 : tile.placedItemId === "steel_furnace" ? 2 : 1;
+  const timeNeeded = (tile.smeltActive ? tile.smeltTimer ?? 0 : recipe!.seconds) / speed;
+  const elapsed = electric ? dt * power : workingTime(tile, Math.min(timeNeeded, dt), 1, stats);
+  if (elapsed <= 0 && timeNeeded > 0) {
+    tile.machineStatus = electric ? "power" : "fuel";
+    return;
+  }
 
-  const smeltRecipes: Record<string, { output: string; time: number }> = {
-    iron_ore: { output: "iron_bar", time: 3.2 },
-    copper_ore: { output: "copper_bar", time: 3.2 },
-    silver_ore: { output: "silver_bar", time: 3.5 },
-    gold_ore: { output: "gold_bar", time: 4.0 },
-    uranium_ore: { output: "uranium_bar", time: 6.0 },
-    iron_bar: { output: "steel_plate", time: 5.0 },
+  if (!tile.smeltActive) {
+    const count = recipe!.count ?? 1;
+    record(stats, "consumed", input!.id, count);
+    removeItem(inv, 0, count);
+    tile.smeltTimer = tile.smeltMaxTime = recipe!.seconds;
+    tile.smeltOutputId = output;
+    tile.smeltActive = true;
+  }
+  tile.machineStatus = "running";
+  tile.smeltTimer = Math.max(0, (tile.smeltTimer ?? 0) - elapsed * speed);
+  if (tile.smeltTimer > 0.000001) return;
+  if (inv[2]) inv[2].count++;
+  else inv[2] = createItem(output);
+  record(stats, "produced", output);
+  tile.smeltOutputId = undefined;
+  tile.smeltActive = false;
+  return output;
+}
+
+function insertStack(inv: (Item | null)[], slots: number[], id: string): boolean {
+  const slot = slots.find(index => inv[index]?.id === id && acceptsStack(inv[index], id))
+    ?? slots.find(index => !inv[index]);
+  if (slot === undefined) return false;
+  if (inv[slot]) inv[slot]!.count++;
+  else inv[slot] = createItem(id);
+  return true;
+}
+
+const beltSpacing = 0.24;
+
+export function loadConveyor(tile: Tile, item: BeltItem): boolean {
+  const items = tile.beltItems ??= [];
+  if (items.some(other => other.lane === item.lane && Math.abs(other.offset - item.offset) < beltSpacing - 0.001)) return false;
+  items.push(item);
+  return true;
+}
+
+function deliver(tile: Tile | undefined, item: BeltItem): boolean {
+  const id = tile?.placedItemId;
+  if (!tile || tile.kind !== "placed_item" || !id) return false;
+  if (isConveyor(id)) return loadConveyor(tile, item);
+  if (isChestBuilding(id)) {
+    const inv = tile.chestInventory ??= Array(getChestSlotCount(id)).fill(null);
+    return insertStack(inv, [...inv.keys()].slice(0, tile.chestBarLimit ?? inv.length), item.id);
+  }
+  if (isFurnace(id)) {
+    const inv = tile.chestInventory ??= [null, null, null];
+    if (FUEL_SECONDS[item.id] && id !== "electric_furnace") return insertStack(inv, [1], item.id);
+    return Boolean(SMELTING[item.id]) && insertStack(inv, [0], item.id);
+  }
+  if (id === "burner_drill" || id === "burner_inserter" || id === "boiler") {
+    const inv = tile.chestInventory ??= [null];
+    return Boolean(FUEL_SECONDS[item.id]) && insertStack(inv, [0], item.id);
+  }
+  if (isProcessor(id)) {
+    const recipe = RECIPE_BY_ID.get(tile.assemblerRecipeId ?? "iron_gear");
+    const inv = tile.chestInventory ??= [null, null, null, null, null];
+    return Boolean(recipe?.inputs.some(input => input.itemId === item.id)) && insertStack(inv, [0, 1, 2, 3], item.id);
+  }
+  if (id.includes("lab") || id.includes("turret")) {
+    const valid = id.includes("lab") ? item.id.endsWith("_science_pack") : /magazine|ammo|bullet/.test(item.id);
+    const inv = tile.chestInventory ??= Array(6).fill(null);
+    return valid && insertStack(inv, [...inv.keys()], item.id);
+  }
+  return false;
+}
+
+function updateTransportBelt(tile: Tile, grid: Tile[][], x: number, y: number, dt: number, processed: Set<BeltItem>) {
+  const items = tile.beltItems;
+  if (!items?.length) return;
+  const id = tile.placedItemId!;
+  const speed = id.includes("turbo") ? 7.2 : id.includes("express") ? 5.4 : id.includes("fast") ? 3.6 : 1.8;
+  const { dx, dy } = getDirectionVector(tile.direction);
+  const next = grid[y + dy]?.[x + dx];
+  const leaders = [Infinity, Infinity];
+
+  items.sort((a, b) => b.offset - a.offset);
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    if (processed.has(item)) {
+      leaders[item.lane] = item.offset;
+      continue;
+    }
+    processed.add(item);
+    const offset = Math.max(item.offset, Math.min(item.offset + speed * dt, leaders[item.lane] - beltSpacing));
+    if (offset >= 1) {
+      const previous = item.offset;
+      item.offset = Math.min(0.18, offset - 1);
+      let transferred = false;
+      if (id.includes("splitter")) {
+        const side = grid[y + dy + dx]?.[x + dx - dy];
+        const route = tile.splitterOutput ?? 0;
+        transferred = deliver(route ? side : next, item) || deliver(route ? next : side, item);
+        if (transferred) tile.splitterOutput = route ? 0 : 1;
+      } else if (next?.placedItemId?.includes("underground") && next.direction === tile.direction) {
+        const reach = next.placedItemId.includes("express") ? 10 : next.placedItemId.includes("fast") ? 8 : 5;
+        for (let distance = 2; distance <= reach + 1; distance++) {
+          const exit = grid[y + dy * distance]?.[x + dx * distance];
+          if (exit?.placedItemId === next.placedItemId && exit.direction === tile.direction) {
+            transferred = deliver(exit, item);
+            break;
+          }
+        }
+      } else {
+        const nextDir = getDirectionVector(next?.direction);
+        if (!isConveyor(next?.placedItemId) || nextDir.dx !== -dx || nextDir.dy !== -dy) transferred = deliver(next, item);
+      }
+      if (transferred) {
+        items.splice(i--, 1);
+        continue;
+      }
+      item.offset = Math.max(previous, 0.98);
+    } else {
+      item.offset = offset;
+    }
+    leaders[item.lane] = item.offset;
+  }
+}
+
+export function dismantleTile(state: GameState, grid: Tile[][], x: number, y: number): boolean {
+  const tile = grid[y]?.[x];
+  if (tile?.kind !== "placed_item" || !tile.placedItemId) return false;
+  const inventory = state.inventory.map(item => item && { ...item });
+  const recovered = [
+    createItem(tile.placedItemId), ...(tile.chestInventory ?? []), tile.inserterHolding,
+    ...(tile.beltItems ?? []).map(item => createItem(item.id)),
+    tile.smeltActive && tile.smeltOutputId ? createItem(tile.smeltOutputId) : null,
+  ];
+  if (!recovered.every(item => !item || addItem(inventory, item))) return false;
+  state.inventory = inventory;
+  state.workers = state.workers?.filter(worker => tile.placedItemId !== "worker_cabin" || worker.cabinX !== x || worker.cabinY !== y);
+  state.pets = state.pets?.filter(pet => !tile.placedItemId?.startsWith("pet_bowl") || pet.bowlX !== x || pet.bowlY !== y);
+  grid[y][x] = {
+    kind: tile.depositRemaining === 0 ? "grass" : tile.foundation ?? (state.inMine ? "mine_dirt" : state.inHouse ? "house_floor" : "grass"),
+    age: tile.age,
+    watered: tile.watered,
+    zone: tile.zone,
+    depositRemaining: tile.depositRemaining,
   };
-
-  const isElectric = tile.placedItemId === "electric_furnace";
-  const speedMultiplier = tile.placedItemId === "steel_furnace" ? 2.0 : tile.placedItemId === "electric_furnace" ? 2.5 : 1.0;
-  const currentInputId = input?.id;
-  const recipe = currentInputId ? smeltRecipes[currentInputId] : null;
-
-  if (tile.smeltActive) {
-    if (tile.smeltTimer !== undefined) {
-      tile.smeltTimer -= dt * speedMultiplier * (isElectric ? powerSatisfaction : 1.0);
-      if (tile.smeltTimer <= 0) {
-        tile.smeltActive = false;
-        tile.smeltTimer = 0;
-
-        if (tile.smeltOutputId) {
-          const outId = tile.smeltOutputId;
-          const outItem = createItem(outId, 1);
-          if (tile.chestInventory[2] === null) {
-            tile.chestInventory[2] = outItem;
-          } else if (tile.chestInventory[2].id === outId && tile.chestInventory[2].count < 99) {
-            tile.chestInventory[2].count += 1;
-          }
-        }
-        tile.smeltOutputId = undefined;
-      }
-    }
-  } else {
-    if (input && recipe && input.count >= (input.id === "iron_bar" ? 5 : 1)) {
-      const fuelCost = isElectric ? 0 : 1;
-      const hasFuel = isElectric ? (powerSatisfaction > 0.2) : (fuel && fuel.count >= 1 && (fuel.id === "coal" || fuel.id === "wood"));
-
-      if (hasFuel) {
-        const outputSlot = tile.chestInventory[2];
-        if (outputSlot === null || (outputSlot.id === recipe.output && outputSlot.count < 99)) {
-          const cost = input.id === "iron_bar" ? 5 : 1;
-          if (input.count <= cost) {
-            tile.chestInventory[0] = null;
-          } else {
-            input.count -= cost;
-          }
-
-          if (!isElectric && fuel) {
-            if (fuel.count <= 1) {
-              tile.chestInventory[1] = null;
-            } else {
-              fuel.count -= 1;
-            }
-          }
-
-          tile.smeltActive = true;
-          tile.smeltTimer = recipe.time;
-          tile.smeltMaxTime = recipe.time;
-          tile.smeltOutputId = recipe.output;
-        }
-      }
-    }
-  }
+  invalidateMachineCache();
+  return true;
 }
 
-// Factorio Transport Belt, Underground Belt, and Splitter Simulation
-function updateTransportBelt(tile: Tile, grid: Tile[][], x: number, y: number, dt: number) {
-  if (!tile.beltItems) tile.beltItems = [];
-  if (tile.beltItems.length === 0) return;
+export function getFactoryPlacementIssue(tile: Tile, id: string): string | null {
+  if (id.includes("drill") && (!DEPOSITS[tile.kind] || tile.depositRemaining === 0)) return "Place the drill on a mineral deposit.";
+  if (tile.cropId) return "Harvest the crop before building here.";
+  if (DEPOSITS[tile.kind] || ["grass", "soil", "watered", "path", "mine_dirt", "house_floor"].includes(tile.kind)) return null;
+  return "This tile is blocked.";
+}
 
-  const id = tile.placedItemId || "transport_belt";
-  const isTurbo = id.includes("turbo");
-  const isExpress = id.includes("express");
-  const isFast = id.includes("fast");
-  const speed = isTurbo ? 7.2 : isExpress ? 5.4 : isFast ? 3.6 : 1.8; // tiles per sec
+function updateMiningDrill(tile: Tile, grid: Tile[][], x: number, y: number, dt: number, power: number, stats: ProductionStats) {
+  const inv = tile.chestInventory ??= [null, null, null];
+  const ore = tile.drillTargetOre ||= (tile.foundation && DEPOSITS[tile.foundation]) || "stone";
+  const electric = tile.placedItemId !== "burner_drill";
   const { dx, dy } = getDirectionVector(tile.direction);
-
-  for (let i = 0; i < tile.beltItems.length; i++) {
-    const item = tile.beltItems[i];
-    item.offset += speed * dt;
-
-    if (item.offset >= 1.0) {
-      const targetX = x + dx;
-      const targetY = y + dy;
-
-      if (targetX >= 0 && targetX < COLS && targetY >= 0 && targetY < ROWS) {
-        const nextTile = grid[targetY]?.[targetX];
-        if (nextTile && nextTile.kind === "placed_item") {
-          const nextId = nextTile.placedItemId || "";
-
-          // 1. Next tile is standard or tiered belt
-          if (nextId.includes("belt") && !nextId.includes("underground")) {
-            if (!nextTile.beltItems) nextTile.beltItems = [];
-            if (nextTile.beltItems.length < 8) {
-              nextTile.beltItems.push({
-                id: item.id,
-                offset: item.offset - 1.0,
-                lane: item.lane,
-              });
-              tile.beltItems.splice(i, 1);
-              i--;
-              continue;
-            }
-          }
-          // 2. Next tile is Underground Belt Entrance
-          else if (nextId.includes("underground")) {
-            const maxReach = nextId.includes("express") ? 10 : nextId.includes("fast") ? 8 : 5;
-            let exitFound = false;
-
-            // Search ahead in forward direction for matching exit
-            for (let d = 2; d <= maxReach; d++) {
-              const uX = x + dx * d;
-              const uY = y + dy * d;
-              if (uX >= 0 && uX < COLS && uY >= 0 && uY < ROWS) {
-                const uTile = grid[uY]?.[uX];
-                if (uTile && uTile.kind === "placed_item" && uTile.placedItemId?.includes("underground")) {
-                  if (!uTile.beltItems) uTile.beltItems = [];
-                  if (uTile.beltItems.length < 8) {
-                    uTile.beltItems.push({
-                      id: item.id,
-                      offset: 0.1,
-                      lane: item.lane,
-                    });
-                    tile.beltItems.splice(i, 1);
-                    i--;
-                    exitFound = true;
-                    break;
-                  }
-                }
-              }
-            }
-            if (exitFound) continue;
-          }
-          // 3. Next tile is Conveyor Splitter
-          else if (nextId.includes("splitter")) {
-            // Splitter sends alternating items forward or to side
-            const altLane = item.lane === 0 ? 1 : 0;
-            if (!nextTile.beltItems) nextTile.beltItems = [];
-            if (nextTile.beltItems.length < 8) {
-              nextTile.beltItems.push({
-                id: item.id,
-                offset: item.offset - 1.0,
-                lane: altLane,
-              });
-              tile.beltItems.splice(i, 1);
-              i--;
-              continue;
-            }
-          }
-          // 4. Next tile is a Chest / Storage Container
-          else if (isChestBuilding(nextId) && nextTile.chestInventory) {
-            const added = addItem(nextTile.chestInventory, createItem(item.id, 1));
-            if (added) {
-              tile.beltItems.splice(i, 1);
-              i--;
-              continue;
-            }
-          }
-          // 5. Next tile is a Furnace
-          else if ((nextId === "furnace" || nextId === "stone_furnace" || nextId === "steel_furnace" || nextId === "electric_furnace") && nextTile.chestInventory) {
-            const itemObj = createItem(item.id, 1);
-            if (item.id === "coal" || item.id === "wood") {
-              if (nextTile.chestInventory[1] === null) {
-                nextTile.chestInventory[1] = itemObj;
-                tile.beltItems.splice(i, 1); i--; continue;
-              } else if (nextTile.chestInventory[1].id === item.id && nextTile.chestInventory[1].count < 99) {
-                nextTile.chestInventory[1].count++;
-                tile.beltItems.splice(i, 1); i--; continue;
-              }
-            } else {
-              if (nextTile.chestInventory[0] === null) {
-                nextTile.chestInventory[0] = itemObj;
-                tile.beltItems.splice(i, 1); i--; continue;
-              } else if (nextTile.chestInventory[0].id === item.id && nextTile.chestInventory[0].count < 99) {
-                nextTile.chestInventory[0].count++;
-                tile.beltItems.splice(i, 1); i--; continue;
-              }
-            }
-          }
-          // 6. Next tile is an Assembling Machine / Chemical Plant / Refinery
-          else if ((nextId.startsWith("assembling_machine") || nextId === "chemical_plant" || nextId === "oil_refinery" || nextId === "foundry") && nextTile.chestInventory) {
-            let placedInAssembler = false;
-            for (let slot = 0; slot < 4; slot++) {
-              if (nextTile.chestInventory[slot] === null) {
-                nextTile.chestInventory[slot] = createItem(item.id, 1);
-                placedInAssembler = true; break;
-              } else if (nextTile.chestInventory[slot].id === item.id && nextTile.chestInventory[slot].count < 99) {
-                nextTile.chestInventory[slot].count++;
-                placedInAssembler = true; break;
-              }
-            }
-            if (placedInAssembler) {
-              tile.beltItems.splice(i, 1);
-              i--;
-              continue;
-            }
-          }
-          // 7. Next tile is a Science Lab
-          else if (nextId.includes("lab") && nextTile.chestInventory) {
-            if (item.id.includes("science_pack") || item.id.includes("science")) {
-              const added = addItem(nextTile.chestInventory, createItem(item.id, 1));
-              if (added) {
-                tile.beltItems.splice(i, 1);
-                i--;
-                continue;
-              }
-            }
-          }
-          // 8. Next tile is a Turret (Auto-feed ammo)
-          else if (nextId.includes("turret") && nextTile.chestInventory) {
-            if (item.id.includes("magazine") || item.id.includes("ammo") || item.id.includes("bullet")) {
-              const added = addItem(nextTile.chestInventory, createItem(item.id, 1));
-              if (added) {
-                tile.beltItems.splice(i, 1);
-                i--;
-                continue;
-              }
-            }
-          }
-          // 9. Next tile is a Boiler (Auto-feed fuel)
-          else if (nextId === "boiler" && nextTile.chestInventory) {
-            if (item.id === "coal" || item.id === "wood" || item.id === "solid_fuel") {
-              const added = addItem(nextTile.chestInventory, createItem(item.id, 1));
-              if (added) {
-                tile.beltItems.splice(i, 1);
-                i--;
-                continue;
-              }
-            }
-          }
-        }
-      }
-
-      // If cannot transfer, clamp to end of belt
-      item.offset = 0.95;
-    }
+  if (tile.depositRemaining === 0) {
+    tile.machineStatus = "depleted";
+    return;
   }
+
+  const seconds = electric ? 2.2 : 4;
+  tile.drillTimer ??= 0;
+  if (tile.drillTimer < 1) {
+    const elapsed = electric ? dt * power : workingTime(tile, Math.min(dt, (1 - tile.drillTimer) * seconds), 0, stats);
+    if (elapsed <= 0) {
+      tile.machineStatus = electric ? "power" : "fuel";
+      return;
+    }
+    tile.machineStatus = "running";
+    tile.drillTimer = Math.min(1, tile.drillTimer + elapsed / seconds);
+    if (tile.drillTimer < 1 - 0.000001) return;
+  }
+
+  const item: BeltItem = { id: ore, offset: 0.06, lane: ((tile.depositRemaining ?? 0) % 2) as 0 | 1 };
+  if (!deliver(grid[y + dy]?.[x + dx], item) && !insertStack(inv, [2], ore)) {
+    tile.drillTimer = 1;
+    tile.machineStatus = "blocked";
+    return;
+  }
+  if (tile.depositRemaining !== undefined) tile.depositRemaining--;
+  record(stats, "produced", ore);
+  tile.drillTimer = 0;
 }
 
-// Factorio Mining Drill Simulation
-function updateMiningDrill(tile: Tile, grid: Tile[][], x: number, y: number, dt: number, powerSatisfaction = 1.0) {
-  const isElectric = tile.placedItemId === "electric_drill";
-  if (!tile.chestInventory) tile.chestInventory = Array.from({ length: 3 }, () => null);
-
-  // Check fuel if burner drill
-  if (!isElectric) {
-    const fuel = tile.chestInventory[0];
-    if (!fuel || (fuel.id !== "coal" && fuel.id !== "wood") || fuel.count <= 0) {
-      return; // Burner drill out of fuel
-    }
-  } else {
-    if (powerSatisfaction <= 0.1) return; // Electric drill unpowered
-  }
-
-  // Detect underlying ore patch
-  if (!tile.drillTargetOre) {
-    const currentKind = grid[y]?.[x]?.kind;
-    const oreMapping: Record<string, string> = {
-      ore_iron: "iron_ore",
-      ore_copper: "copper_ore",
-      ore_coal: "coal",
-      ore_uranium: "uranium_ore",
-      ore_gold: "gold_ore",
-      ore_silver: "silver_ore",
-      ore_aluminum: "iron_ore",
-      debris_stone: "stone",
-    };
-    tile.drillTargetOre = oreMapping[currentKind] || "stone";
-  }
-
-  const speed = isElectric ? 0.45 * powerSatisfaction : 0.25; // cycle progress/sec
-  if (tile.drillTimer === undefined) tile.drillTimer = 0;
-  tile.drillTimer += speed * dt;
-
-  if (tile.drillTimer >= 1.0) {
-    tile.drillTimer = 0;
-
-    // Consume 1 fuel occasionally for burner
-    if (!isElectric && Math.random() < 0.15 && tile.chestInventory[0]) {
-      tile.chestInventory[0].count -= 1;
-      if (tile.chestInventory[0].count <= 0) tile.chestInventory[0] = null;
-    }
-
-    const minedItem = tile.drillTargetOre || "stone";
-    const { dx, dy } = getDirectionVector(tile.direction);
-    const targetX = x + dx;
-    const targetY = y + dy;
-
-    if (targetX >= 0 && targetX < COLS && targetY >= 0 && targetY < ROWS) {
-      const forwardTile = grid[targetY]?.[targetX];
-      if (forwardTile) {
-        // Output directly onto belt
-        if (forwardTile.kind === "placed_item" && (forwardTile.placedItemId === "transport_belt" || forwardTile.placedItemId === "fast_transport_belt")) {
-          if (!forwardTile.beltItems) forwardTile.beltItems = [];
-          if (forwardTile.beltItems.length < 6) {
-            forwardTile.beltItems.push({
-              id: minedItem,
-              offset: 0.1,
-              lane: Math.random() < 0.5 ? 0 : 1,
-            });
-            return;
-          }
-        }
-        // Output into chest or furnace
-        if (forwardTile.kind === "placed_item" && forwardTile.chestInventory) {
-          addItem(forwardTile.chestInventory, createItem(minedItem, 1));
-          return;
-        }
-      }
-    }
-  }
-}
-
-// Factorio Robotic Inserter Simulation
-function updateInserter(tile: Tile, grid: Tile[][], x: number, y: number, dt: number, powerSatisfaction = 1.0) {
-  const isFast = tile.placedItemId === "fast_inserter" || tile.placedItemId === "filter_inserter";
-  const isLong = tile.placedItemId === "long_inserter";
-  const reach = isLong ? 2 : 1;
-  const swingSpeed = (isFast ? 7.0 : 4.0) * (powerSatisfaction || 1.0);
-
-  if (tile.inserterArmAngle === undefined) tile.inserterArmAngle = -Math.PI;
-
+function updateInserter(tile: Tile, grid: Tile[][], x: number, y: number, dt: number, power: number, stats: ProductionStats) {
+  const id = tile.placedItemId!;
+  const reach = id === "long_inserter" ? 2 : 1;
+  const speed = id.includes("fast") || id.includes("stack") ? 7 : 4;
+  const burner = id === "burner_inserter";
   const { dx, dy } = getDirectionVector(tile.direction);
-  const backX = x - dx * reach;
-  const backY = y - dy * reach;
-  const frontX = x + dx * reach;
-  const frontY = y + dy * reach;
+  tile.inserterArmAngle ??= -Math.PI;
+  tile.machineStatus = "idle";
 
-  // Holding item -> swing towards front (angle 0)
-  if (tile.inserterHolding) {
-    if (tile.inserterArmAngle < 0) {
-      tile.inserterArmAngle = Math.min(0, tile.inserterArmAngle + swingSpeed * dt);
+  if (tile.inserterHolding && tile.inserterArmAngle >= 0) {
+    if (deliver(grid[y + dy * reach]?.[x + dx * reach], { id: tile.inserterHolding.id, offset: 0.12, lane: 1 })) {
+      tile.inserterHolding = null;
+    } else {
+      tile.machineStatus = "blocked";
     }
+    return;
+  }
 
-    // At destination front
-    if (tile.inserterArmAngle >= 0) {
-      if (frontX >= 0 && frontX < COLS && frontY >= 0 && frontY < ROWS) {
-        const destTile = grid[frontY]?.[frontX];
-        if (destTile && destTile.kind === "placed_item") {
-          // Drop onto front belt
-          if (destTile.placedItemId === "transport_belt" || destTile.placedItemId === "fast_transport_belt") {
-            if (!destTile.beltItems) destTile.beltItems = [];
-            if (destTile.beltItems.length < 6) {
-              destTile.beltItems.push({
-                id: tile.inserterHolding.id,
-                offset: 0.1,
-                lane: 0,
-              });
-              tile.inserterHolding = null;
-              return;
-            }
-          }
-          // Drop into chest
-          else if (isChestBuilding(destTile.placedItemId) && destTile.chestInventory) {
-            const added = addItem(destTile.chestInventory, tile.inserterHolding);
-            if (added) {
-              tile.inserterHolding = null;
-              return;
-            }
-          }
-          // Drop into furnace
-          else if ((destTile.placedItemId === "furnace" || destTile.placedItemId === "stone_furnace" || destTile.placedItemId === "steel_furnace" || destTile.placedItemId === "electric_furnace") && destTile.chestInventory) {
-            const held = tile.inserterHolding;
-            if (held.id === "coal" || held.id === "wood") {
-              if (destTile.chestInventory[1] === null) {
-                destTile.chestInventory[1] = held;
-                tile.inserterHolding = null; return;
-              } else if (destTile.chestInventory[1].id === held.id && destTile.chestInventory[1].count < 99) {
-                destTile.chestInventory[1].count++;
-                tile.inserterHolding = null; return;
-              }
-            } else {
-              if (destTile.chestInventory[0] === null) {
-                destTile.chestInventory[0] = held;
-                tile.inserterHolding = null; return;
-              } else if (destTile.chestInventory[0].id === held.id && destTile.chestInventory[0].count < 99) {
-                destTile.chestInventory[0].count++;
-                tile.inserterHolding = null; return;
-              }
-            }
-          }
-          // Drop into assembling machine input
-          else if (destTile.placedItemId?.startsWith("assembling_machine") && destTile.chestInventory) {
-            const held = tile.inserterHolding;
-            for (let s = 0; s < 4; s++) {
-              if (destTile.chestInventory[s] === null) {
-                destTile.chestInventory[s] = held;
-                tile.inserterHolding = null; return;
-              } else if (destTile.chestInventory[s].id === held.id && destTile.chestInventory[s].count < 99) {
-                destTile.chestInventory[s].count++;
-                tile.inserterHolding = null; return;
-              }
-            }
-          }
-        }
+  if (!tile.inserterHolding && tile.inserterArmAngle <= -Math.PI) {
+    const source = grid[y - dy * reach]?.[x - dx * reach];
+    if (!source?.placedItemId) return;
+    if (burner && !(tile.fuelSeconds || tile.chestInventory?.[0] && FUEL_SECONDS[tile.chestInventory[0].id])) {
+      tile.machineStatus = "fuel";
+      return;
+    }
+    if (!burner && power <= 0) {
+      tile.machineStatus = "power";
+      return;
+    }
+    if (isConveyor(source.placedItemId)) {
+      const index = source.beltItems?.findIndex(item => item.offset >= 0.32) ?? -1;
+      if (index >= 0) tile.inserterHolding = createItem(source.beltItems!.splice(index, 1)[0].id);
+    } else if (source.chestInventory) {
+      const inv = source.chestInventory;
+      const slot = isFurnace(source.placedItemId) || source.placedItemId.includes("drill") ? 2
+        : isProcessor(source.placedItemId) ? 4
+        : isChestBuilding(source.placedItemId) ? inv.findIndex(Boolean) : -1;
+      const item = inv[slot];
+      if (item) {
+        tile.inserterHolding = createItem(item.id);
+        removeItem(inv, slot);
       }
     }
+    return;
   }
-  // Not holding item -> swing back towards source (-Math.PI)
-  else {
-    if (tile.inserterArmAngle > -Math.PI) {
-      tile.inserterArmAngle = Math.max(-Math.PI, tile.inserterArmAngle - swingSpeed * dt);
-    }
 
-    // At source back
-    if (tile.inserterArmAngle <= -Math.PI) {
-      if (backX >= 0 && backX < COLS && backY >= 0 && backY < ROWS) {
-        const srcTile = grid[backY]?.[backX];
-        if (srcTile && srcTile.kind === "placed_item") {
-          // Grab from belt
-          if (srcTile.beltItems && srcTile.beltItems.length > 0) {
-            const grabbed = srcTile.beltItems.shift();
-            if (grabbed) {
-              tile.inserterHolding = createItem(grabbed.id, 1);
-              return;
-            }
-          }
-          // Grab from chest
-          else if (srcTile.chestInventory) {
-            // If pulling from furnace or assembler, grab output slot first
-            const isFurnace = srcTile.placedItemId === "furnace" || srcTile.placedItemId === "stone_furnace" || srcTile.placedItemId === "steel_furnace" || srcTile.placedItemId === "electric_furnace";
-            const isAssembler = srcTile.placedItemId?.startsWith("assembling_machine");
-            const targetSlot = isFurnace ? 2 : isAssembler ? 4 : -1;
-
-            if (targetSlot !== -1 && srcTile.chestInventory[targetSlot]) {
-              const item = srcTile.chestInventory[targetSlot]!;
-              tile.inserterHolding = createItem(item.id, 1);
-              item.count -= 1;
-              if (item.count <= 0) srcTile.chestInventory[targetSlot] = null;
-              return;
-            }
-
-            // Otherwise grab first available non-empty slot
-            for (let s = 0; s < srcTile.chestInventory.length; s++) {
-              const item = srcTile.chestInventory[s];
-              if (item && item.count > 0) {
-                tile.inserterHolding = createItem(item.id, 1);
-                item.count -= 1;
-                if (item.count <= 0) srcTile.chestInventory[s] = null;
-                return;
-              }
-            }
-          }
-        }
-      }
-    }
-  }
+  const elapsed = burner ? workingTime(tile, dt, 0, stats) : dt * power;
+  tile.machineStatus = elapsed > 0 ? "running" : burner ? "fuel" : "power";
+  if (tile.inserterHolding) tile.inserterArmAngle = Math.min(0, tile.inserterArmAngle + speed * elapsed);
+  else tile.inserterArmAngle = Math.max(-Math.PI, tile.inserterArmAngle - speed * elapsed);
 }
 
 // Factorio Assembling Machine Simulation
-function updateAssemblingMachine(tile: Tile, grid: Tile[][], x: number, y: number, dt: number, powerSatisfaction = 1.0) {
+function updateAssemblingMachine(tile: Tile, dt: number, powerSatisfaction: number, stats: ProductionStats) {
   if (!tile.chestInventory) {
     tile.chestInventory = Array.from({ length: 5 }, () => null); // 0..3 inputs, 4 output
   }
@@ -4345,7 +4285,7 @@ function updateAssemblingMachine(tile: Tile, grid: Tile[][], x: number, y: numbe
     tile.assemblerRecipeId = "iron_gear";
   }
 
-  const recipe = CRAFTING_RECIPES.find((r) => r.id === tile.assemblerRecipeId);
+  const recipe = RECIPE_BY_ID.get(tile.assemblerRecipeId);
   if (!recipe) return;
 
   const craftTime = recipe.craftTimeSeconds || 1.5;
@@ -4370,7 +4310,8 @@ function updateAssemblingMachine(tile: Tile, grid: Tile[][], x: number, y: numbe
   // Check output slot space
   const outSlot = tile.chestInventory[4];
   if (outSlot && outSlot.id !== recipe.outputId) canCraft = false;
-  if (outSlot && outSlot.count >= 99) canCraft = false;
+  if (outSlot && outSlot.count + recipe.outputCount > 99) canCraft = false;
+  tile.machineStatus = powerSatisfaction <= 0 ? "power" : canCraft ? "running" : "idle";
 
   if (canCraft && powerSatisfaction > 0.1) {
     if (tile.assemblerProgress === undefined) tile.assemblerProgress = 0;
@@ -4381,6 +4322,7 @@ function updateAssemblingMachine(tile: Tile, grid: Tile[][], x: number, y: numbe
 
       // Deduct inputs
       for (const input of recipe.inputs) {
+        record(stats, "consumed", input.itemId, input.count);
         let remaining = input.count;
         for (let slot = 0; slot < 4; slot++) {
           const item = tile.chestInventory[slot];
@@ -4394,6 +4336,7 @@ function updateAssemblingMachine(tile: Tile, grid: Tile[][], x: number, y: numbe
         }
       }
 
+      record(stats, "produced", recipe.outputId, recipe.outputCount);
       // Add output
       if (tile.chestInventory[4] === null) {
         tile.chestInventory[4] = createItem(recipe.outputId, recipe.outputCount);
@@ -4412,42 +4355,34 @@ function updateScienceLab(tile: Tile, state: GameState, dt: number, powerSatisfa
   const tech = TECHNOLOGIES.find((t) => t.id === state.activeResearchId);
   if (!tech) return;
 
-  // Check for any science pack in lab inventory
-  let packSlot = -1;
-  for (let s = 0; s < tile.chestInventory.length; s++) {
-    const item = tile.chestInventory[s];
-    if (item && item.id.endsWith("_science_pack") && item.count > 0) {
-      packSlot = s;
-      break;
-    }
+  const packSlot = tile.chestInventory.findIndex(item => item?.id.endsWith("_science_pack"));
+  const pack = tile.chestInventory[packSlot];
+  if ((tile.labSeconds ?? 0) <= 0 && pack) {
+    tile.labSeconds = 6;
+    record(state.productionStats, "consumed", pack.id);
+    removeItem(tile.chestInventory, packSlot);
   }
 
-  const baseRate = 3.0 * powerSatisfaction;
-  if (packSlot !== -1) {
-    // Consume science pack over time
-    if (Math.random() < 0.08 * dt) {
-      tile.chestInventory[packSlot]!.count -= 1;
-      if (tile.chestInventory[packSlot]!.count <= 0) tile.chestInventory[packSlot] = null;
-    }
-    state.researchPoints = (state.researchPoints || 0) + baseRate * 2.5 * dt;
-    state.researchProgress = (state.researchProgress || 0) + baseRate * 2.5 * dt;
-
-    if (state.researchProgress >= tech.cost) {
-      if (!state.unlockedTechs) state.unlockedTechs = [];
-      state.unlockedTechs.push(tech.id);
-      state.researchProgress = 0;
-      state.activeResearchId = undefined;
-      gameAudio.playLevelUp();
-    }
+  const elapsed = Math.min(tile.labSeconds ?? 0, dt * powerSatisfaction);
+  tile.labSeconds = (tile.labSeconds ?? 0) - elapsed;
+  tile.machineStatus = elapsed > 0 ? "running" : "idle";
+  state.researchPoints = (state.researchPoints || 0) + elapsed * 5;
+  state.researchProgress = (state.researchProgress || 0) + elapsed * 5;
+  if (state.researchProgress >= tech.cost) {
+    if (!state.unlockedTechs) state.unlockedTechs = [];
+    if (!state.unlockedTechs.includes(tech.id)) state.unlockedTechs.push(tech.id);
+    state.researchProgress = 0;
+    state.activeResearchId = undefined;
   }
 }
 
 // High-performance placed machine coordinates cache (avoids 115,200 tile scans every 80ms)
 let _cachedMachineCoords: { x: number; y: number }[] = [];
-let _lastMachineCoordsScan = 0;
+let _lastMachineCoordsScan = -Infinity;
+let cachedMachineGrid: Tile[][] | undefined;
 
 export function invalidateMachineCache(): void {
-  _lastMachineCoordsScan = 0;
+  _lastMachineCoordsScan = -Infinity;
 }
 
 export function updateEntities(state: GameState, dt: number): void {
@@ -4455,11 +4390,12 @@ export function updateEntities(state: GameState, dt: number): void {
   let totalGenerationKw = 0;
   let totalDemandKw = 0;
   const hours = state.time / 60;
-  const isDay = hours >= 6 && hours <= 19;
+  const isDay = hours >= 6 && hours <= 20;
 
   const now = performance.now();
   // Refresh cache every 2 seconds or if empty
-  if (now - _lastMachineCoordsScan > 2000 || _cachedMachineCoords.length === 0) {
+  if (now - _lastMachineCoordsScan > 2000 || cachedMachineGrid !== state.tiles) {
+    cachedMachineGrid = state.tiles;
     _lastMachineCoordsScan = now;
     _cachedMachineCoords = [];
     const tRows = state.tiles?.length || 0;
@@ -4474,22 +4410,47 @@ export function updateEntities(state: GameState, dt: number): void {
     }
   }
 
-  // Pass 1: Power Grid Calculation over placed machines only
+  // A boiler can raise steam only within reach of a water source and a steam unit.
+  for (const { x, y } of _cachedMachineCoords) {
+    const boiler = state.tiles[y][x];
+    if (boiler.placedItemId !== "boiler") continue;
+    const nearby = (predicate: (tile: Tile | undefined) => boolean) => {
+      for (let dy = -3; dy <= 3; dy++) {
+        for (let dx = -3; dx <= 3; dx++) if (Math.abs(dx) + Math.abs(dy) <= 3 && predicate(state.tiles[y + dy]?.[x + dx])) return true;
+      }
+      return false;
+    };
+    boiler.machineStatus = "idle";
+    if (!nearby(tile => tile?.kind === "water") || !nearby(tile => ["generator", "steam_engine", "steam_turbine"].includes(tile?.placedItemId ?? ""))) continue;
+    boiler.chestInventory ??= [null];
+    boiler.machineStatus = workingTime(boiler, dt, 0, state.productionStats) > 0 ? "running" : "fuel";
+  }
+
   for (let i = 0; i < _cachedMachineCoords.length; i++) {
     const { x, y } = _cachedMachineCoords[i];
     const tile = state.tiles[y]?.[x];
     if (tile && tile.kind === "placed_item" && tile.placedItemId) {
       const id = tile.placedItemId;
-      if (id === "generator" || id === "steam_engine") {
-        totalGenerationKw += 900;
-      } else if (id === "steam_turbine") {
-        totalGenerationKw += 5800;
+      if (id === "burner_drill" || id === "burner_inserter" || tile.structureHp !== undefined && tile.structureHp <= 0) continue;
+      if (id === "generator" || id === "steam_engine" || id === "steam_turbine") {
+        let hasSteam = false;
+        for (let dy = -3; dy <= 3 && !hasSteam; dy++) {
+          for (let dx = -3; dx <= 3; dx++) {
+            const source = state.tiles[y + dy]?.[x + dx];
+            if (Math.abs(dx) + Math.abs(dy) <= 3 && source?.placedItemId === "boiler" && source.machineStatus === "running") {
+              hasSteam = true;
+              break;
+            }
+          }
+        }
+        tile.machineStatus = hasSteam ? "running" : "idle";
+        if (hasSteam) totalGenerationKw += id === "steam_turbine" ? 5800 : 900;
       } else if (id === "nuclear_reactor") {
         totalGenerationKw += 40000;
       } else if (id === "fusion_generator" || id === "fusion_reactor") {
         totalGenerationKw += 250000;
       } else if (id === "solar_panel" && isDay) {
-        totalGenerationKw += 60;
+        totalGenerationKw += 60 * Math.min(1, (hours - 6) / 2, (20 - hours) / 2) * (state.weather === "rainy" ? 0.45 : 1);
       } else if (id.includes("drill")) {
         totalDemandKw += id.includes("big") ? 300 : 90;
       } else if (id === "assembling_machine_1") {
@@ -4512,7 +4473,11 @@ export function updateEntities(state: GameState, dt: number): void {
     }
   }
 
-  const satisfaction = totalDemandKw > 0 ? Math.min(1.0, Math.max(0.05, totalGenerationKw / totalDemandKw)) : 1.0;
+  const satisfaction = totalDemandKw > 0 ? Math.min(1, totalGenerationKw / totalDemandKw) : 1;
+  state.powerGridStats = {
+    capacityKw: totalGenerationKw, demandKw: totalDemandKw, satisfaction,
+    accumulatorStorageMj: 0, maxStorageMj: 0,
+  };
   // Factorio Character Natural Health & Shield Regeneration
   if (state.player && !state.godMode) {
     if (state.player.health < state.player.maxHealth) {
@@ -4543,36 +4508,54 @@ export function updateEntities(state: GameState, dt: number): void {
 
   // 2. Factorio Logistics & Machines Tick Pipeline + Pollution Emission (Cached coordinates only)
   let totalPollutionEmitted = 0;
+  let hotSite: { x: number; y: number } | undefined;
+  let hotValue = 0;
+  const processedBeltItems = new Set<BeltItem>();
   for (let i = 0; i < _cachedMachineCoords.length; i++) {
     const { x, y } = _cachedMachineCoords[i];
     const tile = state.tiles[y]?.[x];
     if (!tile || tile.kind !== "placed_item" || !tile.placedItemId) continue;
+    if (tile.structureHp !== undefined && tile.structureHp <= 0) {
+      tile.machineStatus = "damaged";
+      continue;
+    }
 
     const id = tile.placedItemId;
     let pollutionEmission = 0;
 
-    if (id.includes("belt") || id.includes("loader")) {
-      updateTransportBelt(tile, state.tiles, x, y, dt);
+    if (isConveyor(id)) {
+      updateTransportBelt(tile, state.tiles, x, y, dt, processedBeltItems);
     } else if (id.includes("drill")) {
-      updateMiningDrill(tile, state.tiles, x, y, dt, satisfaction);
-      pollutionEmission = id.includes("burner") ? 10 * dt : 5 * dt;
+      updateMiningDrill(tile, state.tiles, x, y, dt, satisfaction, state.productionStats);
+      if (tile.machineStatus === "running") pollutionEmission = (id === "burner_drill" ? 10 : 5) * dt;
     } else if (id.includes("inserter")) {
-      updateInserter(tile, state.tiles, x, y, dt, satisfaction);
-    } else if (id.includes("assembling_machine") || id.includes("chemical") || id.includes("refinery") || id.includes("centrifuge") || id.includes("electromagnetic") || id.includes("cryogenic") || id.includes("foundry") || id.includes("biochamber")) {
-      updateAssemblingMachine(tile, state.tiles, x, y, dt, satisfaction);
-      pollutionEmission = 4 * dt;
-    } else if (id.includes("furnace") || id === "furnace") {
-      tickFurnace(tile, dt, satisfaction);
-      pollutionEmission = id.includes("stone") ? 8 * dt : 4 * dt;
+      updateInserter(tile, state.tiles, x, y, dt, satisfaction, state.productionStats);
+    } else if (isProcessor(id)) {
+      updateAssemblingMachine(tile, dt, satisfaction, state.productionStats);
+      if (tile.machineStatus === "running") pollutionEmission = 4 * dt;
+    } else if (isFurnace(id)) {
+      const product = tickFurnace(tile, dt, satisfaction, state.productionStats);
+      if (tile.machineStatus === "running") pollutionEmission = (id === "electric_furnace" ? 2 : 8) * dt;
+      if (product && state.quest?.targetType === "craft" && state.quest.targetId === product) {
+        if (++state.quest.currentCount >= state.quest.targetCount) {
+          state.coins += state.quest.rewardCoins;
+          state.quest = null;
+        }
+      }
+    } else if (id === "boiler" && tile.machineStatus === "running") {
+      pollutionEmission = 15 * dt;
     } else if (id.includes("lab")) {
       updateScienceLab(tile, state, dt, satisfaction);
-    } else if (id === "boiler" || id === "generator") {
-      pollutionEmission = 15 * dt;
     }
 
     if (pollutionEmission > 0) {
       state.pollutionGrid[y][x] = Math.min(500, (state.pollutionGrid[y][x] || 0) + pollutionEmission);
       totalPollutionEmitted += pollutionEmission;
+      const emitted = state.pollutionGrid[y][x];
+      if (emitted > hotValue) {
+        hotSite = { x, y };
+        hotValue = emitted;
+      }
     }
   }
 
@@ -4581,32 +4564,7 @@ export function updateEntities(state: GameState, dt: number): void {
     state.evolutionFactor = Math.min(1.0, (state.evolutionFactor || 0.01) + 0.00002 * dt);
   }
 
-  // 3. Defense Turrets Auto-Targeting Biters (uses cached machine coords)
-  if (state.biters && state.biters.length > 0) {
-    for (let i = 0; i < _cachedMachineCoords.length; i++) {
-      const { x, y } = _cachedMachineCoords[i];
-      const tile = state.tiles[y]?.[x];
-      if (tile && tile.kind === "placed_item" && tile.placedItemId?.includes("turret")) {
-        // Find nearest biter within 7 tiles
-        let targetBiter = null;
-        let minDist = 7;
-        for (const biter of state.biters) {
-          const dist = Math.hypot(biter.x - x, biter.y - y);
-          if (dist < minDist) {
-            minDist = dist;
-            targetBiter = biter;
-          }
-        }
-
-        if (targetBiter) {
-          targetBiter.hp -= (tile.placedItemId.includes("laser") ? 45 : 25) * dt;
-        }
-      }
-    }
-
-    // Clean dead biters
-    state.biters = state.biters.filter(b => b.hp > 0);
-  }
+  tickDefense(state, dt, _cachedMachineCoords, satisfaction, hotSite);
 
   // Research Center tick - workers assigned to research generate points
   if (!state.inMine && state.activeResearchId) {
@@ -5128,6 +5086,14 @@ export function getChargedTargetTiles(
   return tiles;
 }
 
+function collectToolYield(state: GameState, tile: Tile, item: Item) {
+  if (addItem(state.inventory, item)) return;
+  const loot = tile.looseItems ??= [];
+  const stack = loot.find(drop => drop.id === item.id);
+  if (stack) stack.count += item.count;
+  else loot.push(item);
+}
+
 // Interact tool calculations
 export function interact(
   state: GameState,
@@ -5151,6 +5117,7 @@ export function interact(
   const py = f.y * TILE + TILE / 2;
 
   const heldItem = state.inventory[state.hotbarIndex];
+  if (heldItem?.type === "tool") state.player.actionSeconds = .22;
   // God mode: tools cost no energy
   const toolEnergyCost = state.godMode ? 0 : 2;
 
@@ -5436,7 +5403,7 @@ export function interact(
         if (tile.hitPoints <= 0) {
           tile.kind = state.inMine ? "mine_dirt" : "grass";
           tile.hitPoints = undefined;
-          addItem(state.inventory, createItem("stone", 1));
+          collectToolYield(state, tile, createItem("stone", 1));
           if (Math.random() < 0.15) {
             addItem(state.inventory, createItem("coal", 1));
           }
@@ -5495,7 +5462,7 @@ export function interact(
         if (tile.hitPoints <= 0) {
           tile.kind = state.inMine ? "mine_dirt" : "grass";
           tile.hitPoints = undefined;
-          addItem(state.inventory, createItem(config.item, Math.floor(Math.random() * 2) + 1));
+          collectToolYield(state, tile, createItem(config.item, Math.floor(Math.random() * 2) + 1));
 
           let gemMsg = "";
           if (state.inMine && Math.random() < 0.15) {
@@ -5526,22 +5493,13 @@ export function interact(
           });
         }
       } else if (tile.kind === "placed_item" && tile.placedItemId) {
-        state.energy -= toolEnergyCost;
-        const id = tile.placedItemId;
-        const itemObj = createItem(id, 1);
-
-        if (id === "chest" && tile.chestInventory) {
-          for (const item of tile.chestInventory) {
-            if (item) addItem(state.inventory, item);
-          }
+        const name = ITEM_DEFS[tile.placedItemId]?.name ?? tile.placedItemId;
+        if (dismantleTile(state, grid, f.x, f.y)) {
+          state.energy -= toolEnergyCost;
+          result.message = `Picked up ${name}`;
+        } else {
+          result.message = "Make room in your inventory to dismantle this.";
         }
-
-        tile.kind = "grass";
-        tile.placedItemId = undefined;
-        tile.chestInventory = undefined;
-        invalidateMachineCache();
-        addItem(state.inventory, itemObj);
-        result.message = `Picked up ${itemObj.name}`;
       }
       break;
 
@@ -5563,9 +5521,9 @@ export function interact(
         if (tile.hitPoints <= 0) {
           tile.kind = "grass";
           tile.hitPoints = undefined;
-          addItem(state.inventory, createItem("wood", Math.floor(Math.random() * 4) + 3));
+          collectToolYield(state, tile, createItem("wood", Math.floor(Math.random() * 4) + 3));
           if (Math.random() < 0.2) {
-            addItem(state.inventory, createItem("wood", 2));
+            collectToolYield(state, tile, createItem("wood", 2));
           }
           const lvlMsg = addExperience(state, "farming", 8);
           result.message = "Chopped down tree" + (lvlMsg ? `. ${lvlMsg}` : "");
@@ -5594,7 +5552,7 @@ export function interact(
         if (tile.hitPoints <= 0) {
           tile.kind = "grass";
           tile.hitPoints = undefined;
-          addItem(state.inventory, createItem("wood", 2));
+          collectToolYield(state, tile, createItem("wood", 2));
           result.message = "Cleared branch. +2 wood";
         } else {
           result.message = `Struck branch (${tile.hitPoints} HP left)`;
@@ -5672,37 +5630,40 @@ export function interact(
       return result;
     }
 
-    // Regular & Factorio Placeables
-    if (tile.kind === "grass" || tile.kind === "mine_dirt" || tile.kind === "soil" || tile.kind === "house_floor" || tile.kind === "path" || tile.kind === "ore_iron" || tile.kind === "ore_copper" || tile.kind === "ore_coal" || tile.kind === "debris_stone" || tile.kind === "ore_uranium") {
+    const issue = getFactoryPlacementIssue(tile, heldItem.id);
+    if (issue) {
+      result.message = issue;
+      return result;
+    }
+    if (tile.kind !== "placed_item") {
+      const foundation = tile.kind;
       tile.kind = "placed_item";
+      tile.foundation = foundation;
       tile.placedItemId = heldItem.id;
       tile.direction = state.placementDirection || "right";
       invalidateMachineCache();
 
-      if (heldItem.id === "chest") {
-        tile.chestInventory = Array.from({ length: 12 }, () => null);
-      } else if (heldItem.id === "iron_chest") {
-        tile.chestInventory = Array.from({ length: 24 }, () => null);
-      } else if (heldItem.id === "steel_chest") {
-        tile.chestInventory = Array.from({ length: 48 }, () => null);
-      } else if (heldItem.id === "logistics_chest") {
-        tile.chestInventory = Array.from({ length: 60 }, () => null);
-      } else if (heldItem.id === "transport_belt" || heldItem.id === "fast_transport_belt") {
+      if (isChestBuilding(heldItem.id)) {
+        tile.chestInventory = Array(getChestSlotCount(heldItem.id)).fill(null);
+      } else if (isConveyor(heldItem.id)) {
         tile.beltItems = [];
-      } else if (heldItem.id === "burner_drill" || heldItem.id === "electric_drill") {
-        tile.chestInventory = Array.from({ length: 3 }, () => null);
+      } else if (heldItem.id.includes("drill")) {
+        tile.chestInventory = [null, null, null];
+        tile.drillTargetOre = DEPOSITS[foundation];
+        tile.depositRemaining ??= 160 + (f.x * 31 + f.y * 17) % 140;
         tile.drillTimer = 0;
-      } else if (heldItem.id === "inserter" || heldItem.id === "fast_inserter" || heldItem.id === "long_inserter" || heldItem.id === "filter_inserter") {
+      } else if (heldItem.id.includes("inserter")) {
         tile.inserterArmAngle = -Math.PI;
         tile.inserterHolding = null;
-      } else if (heldItem.id.startsWith("assembling_machine") || heldItem.id === "chemical_plant") {
-        tile.chestInventory = Array.from({ length: 5 }, () => null);
+        if (heldItem.id === "burner_inserter") tile.chestInventory = [null];
+      } else if (isProcessor(heldItem.id)) {
+        tile.chestInventory = [null, null, null, null, null];
         tile.assemblerRecipeId = "iron_gear";
         tile.assemblerProgress = 0;
-      } else if (heldItem.id === "science_lab") {
-        tile.chestInventory = Array.from({ length: 6 }, () => null);
-      } else if (heldItem.id === "furnace" || heldItem.id === "stone_furnace" || heldItem.id === "steel_furnace" || heldItem.id === "electric_furnace") {
-        tile.chestInventory = Array.from({ length: 3 }, () => null);
+      } else if (heldItem.id.includes("lab") || heldItem.id.includes("turret")) {
+        tile.chestInventory = Array(6).fill(null);
+      } else if (isFurnace(heldItem.id)) {
+        tile.chestInventory = [null, null, null];
       } else if (heldItem.id === "worker_cabin") {
         tile.chestInventory = Array.from({ length: 12 }, () => null);
         if (!state.workers) state.workers = [];
@@ -6162,6 +6123,7 @@ class ImprovedNoise {
   }
 }
 
+const worldGenNoise = new ImprovedNoise();
 const noiseBase = new ImprovedNoise();
 
 export function getGrassColor(x: number, y: number, season: string = "spring"): string {
@@ -6197,9 +6159,9 @@ export function getGrassColor(x: number, y: number, season: string = "spring"): 
   }
 
   if (b.kind === "forest") {
-    const r = Math.max(0, 44 + (tint >> 1));
-    const g = Math.max(0, 80 + tint);
-    const bl = Math.max(0, 36 + (tint >> 1));
+    const r = Math.max(0, 78 + tint);
+    const g = Math.max(0, 98 + tint);
+    const bl = Math.max(0, 61 + (tint >> 1));
     return `rgb(${r}, ${g}, ${bl})`;
   }
 
@@ -6216,9 +6178,9 @@ export function getGrassColor(x: number, y: number, season: string = "spring"): 
   } else if (season === "winter") {
     return `rgb(${190 + tint}, ${205 + tint}, ${215 + tint})`;
   } else if (season === "summer") {
-    return `rgb(${68 + (tint >> 1)}, ${135 + tint}, ${48 + (tint >> 1)})`;
+    return `rgb(${108 + tint}, ${117 + tint}, ${75 + (tint >> 1)})`;
   }
-  return `rgb(${72 + (tint >> 1)}, ${142 + tint}, ${52 + (tint >> 1)})`;
+  return `rgb(${104 + tint}, ${110 + tint}, ${75 + (tint >> 1)})`;
 }
 
 function seedRandom(s: number): number {
@@ -6272,6 +6234,76 @@ function drawOrganicBlob(
 }
 
 // ----------------------------- OVERHAUL GRAPHICS RENDERER -----------------------------
+export function getWorldCamera(state: GameState, width: number, height: number) {
+  const grid = state.inHouse ? state.houseGrid! : state.inMine ? state.mineGrid : state.tiles;
+  const { player } = state;
+  const origin = (position: number, tiles: number, viewport: number) => {
+    const size = tiles * TILE;
+    if (size < viewport) return (size - viewport) / 2;
+    return Math.max(0, Math.min(size - viewport, (position + 0.5) * TILE - viewport / 2));
+  };
+  return {
+    x: origin(player.subX ?? player.x, grid[0]?.length ?? 0, width),
+    y: origin(player.subY ?? player.y, grid.length, height),
+  };
+}
+
+const terrainColors = new Map<Season, string[]>();
+function terrainColor(x: number, y: number, season: Season): string {
+  let colors = terrainColors.get(season);
+  if (!colors) {
+    colors = new Array<string>(COLS * ROWS);
+    terrainColors.set(season, colors);
+  }
+  const index = y * COLS + x;
+  return colors[index] ??= getGrassColor(x, y, season);
+}
+
+const surfaceChunkSize = 10;
+const surfaceChunks = new Map<string, { image: HTMLCanvasElement; ore: string }>();
+let surfaceSeason: Season | undefined;
+let surfaceLowDetail = false;
+
+function surfaceChunk(grid: Tile[][], cx: number, cy: number, season: Season, lowDetail: boolean) {
+  if (surfaceSeason !== season || surfaceLowDetail !== lowDetail) {
+    surfaceChunks.clear();
+    surfaceSeason = season;
+    surfaceLowDetail = lowDetail;
+  }
+  const key = `${cx}:${cy}`;
+  const firstX = cx * surfaceChunkSize;
+  const firstY = cy * surfaceChunkSize;
+  const size = surfaceChunkSize * TILE;
+  // Only resource beds and bare ground change the background raster.
+  let mineralMask = "";
+  for (let y = firstY; y < firstY + surfaceChunkSize; y++) {
+    for (let x = firstX; x < firstX + surfaceChunkSize; x++) {
+      const tile = grid[y]?.[x];
+      const kind = tile?.foundation ?? tile?.kind;
+      mineralMask += kind?.startsWith("ore_") || kind === "water" || kind === "path" ? `|${kind}` : "|";
+    }
+  }
+  const cached = surfaceChunks.get(key);
+  if (cached?.ore === mineralMask) return cached.image;
+  const image = cached?.image ?? document.createElement("canvas");
+  if (!cached) image.width = image.height = size;
+  const raster = image.getContext("2d")!;
+  raster.setTransform(1, 0, 0, 1, -firstX * TILE, -firstY * TILE);
+  for (let y = firstY; y < firstY + surfaceChunkSize; y++) {
+    for (let x = firstX; x < firstX + surfaceChunkSize; x++) {
+      const tile = grid[y]?.[x];
+      if (!tile) continue;
+      const kind = tile.foundation ?? tile.kind;
+      raster.fillStyle = terrainColor(x, y, season);
+      raster.fillRect(x * TILE, y * TILE, TILE, TILE);
+      if (kind !== "water" && kind !== "path" && (!lowDetail || kind.startsWith("ore_"))) drawGroundDetail(raster, x, y, kind);
+    }
+  }
+  if (surfaceChunks.size >= 84) surfaceChunks.delete(surfaceChunks.keys().next().value);
+  surfaceChunks.set(key, { image, ore: mineralMask });
+  return image;
+}
+
 export function draw(
   ctx: CanvasRenderingContext2D,
   state: GameState,
@@ -6295,30 +6327,10 @@ export function draw(
   const playerPx = (p.subX !== undefined ? p.subX : p.x) * TILE + TILE / 2;
   const playerPy = (p.subY !== undefined ? p.subY : p.y) * TILE + TILE / 2;
 
-  let cameraX = 0;
-  if (state.inHouse || state.inMine) {
-    if (gridCols * TILE < effectiveWidth) {
-      cameraX = -(effectiveWidth - gridCols * TILE) / 2;
-    } else {
-      cameraX = Math.max(0, Math.min(gridCols * TILE - effectiveWidth, playerPx - effectiveWidth / 2));
-    }
-  } else {
-    cameraX = playerPx - effectiveWidth / 2;
-  }
-
-  let cameraY = 0;
-  if (state.inHouse || state.inMine) {
-    if (gridRows * TILE < effectiveHeight) {
-      cameraY = -(effectiveHeight - gridRows * TILE) / 2;
-    } else {
-      cameraY = Math.max(0, Math.min(gridRows * TILE - effectiveHeight, playerPy - effectiveHeight / 2));
-    }
-  } else {
-    cameraY = playerPy - effectiveHeight / 2;
-  }
+  const { x: cameraX, y: cameraY } = getWorldCamera(state, effectiveWidth, effectiveHeight);
 
   // Background
-  ctx.fillStyle = state.inHouse ? "#100f0f" : (state.inMine ? "#231f20" : "#5da859"); // void background for house interior
+  ctx.fillStyle = state.inHouse ? "#100f0f" : (state.inMine ? "#231f20" : "#666b48"); // void background for house interior
   ctx.fillRect(0, 0, viewWidth, viewHeight);
 
   ctx.save();
@@ -6331,79 +6343,25 @@ export function draw(
   const endRow = Math.min(gridRows, Math.ceil((cameraY + effectiveHeight) / TILE));
 
   const phase = getTimePhase(state.time);
+  const frameTime = performance.now();
 
   // Checker functions for terrains
   const isWater = (t: Tile | undefined) => !!t && t.kind === "water";
   const isPath = (t: Tile | undefined) => !!t && t.kind === "path";
   const isSoil = (t: Tile | undefined) => !!t && (t.kind === "soil" || t.kind === "watered" || t.cropId !== undefined);
 
-  // 1. Terrain Tiles Layer (Layer 1: Base Grass Background + Base overlay)
-  for (let y = startRow; y < endRow; y++) {
-    for (let x = startCol; x < endCol; x++) {
-      const px = x * TILE;
-      const py = y * TILE;
-
-      if (state.inHouse) {
-        // Black void padding
-        ctx.fillStyle = "#110e0c";
-        ctx.fillRect(px, py, TILE, TILE);
-      } else if (!state.inMine) {
-        // Factorio Planet Nauvis Base Terrain (Seamless Organic Biomes & Ore Veins)
-        const tile = currentGrid[y]?.[x];
-        if (tile && tile.kind && tile.kind.startsWith("ore_")) {
-          const oreBedColors: Record<string, string> = {
-            ore_iron: "#253040",
-            ore_copper: "#5c331a",
-            ore_coal: "#14171a",
-            ore_uranium: "#0e3b1c",
-            ore_gold: "#4a3c10",
-            ore_crude_oil: "#161b22"
-          };
-          ctx.fillStyle = oreBedColors[tile.kind] || "#3b2f21";
-          ctx.fillRect(px, py, TILE, TILE);
-        } else {
-          const grassColor = getGrassColor(x, y, state.season);
-          ctx.fillStyle = grassColor;
-          ctx.fillRect(px, py, TILE, TILE);
-        }
-
-        // Factorio Arid Surface Details: Mineral Gravel Specks, Dry Earth Cracks, and Stone Grains
-        const r = seedRandom(x * 37 + y * 73);
-        if (r < 0.18) {
-          // Tiny mineral gravel / pebble
-          const gx = px + 6 + (r * 18);
-          const gy = py + 6 + ((r * 99) % 18);
-          ctx.fillStyle = "#3b2f21";
-          ctx.fillRect(gx, gy, 2, 2);
-          ctx.fillStyle = "#63503a";
-          ctx.fillRect(gx + 1, gy, 1, 1);
-        } else if (r < 0.28) {
-          // Dry cracked earth fissure line
-          const cx = px + 8 + (r * 12);
-          const cy = py + 8 + ((r * 66) % 12);
-          ctx.strokeStyle = "#2d2419";
-          ctx.lineWidth = 1;
-          ctx.beginPath();
-          ctx.moveTo(cx, cy);
-          ctx.lineTo(cx + 4, cy + 3);
-          ctx.lineTo(cx + 7, cy + 1);
-          ctx.stroke();
-        } else if (r < 0.35) {
-          // Subtle ochre mineral dust speck
-          const dx = px + 4 + (r * 22);
-          const dy = py + 4 + ((r * 44) % 22);
-          ctx.fillStyle = "#8a7154";
-          ctx.fillRect(dx, dy, 1.5, 1.5);
-        }
-      } else {
-        // Mine dirt tiles
-        const t = currentGrid[y][x];
-        if (t.kind !== "mine_wall") {
-          ctx.fillStyle = (x + y) % 2 === 0 ? "#3d312a" : "#352b25";
-          ctx.fillRect(px, py, TILE, TILE);
-          ctx.fillStyle = "#2c231e";
-          if ((x * 3 + y) % 5 === 0) ctx.fillRect(px + 6, py + 14, 8, 2);
-        }
+  if (!state.inHouse && !state.inMine) {
+    for (let cy = Math.floor(startRow / surfaceChunkSize); cy < Math.ceil(endRow / surfaceChunkSize); cy++) {
+      for (let cx = Math.floor(startCol / surfaceChunkSize); cx < Math.ceil(endCol / surfaceChunkSize); cx++) {
+        const texture = surfaceChunk(currentGrid, cx, cy, state.season, state.settings?.graphicsQuality === "low");
+        ctx.drawImage(texture, cx * surfaceChunkSize * TILE, cy * surfaceChunkSize * TILE);
+      }
+    }
+  } else if (state.inMine) {
+    for (let y = startRow; y < endRow; y++) {
+      for (let x = startCol; x < endCol; x++) {
+        ctx.fillStyle = (x + y) % 2 === 0 ? "#3d312a" : "#352b25";
+        ctx.fillRect(x * TILE, y * TILE, TILE, TILE);
       }
     }
   }
@@ -6415,23 +6373,18 @@ export function draw(
       const px = x * TILE;
       const py = y * TILE;
 
-      if (t.kind === "path") {
-        // Factorio Reinforced Concrete & Stone Brick Paving
-        ctx.fillStyle = "#334155";
+      if ((t.foundation ?? t.kind) === "path") {
+        ctx.fillStyle = "#565651";
         ctx.fillRect(px, py, TILE, TILE);
-        ctx.fillStyle = "#475569";
-        ctx.fillRect(px + 1, py + 1, TILE - 2, TILE - 2);
-
-        // Brick Pavement Seam Grid
-        ctx.strokeStyle = "#1e293b";
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.moveTo(px, py + TILE / 2);
-        ctx.lineTo(px + TILE, py + TILE / 2);
-        ctx.moveTo(px + TILE / 2, py);
-        ctx.lineTo(px + TILE / 2, py + TILE);
-        ctx.stroke();
-
+        ctx.fillStyle = "#717168";
+        ctx.fillRect(px, py + 2, TILE, 27);
+        ctx.fillStyle = "#434741";
+        ctx.fillRect(px, py + 29, TILE, 3);
+        ctx.fillStyle = "#8d8978";
+        ctx.fillRect(px, py + 2, TILE, 1);
+        ctx.fillStyle = "rgba(41,45,40,.24)";
+        ctx.fillRect(px, py + 3, 1, 26);
+        drawGroundDetail(ctx, x, y, "path");
       } else if (t.kind === "water") {
         // 1. Seamless Deep Factorio Lake Water
         ctx.fillStyle = "#123842";
@@ -6488,6 +6441,14 @@ export function draw(
         const isWatered = t.kind === "watered" || t.watered;
         ctx.fillStyle = isWatered ? "#241c14" : "#3a2e22";
         ctx.fillRect(px, py, TILE, TILE);
+
+        for (let furrow = 2; furrow < TILE; furrow += 8) {
+          ctx.fillStyle = isWatered ? "#1a1812" : "#2c261c";
+          ctx.fillRect(px + furrow, py, 2.5, TILE);
+          ctx.fillStyle = isWatered ? "#3a2c20" : "#53412e";
+          ctx.fillRect(px + furrow + 3, py, 1.5, TILE);
+        }
+        drawGroundDetail(ctx, x, y, "path");
 
         // Organic Soil Edge Granules
         ctx.fillStyle = isWatered ? "#1b140e" : "#4a3b2c";
@@ -6564,40 +6525,49 @@ export function draw(
         }
       } else if (t.kind === "house") {
         if (x >= 12 && x <= 17 && y >= 24 && y <= 28) {
-          // Factorio Crashed Spaceship Hull & Escape Pod Wreckage (6x5, rx: 0..5, ry: 0..4)
           const rx = x - 12;
           const ry = y - 24;
-
-          // Titanium Alloy Hull Plates with Heat Shield Scorching
-          ctx.fillStyle = ry <= 1 ? "#2c3e50" : "#34495e";
-          ctx.fillRect(px, py, TILE, TILE);
-          ctx.fillStyle = "#1b2631";
-          ctx.fillRect(px, py + TILE - 2, TILE, 2);
-
-          // Yellow/Black Hazard Stripes on wing panels
-          if (ry === 0 || ry === 4) {
-            ctx.fillStyle = "#f39c12";
-            for (let i = 0; i < TILE; i += 8) {
-              ctx.fillRect(px + i, py, 4, 3);
+          if (ry < 4) {
+            ctx.fillStyle = ry < 2 ? "#58655c" : "#42534b";
+            ctx.fillRect(px, py, TILE, TILE);
+            for (let i = 2; i < TILE; i += 8) {
+              ctx.fillStyle = "rgba(22,33,25,.34)";
+              ctx.fillRect(px + i, py, 2.5, TILE);
+              ctx.fillStyle = "rgba(205,209,179,.15)";
+              ctx.fillRect(px + i + 2.5, py, 1, TILE);
             }
-          }
-
-          // Cockpit Computer & Radar Array
-          if (rx === 3 && ry === 1) {
-            ctx.fillStyle = "#1abc9c";
-            ctx.fillRect(px + 4, py + 4, TILE - 8, TILE - 8);
-            ctx.fillStyle = "#e67e22";
-            ctx.fillRect(px + 8, py + 8, 4, 4);
-          }
-
-          // Airship Hatchway Air-Lock Door
-          if (rx === 3 && ry === 4) {
-            ctx.fillStyle = "#1b2631";
-            ctx.fillRect(px + 4, py, TILE - 8, TILE);
-            ctx.fillStyle = "#f1c40f";
-            ctx.fillRect(px + 6, py + 2, TILE - 12, 3);
-            ctx.fillStyle = "#2ecc71"; // green active status light
-            ctx.fillRect(px + 6, py + 8, 3, 3);
+            if (ry === 2) {
+              ctx.fillStyle = "#788073";
+              ctx.fillRect(px, py, TILE, 3);
+              ctx.fillStyle = "#303c34";
+              ctx.fillRect(px, py + 3, TILE, 1);
+            }
+            if (ry === 1 && rx === 2) {
+              ctx.fillStyle = "#30332c";
+              ctx.fillRect(px + 9, py + 6, 12, 17);
+              ctx.fillStyle = "#9a735c";
+              ctx.fillRect(px + 7, py + 5, 10, 13);
+              ctx.fillStyle = "#393932";
+              ctx.fillRect(px + 6, py + 4, 12, 5);
+            }
+          } else {
+            ctx.fillStyle = "#75634d";
+            ctx.fillRect(px, py, TILE, TILE);
+            ctx.fillStyle = "#3a4037";
+            ctx.fillRect(px, py, TILE, 4);
+            ctx.fillRect(px, py + 28, TILE, 4);
+            if (rx === 3) {
+              ctx.fillStyle = "#282f29";
+              ctx.fillRect(px + 5, py + 6, 22, 26);
+              ctx.fillStyle = "#856c49";
+              ctx.fillRect(px + 6, py + 7, 2, 24);
+            } else if (rx === 1 || rx === 4) {
+              ctx.fillStyle = "#35433b";
+              ctx.fillRect(px + 6, py + 10, 20, 13);
+              ctx.fillStyle = "#a79b6c";
+              ctx.fillRect(px + 7, py + 11, 8, 9);
+              ctx.fillRect(px + 17, py + 11, 8, 9);
+            }
           }
         } else if (x >= 64 && x <= 74 && y >= 32 && y <= 40) {
           // Factorio Orbital Logistics Depot & Exchange Post
@@ -6717,6 +6687,7 @@ export function draw(
     }
   }
 
+  const specialtyStructures: { x: number; y: number; t: Tile }[] = [];
   // Terrain Tiles Layer (Layer 3: Trees, Growing Crops, Debris, and Placed Items)
   for (let y = startRow; y < endRow; y++) {
     for (let x = startCol; x < endCol; x++) {
@@ -6895,7 +6866,7 @@ export function draw(
         ctx.lineTo(px + 13 + debrisShake, py + 19);
         ctx.stroke();
 
-      } else if (t.kind === "ore_copper" || t.kind === "ore_iron" || t.kind === "ore_gold" || t.kind === "ore_uranium" || t.kind === "ore_silver" || t.kind === "ore_coal" || t.kind === "ore_aluminum") {
+      } else if (state.inMine && (t.kind === "ore_copper" || t.kind === "ore_iron" || t.kind === "ore_gold" || t.kind === "ore_uranium" || t.kind === "ore_silver" || t.kind === "ore_coal" || t.kind === "ore_aluminum")) {
         // Factorio Metallic Ore Vein Deposit
         ctx.fillStyle = "rgba(0, 0, 0, 0.35)";
         ctx.beginPath();
@@ -6993,85 +6964,29 @@ export function draw(
         ctx.fill();
       }
 
-      // Render Placed Items (Factorio Automation & Farm Placeables)
+      if (t.looseItems?.length) {
+        ctx.fillStyle = "#32352a";
+        ctx.fillRect(px + 11, py + 14, 11, 9);
+        ctx.fillStyle = "#d8b783";
+        ctx.fillRect(px + 10, py + 12, 10, 7);
+        ctx.fillStyle = "#846951";
+        ctx.fillRect(px + 14, py + 12, 2, 7);
+      }
+
+      // Render placed equipment.
       if (t.kind === "placed_item" && t.placedItemId) {
         const id = t.placedItemId;
+        if (/roboport|rail|locomotive|cargo_wagon|rocket_silo|combinator|nuclear_reactor|centrifuge|heat_exchanger|steam_turbine|space_platform_hub|cargo_landing_pad|spidertron|foundry|electromagnetic_plant|biochamber|agricultural_tower/.test(id)) specialtyStructures.push({ x, y, t });
         const dir = t.direction || "right";
 
-        // 1. Factorio 4-Tier Transport Belts & Loaders
-        if (id.includes("belt") || id.includes("loader")) {
-          const isTurbo = id.includes("turbo");
-          const isExpress = id.includes("express");
-          const isFast = id.includes("fast");
-          const isLoader = id.includes("loader");
-
-          const beltColor = isTurbo ? "#27ae60" : isExpress ? "#2980b9" : isFast ? "#c0392b" : "#d4ac0d";
-          const arrowColor = isTurbo ? "#2ecc71" : isExpress ? "#3498db" : isFast ? "#e74c3c" : "#f1c40f";
-
-          // Belt Housing / Metal Base
-          ctx.fillStyle = "#1e272c";
-          ctx.fillRect(px + 1, py + 1, TILE - 2, TILE - 2);
-          ctx.fillStyle = beltColor;
-          ctx.fillRect(px + 3, py + 3, TILE - 6, TILE - 6);
-
-          // Moving directional Chevron arrows (Speed proportional to tier)
-          const animSpeed = isTurbo ? 90 : isExpress ? 140 : isFast ? 220 : 320;
-          const animOffset = (Date.now() / animSpeed) % 8;
-
-          ctx.fillStyle = arrowColor;
-          ctx.save();
-          ctx.translate(px + TILE / 2, py + TILE / 2);
-          if (dir === "up") ctx.rotate(-Math.PI / 2);
-          else if (dir === "down") ctx.rotate(Math.PI / 2);
-          else if (dir === "left") ctx.rotate(Math.PI);
-
-          for (let i = -12; i <= 12; i += 6) {
-            const arrX = i + animOffset - 4;
-            if (arrX >= -12 && arrX <= 12) {
-              ctx.beginPath();
-              ctx.moveTo(arrX + 3, 0);
-              ctx.lineTo(arrX - 2, -4);
-              ctx.lineTo(arrX - 0.5, 0);
-              ctx.lineTo(arrX - 2, 4);
-              ctx.closePath();
-              ctx.fill();
-            }
-          }
-          ctx.restore();
-
-          // Loader funnel chute
-          if (isLoader) {
-            ctx.fillStyle = "#34495e";
-            ctx.fillRect(px + 4, py + 4, TILE - 8, 5);
-            ctx.fillStyle = arrowColor;
-            ctx.fillRect(px + 8, py + 2, TILE - 16, 3);
-          }
-
-          // Dual-Lane Item rendering on belts
-          if (t.beltItems && t.beltItems.length > 0) {
-            const { dx, dy } = getDirectionVector(dir);
-            t.beltItems.forEach((bItem) => {
-              const startX = px + 4;
-              const startY = py + 4;
-              const ix = startX + (dx !== 0 ? (bItem.offset * (TILE - 12)) * (dx > 0 ? 1 : -1) + (dx < 0 ? TILE - 12 : 0) : bItem.lane * 8 + 3);
-              const iy = startY + (dy !== 0 ? (bItem.offset * (TILE - 12)) * (dy > 0 ? 1 : -1) + (dy < 0 ? TILE - 12 : 0) : bItem.lane * 8 + 3);
-
-              ctx.fillStyle = bItem.id.includes("iron") ? "#3498db" : bItem.id.includes("copper") ? "#e67e22" : bItem.id.includes("coal") ? "#17202a" : bItem.id.includes("uranium") ? "#2ecc71" : "#f1c40f";
-              ctx.beginPath();
-              ctx.arc(ix + 4, iy + 4, 3.5, 0, Math.PI * 2);
-              ctx.fill();
-              ctx.strokeStyle = "#ffffff";
-              ctx.lineWidth = 0.8;
-              ctx.stroke();
-            });
-          }
-        }
-
-        // 2. Factorio Resource Extraction: Mining Drills & Pumpjacks (Matching Attached Reference)
-        else if (id.includes("drill") || id.includes("pumpjack")) {
-          const isElectric = id.includes("electric") || id.includes("big");
-          const isPumpjack = id.includes("pumpjack");
-          const drillTime = Date.now() / 60;
+        if (isConveyor(id)) {
+          drawConveyor(ctx, px, py, t, frameTime);
+        } else if (drawYardMachine(ctx, px, py, t, frameTime)) {
+          // Custom-rendered drill, furnace, or inserter.
+        } else if (id.includes("pumpjack")) {
+          const isElectric = false;
+          const isPumpjack = true;
+          const drillTime = frameTime / 60;
 
           if (isPumpjack) {
             // Factorio Pumpjack (Olive Green Nodding Donkey Walking Beam)
@@ -7411,38 +7326,41 @@ export function draw(
           ctx.fillRect(px + 23, py + 10, 3, 3);
         }
 
-        // 7. Factorio Combat Defense Turrets (Gun, Laser, Flamethrower, Rocket, Tesla, Railgun)
-        else if (id.includes("turret")) {
-          const isLaser = id.includes("laser");
-          const isFlame = id.includes("flame");
-          const isRocket = id.includes("rocket");
-          const isTesla = id.includes("tesla");
-          const isRailgun = id.includes("railgun");
-
-          // Heavy armored base platform
-          ctx.fillStyle = "#2c3e50";
-          ctx.beginPath();
-          ctx.arc(px + TILE / 2, py + TILE / 2, 10, 0, Math.PI * 2);
-          ctx.fill();
-
-          // Swiveling Turret Head (Auto-aims or rotates)
-          const turretAngle = Date.now() / 800;
+        else if (id === "stone_wall") {
+          const connected = (dx: number, dy: number) => currentGrid[y + dy]?.[x + dx]?.placedItemId === "stone_wall";
+          ctx.fillStyle = "#302f23";
+          ctx.fillRect(px + 4, py + 7, 25, 23);
+          ctx.fillStyle = "#7e7966";
+          ctx.fillRect(px + 6, py + 5, 20, 20);
+          if (connected(1, 0) || connected(-1, 0)) ctx.fillRect(px, py + 8, 32, 14);
+          if (connected(0, 1) || connected(0, -1)) ctx.fillRect(px + 8, py, 16, 32);
+          ctx.fillStyle = "#aaa28a";
+          ctx.fillRect(px + 8, py + 7, 16, 5);
+          ctx.fillStyle = "#514e40";
+          ctx.fillRect(px + 11, py + 12, 1, 6);
+          ctx.fillRect(px + 21, py + 16, 1, 5);
+        } else if (id.includes("turret")) {
+          const laser = id === "laser_turret";
+          ctx.fillStyle = "#333a33";
+          ctx.fillRect(px + 4, py + 5, 25, 23);
+          ctx.fillStyle = "#737868";
+          ctx.fillRect(px + 6, py + 6, 20, 18);
+          ctx.fillStyle = "#aaa187";
+          ctx.fillRect(px + 7, py + 7, 18, 2);
+          ctx.fillStyle = "#2f352d";
+          ctx.fillRect(px + 8, py + 17, 4, 6);
           ctx.save();
-          ctx.translate(px + TILE / 2, py + TILE / 2);
-          ctx.rotate(turretAngle);
-
-          ctx.fillStyle = isLaser ? "#e74c3c" : isFlame ? "#d35400" : isRocket ? "#f39c12" : isTesla ? "#00d2d3" : isRailgun ? "#2980b9" : "#7f8c8d";
-          ctx.fillRect(-4, -4, 8, 8);
-
-          // Twin Gun / Laser Barrels
-          ctx.fillStyle = "#1e272c";
-          ctx.fillRect(2, -3, 10, 2.5);
-          ctx.fillRect(2, 0.5, 10, 2.5);
-
-          // Laser sight dot
-          if (isLaser) {
-            ctx.fillStyle = "rgba(231, 76, 60, 0.8)";
-            ctx.fillRect(12, -1, 3, 2);
+          ctx.translate(px + 16, py + 15);
+          ctx.rotate(t.aimAngle ?? 0);
+          ctx.fillStyle = "#222a25";
+          ctx.fillRect(-8, -6, 18, 12);
+          ctx.fillStyle = laser ? "#739f8d" : "#ae8c56";
+          ctx.fillRect(-7, -5, 12, 8);
+          ctx.fillStyle = "#b3b5a4";
+          ctx.fillRect(3, -2, 13, 4);
+          if ((t.fireCooldown ?? 0) > .23) {
+            ctx.fillStyle = laser ? "#a3ffdf" : "#ffc977";
+            ctx.fillRect(16, -2, 4, 4);
           }
           ctx.restore();
         }
@@ -7806,7 +7724,7 @@ export function draw(
   }
 
   // Factorio Pollution Cloud Density Overlay
-  if (state.pollutionGrid) {
+  if (state.settings?.showPollution && state.pollutionGrid) {
     for (let y = startRow; y < endRow; y++) {
       for (let x = startCol; x < endCol; x++) {
         const poll = state.pollutionGrid[y]?.[x] || 0;
@@ -7819,25 +7737,45 @@ export function draw(
   }
 
   // Render Factorio Biters
-  if (state.biters && state.biters.length > 0) {
-    state.biters.forEach((b) => {
-      const bx = (b.subX ?? b.x) * TILE + TILE / 2;
-      const by = (b.subY ?? b.y) * TILE + TILE / 2;
-      // Biter shadow
-      ctx.fillStyle = "rgba(0, 0, 0, 0.35)";
+  if (!state.inMine && !state.inHouse) for (const scout of state.biters ?? []) {
+    if (scout.x < startCol - 1 || scout.x > endCol + 1 || scout.y < startRow - 1 || scout.y > endRow + 1) continue;
+    ctx.save();
+    ctx.translate((scout.subX + .5) * TILE, (scout.subY + .5) * TILE);
+    ctx.rotate(scout.heading ?? 0);
+    const large = scout.type === "medium";
+    const stride = Math.sin(frameTime * .017 + scout.x) * 3;
+    ctx.strokeStyle = "#3c2c29";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    for (let leg = -1; leg <= 1; leg++) {
+      const reach = leg * 5;
+      ctx.moveTo(reach, 0);
+      ctx.lineTo(reach + stride, -8);
+      ctx.moveTo(reach, 0);
+      ctx.lineTo(reach - stride, 8);
+    }
+    ctx.stroke();
+    ctx.fillStyle = large ? "#986151" : "#6b5140";
+    ctx.beginPath();
+    ctx.ellipse(-1, 0, large ? 11 : 8, large ? 6 : 4.7, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#deae68";
+    ctx.fillRect(4, -3, 3, 2);
+    ctx.fillRect(4, 1, 3, 2);
+    ctx.restore();
+  }
+
+  if (!state.inHouse && state.settings?.graphicsQuality !== "low") {
+    for (const effect of state.combatFx ?? []) {
+      ctx.strokeStyle = effect.color;
+      ctx.globalAlpha = effect.seconds / .13;
+      ctx.lineWidth = 1.8;
       ctx.beginPath();
-      ctx.ellipse(bx, by + 4, 8, 3, 0, 0, Math.PI * 2);
-      ctx.fill();
-      // Biter chitin shell
-      ctx.fillStyle = b.type === "big" ? "#8e44ad" : b.type === "medium" ? "#d35400" : "#c0392b";
-      ctx.beginPath();
-      ctx.arc(bx, by, b.type === "big" ? 10 : 7, 0, Math.PI * 2);
-      ctx.fill();
-      // Mandibles & glowing eyes
-      ctx.fillStyle = "#f1c40f";
-      ctx.fillRect(bx - 3, by - 3, 2, 2);
-      ctx.fillRect(bx + 1, by - 3, 2, 2);
-    });
+      ctx.moveTo((effect.from.x + .5) * TILE, (effect.from.y + .37) * TILE);
+      ctx.lineTo((effect.to.x + .5) * TILE, (effect.to.y + .5) * TILE);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
   }
 
   // ==========================================
@@ -7920,14 +7858,14 @@ export function draw(
   // ==========================================
   // 6. DRAW FACTORIO ENGINEER (MATCHING OFFICIAL MODEL)
   // ==========================================
-  const isMoving = Math.abs(p.x - (p.subX ?? p.x)) > 0.01 || Math.abs(p.y - (p.subY ?? p.y)) > 0.01;
-  const walkTime = isMoving ? Date.now() / 70 : 0;
+  const isMoving = (p.walkSeconds ?? 0) > 0;
+  const walkTime = (p.walkSeconds ?? 0) * 5.9;
   const walkBob = isMoving ? Math.sin(walkTime * 2) * 1.6 : 0;
   const leftLegOffset = isMoving ? Math.sin(walkTime) * 4.5 : 0;
   const rightLegOffset = isMoving ? -Math.sin(walkTime) * 4.5 : 0;
-  const armSwing = isMoving ? Math.sin(walkTime) * 3.5 : 0;
+  const armSwing = (p.actionSeconds ?? 0) > 0 ? -4 * Math.sin(p.actionSeconds! * 13) : isMoving ? Math.sin(walkTime) * 3.5 : 0;
 
-  const dressCol = p.dressColor || "#d48817";
+  const dressCol = p.dressColor || "#b4774e";
   const secCol = p.secondaryColor || "#1e2430";
   const suitType = p.suitType || "engineer";
   const helmetType = p.helmetType || "visor";
@@ -8083,8 +8021,11 @@ export function draw(
   // Active Tool Swipe indicator (Factorio style selector box)
   const activeHighlight = hoveredTile || frontTile(state);
   if (activeHighlight && state.harvestLiftingTimer <= 0) {
-    const dist = Math.abs(activeHighlight.x - p.x) + Math.abs(activeHighlight.y - p.y);
-    const inReach = dist <= 5;
+    const dist = Math.hypot(activeHighlight.x - p.x, activeHighlight.y - p.y);
+    const target = currentGrid[activeHighlight.y]?.[activeHighlight.x];
+    const selected = state.inventory[state.hotbarIndex];
+    const preview = hoveredTile && target && selected?.type === "furniture" && !target.placedItemId && !state.blueprint?.mode;
+    const inReach = dist <= (p.reachDistance ?? 8) && (!preview || !getFactoryPlacementIssue(target, selected!.id));
 
     ctx.strokeStyle = inReach ? "rgba(46, 204, 113, 0.7)" : "rgba(231, 76, 60, 0.5)";
     ctx.lineWidth = 2;
@@ -8092,6 +8033,46 @@ export function draw(
 
     ctx.fillStyle = inReach ? "rgba(46, 204, 113, 0.08)" : "rgba(231, 76, 60, 0.08)";
     ctx.fillRect(activeHighlight.x * TILE + 2, activeHighlight.y * TILE + 2, TILE - 4, TILE - 4);
+
+    if (preview && inReach) {
+      const x = activeHighlight.x * TILE;
+      const y = activeHighlight.y * TILE;
+      const ghost: Tile = { kind: "placed_item", age: 0, watered: false, placedItemId: selected!.id, direction: state.placementDirection };
+      ctx.save();
+      ctx.globalAlpha = 0.48;
+      if (isConveyor(selected!.id)) drawConveyor(ctx, x, y, ghost, frameTime);
+      else drawYardMachine(ctx, x, y, ghost, frameTime);
+      ctx.restore();
+
+      const { dx, dy } = getDirectionVector(state.placementDirection);
+      if (isConveyor(selected!.id) || /drill|inserter/.test(selected!.id)) {
+        const cx = x + 16, cy = y + 16;
+        const tipX = cx + dx * 21, tipY = cy + dy * 21;
+        ctx.strokeStyle = "#fbdda0";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        ctx.lineTo(tipX, tipY);
+        ctx.lineTo(tipX - dx * 5 - dy * 3, tipY - dy * 5 + dx * 3);
+        ctx.moveTo(tipX, tipY);
+        ctx.lineTo(tipX - dx * 5 + dy * 3, tipY - dy * 5 - dx * 3);
+        ctx.stroke();
+      }
+    }
+    if (hoveredTile && target?.machineStatus && state.altMode) {
+      const labels = { running: "Running", idle: "Waiting for input", blocked: "Output backed up", fuel: "Needs fuel", power: "Needs power", depleted: "Deposit depleted", damaged: "Disabled by damage" };
+      const label = target.machineStatus === "fuel" && target.placedItemId === "gun_turret" ? "Needs ammo" : labels[target.machineStatus];
+      const x = activeHighlight.x * TILE + 16;
+      const y = activeHighlight.y * TILE - 7;
+      ctx.font = "600 10px Segoe UI";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      const width = ctx.measureText(label).width + 14;
+      ctx.fillStyle = "rgba(28,31,25,.93)";
+      ctx.fillRect(x - width / 2, y - 8, width, 16);
+      ctx.fillStyle = target.machineStatus === "running" ? "#d1e4ad" : "#e9c693";
+      ctx.fillText(label, x, y);
+    }
 
     const held = state.inventory[state.hotbarIndex];
     if (held && held.id === "sword" && Math.sin(Date.now() / 60) > 0.6) {
@@ -8183,20 +8164,20 @@ export function draw(
     let alpha = 0;
     let color = "0,0,0";
     if (hours < 6) { alpha = 0.55; color = "10,10,40"; } // deep night
-    else if (hours < 8) { alpha = 0.35 - ((hours - 6) / 2) * 0.35; color = "255,140,50"; } // sunrise
+    else if (hours < 8) { alpha = 0.16 - ((hours - 6) / 2) * 0.16; color = "225,171,100"; } // sunrise
     else if (hours >= 17 && hours < 20) { alpha = ((hours - 17) / 3) * 0.45; color = "255,90,0"; } // sunset
     else if (hours >= 20) { alpha = 0.45 + Math.min(1, (hours - 20) / 4) * 0.1; color = "10,10,40"; } // night
 
     if (alpha > 0) {
       ctx.fillStyle = `rgba(${color}, ${alpha})`;
-      ctx.fillRect(cameraX, cameraY, viewWidth, viewHeight);
+      ctx.fillRect(cameraX, cameraY, effectiveWidth, effectiveHeight);
     }
   }
 
   ctx.restore(); // restore viewport transform
 
   // 9. Ambient Night/Evening Lighting filter (Performance Cached Offscreen Canvas)
-  if (phase !== "morning") {
+  if (phase !== "morning" && state.settings?.graphicsQuality !== "low") {
     if (!_cachedLightCanvas) {
       _cachedLightCanvas = typeof document !== "undefined" ? document.createElement("canvas") : null;
     }
@@ -8325,13 +8306,15 @@ export function draw(
     }
   }
 
+  if (!specialtyStructures.length) return;
+  ctx.save();
+  ctx.scale(zoom, zoom);
+  ctx.translate(-cameraX, -cameraY);
   // 11. Factorio Roboport & Flying Autonomous Drone Bots Renderer
-  for (let y = startRow; y < endRow; y++) {
-    for (let x = startCol; x < endCol; x++) {
-      const t = currentGrid[y][x];
+  for (const { x, y, t } of specialtyStructures) {
       if (t.kind === "placed_item" && t.placedItemId === "roboport") {
-        const rpx = x * TILE + 16 - cameraX;
-        const rpy = y * TILE + 16 - cameraY;
+        const rpx = x * TILE + 16;
+        const rpy = y * TILE + 16;
 
         // Render Roboport 32x32 Logistic Coverage Outer Square
         ctx.strokeStyle = "rgba(142, 68, 173, 0.25)";
@@ -8375,17 +8358,14 @@ export function draw(
           ctx.stroke();
         }
       }
-    }
   }
 
   // 12. Factorio Railway Tracks & Autonomous Diesel Locomotive Train Engine Renderer
-  for (let y = startRow; y < endRow; y++) {
-    for (let x = startCol; x < endCol; x++) {
-      const t = currentGrid[y][x];
+  for (const { x, y, t } of specialtyStructures) {
       if (t.kind === "placed_item" && t.placedItemId) {
         const id = t.placedItemId;
-        const rpx = x * TILE - cameraX;
-        const rpy = y * TILE - cameraY;
+        const rpx = x * TILE;
+        const rpy = y * TILE;
 
         if (id === "rail") {
           // Wooden Ties & Parallel Steel Rails
@@ -8430,16 +8410,13 @@ export function draw(
           }
         }
       }
-    }
   }
 
   // 13. Factorio 9x9 Rocket Silo Industrial Launchpad Renderer
-  for (let y = startRow; y < endRow; y++) {
-    for (let x = startCol; x < endCol; x++) {
-      const t = currentGrid[y][x];
+  for (const { x, y, t } of specialtyStructures) {
       if (t.kind === "placed_item" && t.placedItemId === "rocket_silo") {
-        const rpx = x * TILE + 16 - cameraX;
-        const rpy = y * TILE + 16 - cameraY;
+        const rpx = x * TILE + 16;
+        const rpy = y * TILE + 16;
 
         // Circular Silo Shaft Base
         ctx.fillStyle = "#1e272c";
@@ -8478,17 +8455,14 @@ export function draw(
         ctx.lineTo(rpx, rpy + 44);
         ctx.stroke();
       }
-    }
   }
 
   // 14. Factorio Circuit Network 2.0 Combinators & Signal Wire Connections
-  for (let y = startRow; y < endRow; y++) {
-    for (let x = startCol; x < endCol; x++) {
-      const t = currentGrid[y][x];
+  for (const { x, y, t } of specialtyStructures) {
       if (t.kind === "placed_item" && t.placedItemId) {
         const id = t.placedItemId;
-        const cpx = x * TILE + 16 - cameraX;
-        const cpy = y * TILE + 16 - cameraY;
+        const cpx = x * TILE + 16;
+        const cpy = y * TILE + 16;
 
         if (id.includes("combinator")) {
           // Microchip PCB base
@@ -8515,17 +8489,14 @@ export function draw(
           ctx.fillText(sym, cpx, cpy + 2);
         }
       }
-    }
   }
 
   // 15. Factorio Nuclear Power Grid & Uranium Centrifuge Renderer
-  for (let y = startRow; y < endRow; y++) {
-    for (let x = startCol; x < endCol; x++) {
-      const t = currentGrid[y][x];
+  for (const { x, y, t } of specialtyStructures) {
       if (t.kind === "placed_item" && t.placedItemId) {
         const id = t.placedItemId;
-        const npx = x * TILE + 16 - cameraX;
-        const npy = y * TILE + 16 - cameraY;
+        const npx = x * TILE + 16;
+        const npy = y * TILE + 16;
 
         if (id === "nuclear_reactor") {
           // Nuclear Reactor Core Base with Cherenkov Radiation Glow
@@ -8568,17 +8539,14 @@ export function draw(
           ctx.fill();
         }
       }
-    }
   }
 
   // 16. Factorio Space Age Space Platform Hub & Orbital Cargo Drop Pod Renderer
-  for (let y = startRow; y < endRow; y++) {
-    for (let x = startCol; x < endCol; x++) {
-      const t = currentGrid[y][x];
+  for (const { x, y, t } of specialtyStructures) {
       if (t.kind === "placed_item" && t.placedItemId) {
         const id = t.placedItemId;
-        const spx = x * TILE + 16 - cameraX;
-        const spy = y * TILE + 16 - cameraY;
+        const spx = x * TILE + 16;
+        const spy = y * TILE + 16;
 
         if (id === "space_platform_hub" || id === "cargo_landing_pad") {
           // Target Concentric Target Circles
@@ -8644,8 +8612,8 @@ export function draw(
           ctx.strokeRect(spx - 14, spy - 14, 28, 28);
         }
       }
-    }
   }
+  ctx.restore();
 }
 
 export function sortInventory(inventory: (Item | null)[]): (Item | null)[] {

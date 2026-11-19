@@ -18,7 +18,6 @@ export default defineConfig({
     outDir: 'dist',
     emptyOutDir: true,
     target: 'esnext',
-    sourcemap: true,
-    minify: false,
+    sourcemap: false,
   },
 });

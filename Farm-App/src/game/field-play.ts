@@ -1,3 +1,4 @@
+import { consumeCursor, getCursor } from "./item-cursor";
 import { addItem, getDirectionVector, isConveyor, isWalkable, loadConveyor, removeItem, STATIC_POINTS, type GameState, type Tile } from "./meadow-life";
 import { createItem, type Item } from "./data/items";
 
@@ -21,13 +22,14 @@ export function inventoryCopy(inventory: (Item | null)[]) {
 }
 
 export function equippedWeapon(state: GameState) {
-  const chosen = state.inventory.find(item => item?.id === state.player.weaponId && guns[item.id])
+  const cursor = getCursor(state);
+  const chosen = cursor && guns[cursor.id] ? cursor : state.inventory.find(item => item?.id === state.player.weaponId && guns[item.id])
     ?? state.inventory.find(item => item && guns[item.id]);
   const spec = chosen ? guns[chosen.id] : undefined;
   return {
     item: chosen,
     spec,
-    rounds: spec ? state.inventory.reduce((sum, item) => sum + (item && spec.ammo.includes(item.id) ? item.count : 0), 0) : 0,
+    rounds: spec ? state.inventory.reduce((sum, item) => sum + (item && spec.ammo.includes(item.id) ? item.count : 0), cursor && spec.ammo.includes(cursor.id) ? cursor.count : 0) : 0,
   };
 }
 
@@ -71,9 +73,14 @@ export function firePlayerWeapon(state: GameState, cursor?: Point | null) {
   const target = hits[0];
   if (!target) return false;
   const slot = state.inventory.findIndex(item => item && spec.ammo.includes(item.id));
-  if (slot < 0 && !state.godMode) return false;
-  const multiplier = damageFor(state.inventory[slot]?.id ?? "");
-  if (!state.godMode) removeItem(state.inventory, slot);
+  const held = getCursor(state);
+  const heldAmmo = slot < 0 && held && spec.ammo.includes(held.id) ? held : null;
+  if (slot < 0 && !heldAmmo && !state.godMode) return false;
+  const multiplier = damageFor(state.inventory[slot]?.id ?? heldAmmo?.id ?? "");
+  if (!state.godMode) {
+    if (heldAmmo) consumeCursor(state);
+    else removeItem(state.inventory, slot);
+  }
   p.shotCooldown = spec.cooldown;
   p.actionSeconds = .17;
   const dx = target.x - origin.x;

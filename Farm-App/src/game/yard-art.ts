@@ -1,9 +1,9 @@
-﻿import type { Tile, TileKind } from "./meadow-life";
+import type { Tile, TileKind } from "./meadow-life";
 
 const groundTextures = new Map<string, HTMLCanvasElement>();
 const orePalette: Partial<Record<TileKind, [string, string, string]>> = {
-  ore_iron: ["#343233", "#817b79", "#b7a590"],
-  ore_copper: ["#392a27", "#94604a", "#e0a478"],
+  ore_iron: ["#333b39", "#6f8586", "#b3bcaa"],
+  ore_copper: ["#452f23", "#a16b46", "#d4a377"],
   ore_coal: ["#1e2120", "#3c4544", "#8e9690"],
   ore_gold: ["#4a3e29", "#ad8649", "#dfbb69"],
   ore_silver: ["#373c40", "#819296", "#c4cfcb"],
@@ -35,10 +35,10 @@ function paintGround(ctx: CanvasRenderingContext2D, variant: number, palette?: [
   }
 
   if (palette) {
-    for (let i = 0; i < 13; i++) {
+    for (let i = 0; i < 17; i++) {
       const x = 2 + random() * 28;
       const y = 2 + random() * 28;
-      const r = 1.3 + random() * 3.6;
+      const r = 1.8 + random() * 4.2;
       polygon(ctx, palette[0], [x - r, y, x - r * .65, y - r * .65, x + r * .55, y - r, x + r, y, x + r * .3, y + r * .65]);
       polygon(ctx, palette[1], [x - r * .82, y - .8, x - r * .6, y - r * .6, x + r * .55, y - r, x + r * .5, y + .4]);
       polygon(ctx, palette[2], [x - r * .4, y - r * .38, x + r * .55, y - r, x + r * .23, y - r * .35]);
@@ -217,18 +217,216 @@ export function drawYardMachine(ctx: CanvasRenderingContext2D, px: number, py: n
 
 const hotbarIcons = new Map<string, string>();
 export function getYardItemIcon(id: string): string | undefined {
-  if (!/drill|furnace|inserter|transport_belt/.test(id) || typeof document === "undefined") return;
+  if (typeof document === "undefined") return;
   const cached = hotbarIcons.get(id);
-  if (cached) return cached;
+  if (cached !== undefined) return cached || undefined;
   const canvas = document.createElement("canvas");
   canvas.width = canvas.height = 64;
   const ctx = canvas.getContext("2d");
   if (!ctx) return;
   ctx.scale(2, 2);
-  const tile: Tile = { kind: "placed_item", age: 0, watered: false, placedItemId: id };
-  if (id.includes("transport_belt")) drawConveyor(ctx, 0, 0, tile, 0);
-  else if (!drawYardMachine(ctx, 0, 0, tile, 0)) return;
-  const icon = canvas.toDataURL();
+  const icon = drawWorkshopItem(ctx, id, 0, 0) ? canvas.toDataURL() : "";
   hotbarIcons.set(id, icon);
-  return icon;
+  return icon || undefined;
+}
+
+function artRandom(seed: number) {
+  return () => {
+    seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+    return seed / 4294967296;
+  };
+}
+
+const trees = new Map<string, HTMLCanvasElement>();
+export function drawEvergreen(ctx: CanvasRenderingContext2D, x: number, y: number, season: string, shake: number, shadows: boolean) {
+  const variant = ((Math.imul(x, 43103) ^ Math.imul(y, 59797)) >>> 0) % 12;
+  const key = `${season}/${variant}`;
+  let sprite = trees.get(key);
+  if (!sprite) {
+    sprite = document.createElement("canvas");
+    sprite.width = 66;
+    sprite.height = 78;
+    const paint = sprite.getContext("2d")!;
+    const rand = artRandom(variant + 3141);
+    const palette = season === "fall" ? ["#45442b", "#6b6640", "#a18b51"]
+      : season === "winter" ? ["#334338", "#4f6256", "#9eaea1"]
+      : ["#29352a", "#4a573b", "#77805a"];
+    polygon(paint, "#443d2d", [29, 72, 28, 42, 33, 26, 37, 72, 43, 76, 25, 76]);
+    polygon(paint, "#827053", [30, 72, 32, 45, 34, 69, 36, 74]);
+    const spruce = variant % 4 !== 3;
+    if (spruce) {
+      const tip = 3 + Math.floor(rand() * 10);
+      for (let layer = 4; layer >= 0; layer--) {
+        const y0 = tip + layer * 8;
+        const width = 9 + layer * 4.6 + rand() * 3;
+        const lean = (rand() - .5) * 7;
+        polygon(paint, palette[0], [33 + lean, y0, 33 + width, y0 + 17, 37 + width * .8, y0 + 20, 35, y0 + 24, 29, y0 + 21, 33 - width, y0 + 22, 31 - width, y0 + 18]);
+        polygon(paint, palette[1], [33 + lean, y0 + 1, 33 + width * .61, y0 + 16, 31, y0 + 18, 30 - width * .82, y0 + 19]);
+        for (let tuft = 0; tuft < 12; tuft++) {
+          const sx = 32 + (rand() - .55) * width * 1.56;
+          const sy = y0 + 7 + rand() * 12;
+          const distance = Math.abs(sx - 32);
+          if (distance > (sy - y0) * width / 21) continue;
+          polygon(paint, tuft % 3 ? palette[1] : palette[2], [sx, sy - 3, sx + 2, sy, sx + (rand() - .5) * 5, sy + 1]);
+        }
+      }
+    } else {
+      for (let n = 0; n < 29; n++) {
+        const angle = rand() * Math.PI * 2;
+        const radius = Math.sqrt(rand());
+        const x = 32 + Math.cos(angle) * 19 * radius;
+        const y = 34 + Math.sin(angle) * 25 * radius;
+        const r = 4.5 + rand() * 8;
+        paint.fillStyle = palette[n > 21 && y < 39 ? 2 : n > 10 ? 1 : 0];
+        paint.beginPath();
+        paint.ellipse(x, y, r, r * .8, .42, 0, Math.PI * 2);
+        paint.fill();
+      }
+    }
+    trees.set(key, sprite);
+  }
+  const px = x * 32;
+  const py = y * 32;
+  if (shadows) {
+    ctx.fillStyle = "rgba(28,32,21,.28)";
+    ctx.beginPath();
+    ctx.ellipse(px + 25, py + 26, 26, 10, -.31, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.drawImage(sprite, px - 17 + shake, py - 45);
+}
+
+const waters = new Map<string, HTMLCanvasElement>();
+export function drawBasinWater(ctx: CanvasRenderingContext2D, x: number, y: number, shore: number, now: number, animate: boolean) {
+  const variant = ((Math.imul(x, 41143) ^ Math.imul(y, 569)) >>> 0) % 6;
+  const key = `${variant}/${shore}`;
+  let image = waters.get(key);
+  if (!image) {
+    image = document.createElement("canvas");
+    image.width = image.height = 32;
+    const paint = image.getContext("2d")!;
+    const rand = artRandom(1201 + variant * 47);
+    paint.fillStyle = "#263f3e";
+    paint.fillRect(0, 0, 32, 32);
+    for (let n = 0; n < 32; n++) {
+      paint.fillStyle = n % 3 ? "rgba(97,131,117,.11)" : "rgba(19,33,32,.16)";
+      const x0 = rand() * 32;
+      const y0 = rand() * 32;
+      paint.fillRect(x0, y0, 3 + rand() * 6, .6 + rand());
+    }
+    for (let edge = 0; edge < 4; edge++) {
+      if (!(shore & 1 << edge)) continue;
+      paint.save();
+      paint.translate(16, 16);
+      paint.rotate(edge * Math.PI * .5);
+      paint.translate(-16, -16);
+      polygon(paint, "#48554a", [0, 0, 32, 0, 32, 8, 26, 10, 18, 7, 13, 9, 6, 8, 0, 7]);
+      polygon(paint, "#6e6d50", [0, 0, 32, 0, 32, 3, 26, 6, 16, 4, 11, 5, 4, 3, 0, 4]);
+      paint.fillStyle = "rgba(166,174,141,.40)";
+      for (let n = 0; n < 9; n++) paint.fillRect(rand() * 30, 1.2 + rand() * 4, 1 + rand() * 2, .7);
+      paint.strokeStyle = "#626e5a";
+      paint.beginPath();
+      paint.moveTo(2, 10);
+      paint.bezierCurveTo(11, 7, 18, 12, 29, 8);
+      paint.stroke();
+      paint.restore();
+    }
+    waters.set(key, image);
+  }
+  ctx.drawImage(image, x * 32, y * 32);
+  if (animate && (x * 13 + y * 29) % 7 === 0) {
+    const cycle = (Math.sin(now * .0021 + x * .67 + y) + 1) * .5;
+    ctx.fillStyle = `rgba(146,176,152,${cycle * .2})`;
+    ctx.fillRect(x * 32 + 7 + cycle * 5, y * 32 + 18, 11 - cycle * 3, .9);
+  }
+}
+
+export function drawIndustrialSurface(ctx: CanvasRenderingContext2D, px: number, py: number, id: string) {
+  const stone = id === "stone_brick";
+  const safety = id === "hazard_concrete";
+  ctx.fillStyle = stone ? "#635e50" : id === "refined_concrete" ? "#827f71" : "#6f6b60";
+  ctx.fillRect(px, py, 32, 32);
+  ctx.fillStyle = "rgba(34,36,29,.35)";
+  ctx.fillRect(px, py + 31, 32, 1);
+  ctx.fillRect(px + 31, py, 1, 32);
+  if (stone) {
+    ctx.fillRect(px, py + 15, 32, 2);
+    ctx.fillRect(px + 17, py, 2, 15);
+    ctx.fillRect(px + 11, py + 17, 2, 14);
+  }
+  if (safety) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(px + 1, py + 1, 30, 30);
+    ctx.clip();
+    for (let i = -24; i < 49; i += 14) {
+      polygon(ctx, "#b4a16a", [px + i, py, px + i + 6, py, px + i + 36, py + 32, px + i + 30, py + 32]);
+    }
+    ctx.restore();
+  } else {
+    ctx.fillStyle = "rgba(219,210,173,.18)";
+    ctx.fillRect(px + 1, py + 1, 30, 1);
+    ctx.fillRect(px + 2, py + 4, 9, 1);
+    ctx.fillRect(px + 11, py + 24, 13, 1);
+  }
+}
+
+export function drawWorkshopItem(ctx: CanvasRenderingContext2D, id: string, px: number, py: number, size = 32) {
+  ctx.save();
+  ctx.translate(px, py);
+  ctx.scale(size / 32, size / 32);
+  const tile: Tile = { kind: "placed_item", placedItemId: id, age: 0, watered: false };
+  if (/belt|loader|splitter/.test(id)) drawConveyor(ctx, 0, 0, tile, 0);
+  else if (!drawYardMachine(ctx, 0, 0, tile, 0)) {
+    const copper = id.includes("copper");
+    const ore = /ore|coal|^stone$/.test(id);
+    const tool = /pickaxe|watering_can|scythe|^axe$|^hoe$/.test(id);
+    const material = copper ? "#b68154" : id === "coal" ? "#636963" : "#aeae97";
+    if (ore) {
+      polygon(ctx, "#302d26", [3, 19, 8, 10, 17, 6, 24, 10, 29, 19, 24, 25, 10, 25]);
+      polygon(ctx, material, [5, 18, 9, 11, 17, 7, 23, 12, 20, 19, 14, 23]);
+      polygon(ctx, "#716954", [17, 7, 24, 11, 28, 19, 24, 23, 20, 19, 23, 12]);
+    } else if (/bar|plate|brick|gear|wire|cable|magazine/.test(id)) {
+      polygon(ctx, "#494839", [3, 19, 11, 12, 28, 14, 28, 21, 21, 26, 3, 25]);
+      polygon(ctx, material, [3, 18, 11, 11, 28, 13, 21, 20]);
+      polygon(ctx, "#d1c7a3", [3, 18, 11, 11, 27, 13, 11, 13, 6, 18]);
+    } else if (id === "watering_can") {
+      polygon(ctx, "#3f514d", [9, 11, 23, 11, 26, 16, 24, 26, 8, 26, 6, 18]);
+      polygon(ctx, "#71938a", [10, 12, 22, 12, 24, 17, 22, 24, 10, 24, 8, 17]);
+      polygon(ctx, "#9da391", [7, 18, 3, 17, 1, 8, 4, 7, 9, 16]);
+      ctx.strokeStyle = "#a8b5a1";
+      ctx.beginPath();
+      ctx.ellipse(22, 11, 5, 5, .75, Math.PI, Math.PI * 2.28);
+      ctx.stroke();
+    } else if (tool) {
+      polygon(ctx, "#614932", [5, 28, 3, 24, 22, 5, 25, 8, 8, 28]);
+      polygon(ctx, "#a78253", [5, 25, 21, 8, 23, 8, 7, 26]);
+      if (id === "axe") {
+        polygon(ctx, "#6c7066", [17, 6, 25, 3, 31, 12, 27, 19, 21, 15, 19, 10]);
+        polygon(ctx, "#cbbaa0", [25, 3, 31, 12, 27, 19, 25, 15, 28, 12]);
+      } else if (id === "hoe") {
+        polygon(ctx, "#8a9583", [20, 6, 27, 7, 30, 13, 27, 15, 23, 10, 19, 10]);
+        polygon(ctx, "#d0c4a4", [27, 7, 30, 13, 27, 15, 26, 12]);
+      } else if (id === "scythe") {
+        polygon(ctx, "#c0c1aa", [20, 6, 24, 3, 31, 5, 31, 9, 27, 14, 24, 15, 28, 9, 25, 7]);
+      } else {
+        polygon(ctx, "#b9b7a1", [12, 8, 19, 3, 28, 7, 30, 14, 26, 11, 23, 8, 16, 9]);
+      }
+    } else if (/concrete|landfill/.test(id)) {
+      drawIndustrialSurface(ctx, 2, 1, id);
+    } else if (id.includes("chest") || id === "shipping_bin") {
+      const metal = id.includes("steel") || id.includes("iron");
+      polygon(ctx, "#39382b", [4, 11, 26, 11, 30, 16, 29, 26, 9, 29, 3, 24]);
+      polygon(ctx, metal ? "#969686" : "#a38357", [4, 10, 24, 7, 27, 13, 9, 17, 4, 15]);
+      polygon(ctx, metal ? "#6d7669" : "#785d3e", [8, 17, 27, 13, 27, 25, 8, 28]);
+      ctx.fillStyle = "#c0ad79";
+      ctx.fillRect(13, 17, 4, 4);
+      ctx.fillRect(22, 15, 2, 10);
+    } else {
+      ctx.restore();
+      return false;
+    }
+  }
+  ctx.restore();
+  return true;
 }

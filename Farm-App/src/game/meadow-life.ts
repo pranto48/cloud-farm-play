@@ -1,5 +1,6 @@
+import { consumeCursor, getCursor, QUICKBAR_SIZE } from "./item-cursor";
 import { tickDefense, type Patrol, type Signal, type Wildlife } from "./field-play";
-import { drawConveyor, drawGroundDetail, drawYardMachine } from "./yard-art";
+import { drawBasinWater, drawConveyor, drawEvergreen, drawGroundDetail, drawIndustrialSurface, drawWorkshopItem, drawYardMachine } from "./yard-art";
 import { ITEM_DEFS, createItem, type Item } from "./data/items";
 import { shopInventoryForSeason, CROPS, type CropDef, type Season } from "./data/crops";
 import { NPCS, getNPCDestination, type NPCDef } from "./npcs";
@@ -64,6 +65,9 @@ export interface Tile {
   aimAngle?: number;
   fireCooldown?: number;
   foundation?: TileKind;
+  paving?: string;
+  pavingUnderlay?: TileKind;
+  buildPlan?: { id: string; direction: NonNullable<Tile["direction"]> };
   depositRemaining?: number;
   fuelSeconds?: number;
   splitterOutput?: 0 | 1;
@@ -259,6 +263,10 @@ export interface GameState {
   inventory: (Item | null)[];
   handcraftQueue?: HandcraftJob[];
   hotbarIndex: number;
+  quickbar: (string | null)[];
+  cursorStack?: Item | null;
+  cursorOrigin?: number;
+  cursorRefill?: boolean;
   coins: number;
   tiles: Tile[][];
   season: Season;
@@ -3485,7 +3493,9 @@ export function newGame(tiles?: Tile[][]): GameState {
     day: 1,
     time: DAY_START_MINUTES + 90,
     inventory: inv,
-    hotbarIndex: 0,
+    hotbarIndex: -1,
+    quickbar: inv.slice(0, QUICKBAR_SIZE).map(item => item?.id ?? null),
+    cursorStack: null,
     altMode: true,
     coins: 200, // starting funds
     tiles: tiles ?? makeMap(),
@@ -3546,6 +3556,9 @@ function serializeTile(tile: Tile): Partial<Tile> {
   if (tile.cropId) minTile.cropId = tile.cropId;
   if (tile.placedItemId) minTile.placedItemId = tile.placedItemId;
   if (tile.foundation) minTile.foundation = tile.foundation;
+  if (tile.buildPlan) minTile.buildPlan = { ...tile.buildPlan };
+  if (tile.paving) minTile.paving = tile.paving;
+  if (tile.pavingUnderlay) minTile.pavingUnderlay = tile.pavingUnderlay;
   if (tile.depositRemaining !== undefined) minTile.depositRemaining = tile.depositRemaining;
   if (tile.direction) minTile.direction = tile.direction;
   if (tile.beltItems?.length) minTile.beltItems = tile.beltItems;
@@ -3640,7 +3653,7 @@ export function decodeGridRLE(data: unknown, fallbackKind: TileKind = "grass"): 
         kind: currentTile.kind || fallbackKind,
         age: currentTile.age ?? -1,
         watered: !!currentTile.watered,
-        ...(currentTile.placedItemId || currentTile.beltItems || currentTile.looseItems ? structuredClone(currentTile) : currentTile),
+        ...(currentTile.placedItemId || currentTile.beltItems || currentTile.looseItems || currentTile.buildPlan ? structuredClone(currentTile) : currentTile),
       };
       currentRunRemaining--;
     }
@@ -3746,7 +3759,14 @@ export function migrateState(raw: unknown): GameState {
     maxEnergy:    typeof s.maxEnergy === "number"    ? s.maxEnergy    : base.maxEnergy,
     mineDepth:    typeof s.mineDepth === "number"    ? s.mineDepth    : base.mineDepth,
     inMine:       typeof s.inMine === "boolean"      ? s.inMine       : base.inMine,
-    hotbarIndex:  typeof s.hotbarIndex === "number"  ? s.hotbarIndex  : base.hotbarIndex,
+    hotbarIndex: typeof s.hotbarIndex === "number" && s.cursorStack ? s.hotbarIndex : -1,
+    quickbar: Array.from({ length: QUICKBAR_SIZE }, (_, index) => {
+      if (Array.isArray(s.quickbar)) return typeof s.quickbar[index] === "string" ? s.quickbar[index] : null;
+      return Array.isArray(s.inventory) ? s.inventory[index]?.id ?? null : base.quickbar[index];
+    }),
+    cursorStack: s.cursorStack && typeof s.cursorStack === "object" && ((s.cursorStack as Item).count ?? 0) > 0 ? s.cursorStack as Item : null,
+    cursorOrigin: typeof s.cursorOrigin === "number" ? s.cursorOrigin : undefined,
+    cursorRefill: s.cursorRefill === true,
     hasUnreadMail: typeof s.hasUnreadMail === "boolean" ? s.hasUnreadMail : base.hasUnreadMail,
     harvestLiftingTimer: 0,
     carryItem: null,
@@ -4176,16 +4196,54 @@ export function dismantleTile(state: GameState, grid: Tile[][], x: number, y: nu
     watered: tile.watered,
     zone: tile.zone,
     depositRemaining: tile.depositRemaining,
+    looseItems: tile.looseItems,
+    paving: tile.paving,
+    pavingUnderlay: tile.pavingUnderlay,
   };
   invalidateMachineCache();
   return true;
 }
 
+const pavingMaterials = new Set(["stone_brick", "concrete", "hazard_concrete", "refined_concrete"]);
+export function isTerrainItem(id: string) {
+  return id === "landfill" || pavingMaterials.has(id);
+}
+
+export function isBuildableItem(item: Item | null | undefined): item is Item {
+  return Boolean(item && (item.type === "furniture" || isTerrainItem(item.id)));
+}
+
 export function getFactoryPlacementIssue(tile: Tile, id: string): string | null {
+  if (id === "landfill") return tile.kind === "water" ? null : "Landfill requires water";
+  if (pavingMaterials.has(id)) {
+    if (tile.cropId || tile.paving) return "Clear the existing surface first";
+    return ["grass", "soil", "watered", "path"].includes(tile.kind) ? null : "Paving requires clear land";
+  }
   if (id.includes("drill") && (!DEPOSITS[tile.kind] || tile.depositRemaining === 0)) return "Place the drill on a mineral deposit.";
   if (tile.cropId) return "Harvest the crop before building here.";
   if (DEPOSITS[tile.kind] || ["grass", "soil", "watered", "path", "mine_dirt", "house_floor"].includes(tile.kind)) return null;
   return "This tile is blocked.";
+}
+
+export function getPlacementIssue(state: GameState, tile: Tile, id: string, position: { x: number; y: number }) {
+  if (Math.hypot(position.x - state.player.x, position.y - state.player.y) > (state.player.reachDistance ?? 8)) {
+    return "Out of reach";
+  }
+  if (!isTerrainItem(id) && !isWalkable({ ...tile, kind: "placed_item", placedItemId: id }) &&
+      Math.abs(position.x - (state.player.subX ?? state.player.x)) < .72 &&
+      Math.abs(position.y - (state.player.subY ?? state.player.y)) < .72) {
+    return "Move clear of the footprint";
+  }
+  return getFactoryPlacementIssue(tile, id);
+}
+
+export function acceptsManualSlot(tile: Tile, index: number, item: Item) {
+  const id = tile.placedItemId ?? "";
+  if (isFurnace(id)) return index === 0 ? Boolean(SMELTING[item.id]) : index === 1 && id !== "electric_furnace" && Boolean(FUEL_SECONDS[item.id]);
+  if (isProcessor(id)) return index < 4 && Boolean(RECIPE_BY_ID.get(tile.assemblerRecipeId ?? "iron_gear")?.inputs.some(input => input.itemId === item.id));
+  if (id.includes("drill")) return id === "burner_drill" && index === 0 && Boolean(FUEL_SECONDS[item.id]);
+  if (id.includes("lab")) return item.id.endsWith("_science_pack");
+  return true;
 }
 
 function updateMiningDrill(tile: Tile, grid: Tile[][], x: number, y: number, dt: number, power: number, stats: ProductionStats) {
@@ -5098,7 +5156,8 @@ function collectToolYield(state: GameState, tile: Tile, item: Item) {
 export function interact(
   state: GameState,
   chargeLevel: number = 1,
-  targetTile?: { x: number; y: number }
+  targetTile?: { x: number; y: number },
+  sourceSlot?: number,
 ): { message: string | null; particles: Particle[] } {
   const result: { message: string | null; particles: Particle[] } = { message: null, particles: [] };
 
@@ -5116,7 +5175,8 @@ export function interact(
   const px = f.x * TILE + TILE / 2;
   const py = f.y * TILE + TILE / 2;
 
-  const heldItem = state.inventory[state.hotbarIndex];
+  const heldItem = sourceSlot === undefined ? getCursor(state) : state.inventory[sourceSlot];
+  const useItem = () => sourceSlot === undefined ? consumeCursor(state) : removeItem(state.inventory, sourceSlot, 1);
   if (heldItem?.type === "tool") state.player.actionSeconds = .22;
   // God mode: tools cost no energy
   const toolEnergyCost = state.godMode ? 0 : 2;
@@ -5582,13 +5642,29 @@ export function interact(
       tile.age = 0;
       tile.watered = false;
 
-      removeItem(state.inventory, state.hotbarIndex, 1);
+      useItem();
       gameAudio.playWater();
       result.message = `Planted ${CROPS[cropId].name}`;
     }
   }
   // 5. Place Placeable Objects (Sprinklers, Fences, Animals)
-  else if (heldItem && heldItem.type === "furniture") {
+  else if (heldItem && isTerrainItem(heldItem.id)) {
+    const issue = getPlacementIssue(state, tile, heldItem.id, f);
+    if (issue) return { ...result, message: issue };
+    if (heldItem.id === "landfill") {
+      tile.kind = "grass";
+      tile.age = -1;
+      tile.watered = false;
+    } else {
+      tile.pavingUnderlay = tile.kind;
+      tile.kind = "path";
+      tile.paving = heldItem.id;
+    }
+    delete tile.buildPlan;
+    useItem();
+    gameAudio.playTill();
+    result.message = `Placed ${heldItem.name}`;
+  } else if (heldItem && heldItem.type === "furniture") {
     // Check if placing a Chick or Calf onto the farm!
     if (heldItem.id === "chick" || heldItem.id === "calf") {
       if (tile.kind === "grass" || tile.kind === "soil" || tile.kind === "path") {
@@ -5610,7 +5686,7 @@ export function interact(
           walkTimer: Math.random() * 3 + 2,
         });
 
-        removeItem(state.inventory, state.hotbarIndex, 1);
+        useItem();
         gameAudio.playCoin();
         result.message = `Placed ${name} on the farm!`;
 
@@ -5630,7 +5706,7 @@ export function interact(
       return result;
     }
 
-    const issue = getFactoryPlacementIssue(tile, heldItem.id);
+    const issue = getPlacementIssue(state, tile, heldItem.id, f);
     if (issue) {
       result.message = issue;
       return result;
@@ -5640,7 +5716,8 @@ export function interact(
       tile.kind = "placed_item";
       tile.foundation = foundation;
       tile.placedItemId = heldItem.id;
-      tile.direction = state.placementDirection || "right";
+      tile.direction = tile.buildPlan?.id === heldItem.id ? tile.buildPlan.direction : state.placementDirection ?? "right";
+      delete tile.buildPlan;
       invalidateMachineCache();
 
       if (isChestBuilding(heldItem.id)) {
@@ -5704,7 +5781,7 @@ export function interact(
         });
       }
 
-      removeItem(state.inventory, state.hotbarIndex, 1);
+      useItem();
       gameAudio.playTill();
       result.message = `Placed ${heldItem.name}`;
     }
@@ -6304,6 +6381,43 @@ function surfaceChunk(grid: Tile[][], cx: number, cy: number, season: Season, lo
   return image;
 }
 
+function paintBuildPreview(ctx: CanvasRenderingContext2D, x: number, y: number, id: string, direction: NonNullable<Tile["direction"]>, plan: boolean) {
+  const ghost: Tile = { kind: "placed_item", age: 0, watered: false, placedItemId: id, direction };
+  ctx.save();
+  ctx.globalAlpha = plan ? .46 : .64;
+  if (isTerrainItem(id)) drawIndustrialSurface(ctx, x, y, id);
+  else if (isConveyor(id)) drawConveyor(ctx, x, y, ghost, 0);
+  else if (!drawYardMachine(ctx, x, y, ghost, 0) && !drawWorkshopItem(ctx, id, x, y)) {
+    ctx.fillStyle = ITEM_DEFS[id]?.iconColor ?? "#adb590";
+    ctx.fillRect(x + 6, y + 6, 20, 20);
+    ctx.fillStyle = "#eeead0";
+    ctx.font = "12px Segoe UI";
+    ctx.textAlign = "center";
+    ctx.fillText(ITEM_DEFS[id]?.iconSymbol ?? "+", x + 16, y + 21);
+  }
+  ctx.globalAlpha = .95;
+  if (plan) {
+    ctx.strokeStyle = "#93bfaf";
+    ctx.setLineDash([3, 3]);
+    ctx.strokeRect(x + 1, y + 1, 30, 30);
+    ctx.setLineDash([]);
+  }
+  if (isConveyor(id) || /drill|inserter/.test(id)) {
+    const { dx, dy } = getDirectionVector(direction);
+    const tx = x + 16 + dx * 20, ty = y + 16 + dy * 20;
+    ctx.strokeStyle = plan ? "#bee0d3" : "#eee0a1";
+    ctx.lineWidth = 1.8;
+    ctx.beginPath();
+    ctx.moveTo(x + 16, y + 16);
+    ctx.lineTo(tx, ty);
+    ctx.lineTo(tx - dx * 6 - dy * 4, ty - dy * 6 + dx * 4);
+    ctx.moveTo(tx, ty);
+    ctx.lineTo(tx - dx * 6 + dy * 4, ty - dy * 6 - dx * 4);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
 export function draw(
   ctx: CanvasRenderingContext2D,
   state: GameState,
@@ -6373,69 +6487,15 @@ export function draw(
       const px = x * TILE;
       const py = y * TILE;
 
-      if ((t.foundation ?? t.kind) === "path") {
-        ctx.fillStyle = "#565651";
-        ctx.fillRect(px, py, TILE, TILE);
-        ctx.fillStyle = "#717168";
-        ctx.fillRect(px, py + 2, TILE, 27);
-        ctx.fillStyle = "#434741";
-        ctx.fillRect(px, py + 29, TILE, 3);
-        ctx.fillStyle = "#8d8978";
-        ctx.fillRect(px, py + 2, TILE, 1);
-        ctx.fillStyle = "rgba(41,45,40,.24)";
-        ctx.fillRect(px, py + 3, 1, 26);
+      if (t.paving || (t.foundation ?? t.kind) === "path") {
+        drawIndustrialSurface(ctx, px, py, t.paving ?? "concrete");
         drawGroundDetail(ctx, x, y, "path");
       } else if (t.kind === "water") {
-        // 1. Seamless Deep Factorio Lake Water
-        ctx.fillStyle = "#123842";
-        ctx.fillRect(px, py, TILE, TILE);
-
-        // Subtle Deep Basin Gradient
-        const depthGlow = (Math.sin(x * 0.15) * Math.cos(y * 0.15) + 1) * 0.5;
-        ctx.fillStyle = `rgba(10, 34, 41, ${0.3 + depthGlow * 0.3})`;
-        ctx.fillRect(px + 2, py + 2, TILE - 4, TILE - 4);
-
-        // 2. Seamless Natural Sandy Shore Transitions
-        const hasTopLand = y > 0 && currentGrid[y - 1] && currentGrid[y - 1][x]?.kind !== "water";
-        const hasBottomLand = y < gridRows - 1 && currentGrid[y + 1] && currentGrid[y + 1][x]?.kind !== "water";
-        const hasLeftLand = x > 0 && currentGrid[y][x - 1]?.kind !== "water";
-        const hasRightLand = x < gridCols - 1 && currentGrid[y][x + 1]?.kind !== "water";
-
-        if (hasTopLand || hasBottomLand || hasLeftLand || hasRightLand) {
-          // Wet Sand Shore Transition
-          ctx.fillStyle = "#5c4832";
-          if (hasTopLand) ctx.fillRect(px, py, TILE, 5);
-          if (hasBottomLand) ctx.fillRect(px, py + TILE - 5, TILE, 5);
-          if (hasLeftLand) ctx.fillRect(px, py, 5, TILE);
-          if (hasRightLand) ctx.fillRect(px + TILE - 5, py, 5, TILE);
-
-          // Outer Sandy Beach Blend
-          ctx.fillStyle = "#7a6246";
-          if (hasTopLand) ctx.fillRect(px, py, TILE, 2.5);
-          if (hasBottomLand) ctx.fillRect(px, py + TILE - 2.5, TILE, 2.5);
-          if (hasLeftLand) ctx.fillRect(px, py, 2.5, TILE);
-          if (hasRightLand) ctx.fillRect(px + TILE - 2.5, py, 2.5, TILE);
-
-          // Shore Foam Line
-          const foamBob = Math.sin(Date.now() / 450 + (x + y)) * 1.5;
-          ctx.fillStyle = "rgba(175, 225, 235, 0.35)";
-          if (hasTopLand) ctx.fillRect(px, py + 4 + foamBob, TILE, 1.5);
-          if (hasBottomLand) ctx.fillRect(px, py + TILE - 6 - foamBob, TILE, 1.5);
-          if (hasLeftLand) ctx.fillRect(px + 4 + foamBob, py, 1.5, TILE);
-          if (hasRightLand) ctx.fillRect(px + TILE - 6 - foamBob, py, 1.5, TILE);
-        }
-
-        // 3. Animated Surface Wave Caustics
-        const waveTime = Date.now() / 800;
-        const waveX = Math.sin(waveTime + (x * 0.3 + y * 0.3)) * 3;
-        const waveY = Math.cos(waveTime * 1.2 + (x * 0.4 - y * 0.2)) * 2;
-
-        ctx.fillStyle = "rgba(72, 178, 196, 0.18)";
-        ctx.fillRect(px + 4 + waveX, py + 8 + waveY, 14, 2);
-        ctx.fillRect(px + 10 - waveX, py + 20 - waveY, 10, 2);
-        ctx.fillStyle = "rgba(255, 255, 255, 0.12)";
-        ctx.fillRect(px + 6 + waveX, py + 8 + waveY, 5, 2);
-
+        const shore = (y > 0 && currentGrid[y - 1]?.[x]?.kind !== "water" ? 1 : 0)
+          | (x + 1 < gridCols && currentGrid[y]?.[x + 1]?.kind !== "water" ? 2 : 0)
+          | (y + 1 < gridRows && currentGrid[y + 1]?.[x]?.kind !== "water" ? 4 : 0)
+          | (x > 0 && currentGrid[y]?.[x - 1]?.kind !== "water" ? 8 : 0);
+        drawBasinWater(ctx, x, y, shore, frameTime, state.settings?.graphicsQuality !== "low");
       } else if (t.kind === "soil" || t.kind === "watered" || t.cropId !== undefined) {
         // Space Age Gleba Bio-Peat Bed / Nutrient Soil (Seamless Organic Blend)
         const isWatered = t.kind === "watered" || t.watered;
@@ -6695,82 +6755,10 @@ export function draw(
       const px = x * TILE;
       const py = y * TILE;
 
-      // Render Tree
       if (t.kind === "tree") {
-        // 1. Draw organic shadow blob under tree base
-        ctx.fillStyle = "rgba(0, 0, 0, 0.25)";
-        ctx.beginPath();
-        ctx.ellipse(px + 16, py + 30, 12, 5, 0, 0, Math.PI * 2);
-        ctx.fill();
-
-        let hitShake = 0;
-        if (t.lastHitTime) {
-          const elapsed = Date.now() - t.lastHitTime;
-          if (elapsed < 400) {
-            hitShake = Math.sin(elapsed * 0.05) * 3 * (1 - elapsed / 400);
-          }
-        }
-
-        const windSwayAngle = Math.sin(Date.now() / 900 + x * 0.4) * 0.04;
-
-        ctx.save();
-        ctx.translate(px + 16 + hitShake, py + 32);
-        ctx.rotate(windSwayAngle);
-
-        // Detailed wood bark trunk
-        ctx.fillStyle = "#70482e"; // brown bark
-        ctx.fillRect(-4, -22, 8, 22);
-        ctx.fillStyle = "#593924"; // vertical bark lines
-        ctx.fillRect(-2, -22, 1, 22);
-        ctx.fillRect(2, -18, 1, 18);
-
-        // Fluffy leaves (3 overlapping layers)
-        const leafSwayX = Math.sin(Date.now() / 400 + y) * 0.8;
-        
-        // Factorio Industrial Pine & Oak Canopy Rendering
-        let cBase = "#17381b", cMid = "#234d28", cHigh = "#366e3b";
-        if (state.season === "fall") {
-          cBase = "#942a1d"; cMid = "#b84300"; cHigh = "#d35400";
-        } else if (state.season === "winter") {
-          cBase = "#144820"; cMid = "#1e6930"; cHigh = "#b0d4eb";
-        } else if (state.season === "summer") {
-          cBase = "#0f4223"; cMid = "#176e3c"; cHigh = "#27ae60";
-        }
-
-        // Layer 1: Dark forest shadow canopy
-        ctx.fillStyle = cBase;
-        ctx.beginPath();
-        ctx.arc(0 + leafSwayX, -30, 16, 0, Math.PI * 2);
-        ctx.fill();
-
-        // Layer 2: Medium needle clusters
-        ctx.fillStyle = cMid;
-        ctx.beginPath();
-        ctx.arc(-9 + leafSwayX, -36, 13, 0, Math.PI * 2);
-        ctx.arc(9 + leafSwayX, -36, 13, 0, Math.PI * 2);
-        ctx.arc(0 + leafSwayX, -44, 14, 0, Math.PI * 2);
-        ctx.fill();
-
-        // Layer 3: Factorio Pine Needle Highlights
-        ctx.fillStyle = cHigh;
-        ctx.beginPath();
-        ctx.arc(-6 + leafSwayX, -40, 9, 0, Math.PI * 2);
-        ctx.arc(6 + leafSwayX, -40, 9, 0, Math.PI * 2);
-        ctx.arc(0 + leafSwayX, -48, 10, 0, Math.PI * 2);
-        ctx.fill();
-
-        // Pine cone / fruit detail
-        if ((x * 7 + y * 13) % 5 === 0) {
-          ctx.fillStyle = "#e74c3c";
-          const fruits = [[-7, -34], [7, -36], [-3, -42], [5, -44]];
-          fruits.forEach(([fx, fy]) => {
-            ctx.beginPath();
-            ctx.arc(fx + leafSwayX, fy, 2.5, 0, Math.PI * 2);
-            ctx.fill();
-          });
-        }
-
-        ctx.restore();
+        const elapsed = t.lastHitTime ? Date.now() - t.lastHitTime : Infinity;
+        const shake = elapsed < 360 ? Math.sin(elapsed * .05) * (1 - elapsed / 360) * 4 : 0;
+        drawEvergreen(ctx, x, y, state.season, shake, state.settings?.shadowsEnabled !== false);
       }
 
       // Render Debris, Rocks, and Factorio Ore Deposits
@@ -6796,14 +6784,14 @@ export function draw(
         ctx.ellipse(px + 16, py + 25, 11, 4, 0, 0, Math.PI * 2);
         ctx.fill();
 
-        ctx.fillStyle = "#229954";
+        ctx.fillStyle = "#525a37";
         ctx.beginPath();
         ctx.arc(px + 12 + weedShake, py + 20, 6, 0, Math.PI * 2);
         ctx.arc(px + 20 + weedShake, py + 20, 5, 0, Math.PI * 2);
         ctx.arc(px + 16 + weedShake, py + 15, 6, 0, Math.PI * 2);
         ctx.fill();
 
-        ctx.fillStyle = "#2ecc71";
+        ctx.fillStyle = "#7a7950";
         ctx.beginPath();
         ctx.arc(px + 12 + weedShake, py + 18, 3, 0, Math.PI * 2);
         ctx.arc(px + 18 + weedShake, py + 14, 4, 0, Math.PI * 2);
@@ -6965,12 +6953,19 @@ export function draw(
       }
 
       if (t.looseItems?.length) {
-        ctx.fillStyle = "#32352a";
-        ctx.fillRect(px + 11, py + 14, 11, 9);
-        ctx.fillStyle = "#d8b783";
-        ctx.fillRect(px + 10, py + 12, 10, 7);
-        ctx.fillStyle = "#846951";
-        ctx.fillRect(px + 14, py + 12, 2, 7);
+        for (const [index, item] of t.looseItems.slice(0, 3).entries()) {
+          const x0 = px + 7 + index * 7;
+          const y0 = py + 12 - (index % 2) * 5;
+          if (!drawWorkshopItem(ctx, item.id, x0, y0, 15)) {
+            ctx.fillStyle = "#342f24";
+            ctx.fillRect(x0 + 1, y0 + 3, 10, 8);
+            ctx.fillStyle = item.iconColor;
+            ctx.fillRect(x0 + 2, y0 + 2, 8, 5);
+          }
+        }
+      }
+      if (t.buildPlan && !t.placedItemId) {
+        paintBuildPreview(ctx, px, py, t.buildPlan.id, t.buildPlan.direction, true);
       }
 
       // Render placed equipment.
@@ -6979,7 +6974,9 @@ export function draw(
         if (/roboport|rail|locomotive|cargo_wagon|rocket_silo|combinator|nuclear_reactor|centrifuge|heat_exchanger|steam_turbine|space_platform_hub|cargo_landing_pad|spidertron|foundry|electromagnetic_plant|biochamber|agricultural_tower/.test(id)) specialtyStructures.push({ x, y, t });
         const dir = t.direction || "right";
 
-        if (isConveyor(id)) {
+        if (id.includes("chest")) {
+          drawWorkshopItem(ctx, id, px, py);
+        } else if (isConveyor(id)) {
           drawConveyor(ctx, px, py, t, frameTime);
         } else if (drawYardMachine(ctx, px, py, t, frameTime)) {
           // Custom-rendered drill, furnace, or inserter.
@@ -7987,7 +7984,7 @@ export function draw(
   }
 
   // Weapon in Hands / Mining Laser targeting beam
-  const heldItem = state.inventory[state.hotbarIndex];
+  const heldItem = getCursor(state);
   if (heldItem && (heldItem.type === "weapon" || heldItem.type === "tool")) {
     const { dx, dy } = getDirectionVector(p.dir);
     const weaponX = playerPx + dx * 10;
@@ -8023,42 +8020,35 @@ export function draw(
   if (activeHighlight && state.harvestLiftingTimer <= 0) {
     const dist = Math.hypot(activeHighlight.x - p.x, activeHighlight.y - p.y);
     const target = currentGrid[activeHighlight.y]?.[activeHighlight.x];
-    const selected = state.inventory[state.hotbarIndex];
-    const preview = hoveredTile && target && selected?.type === "furniture" && !target.placedItemId && !state.blueprint?.mode;
-    const inReach = dist <= (p.reachDistance ?? 8) && (!preview || !getFactoryPlacementIssue(target, selected!.id));
-
-    ctx.strokeStyle = inReach ? "rgba(46, 204, 113, 0.7)" : "rgba(231, 76, 60, 0.5)";
-    ctx.lineWidth = 2;
-    ctx.strokeRect(activeHighlight.x * TILE + 1, activeHighlight.y * TILE + 1, TILE - 2, TILE - 2);
-
-    ctx.fillStyle = inReach ? "rgba(46, 204, 113, 0.08)" : "rgba(231, 76, 60, 0.08)";
-    ctx.fillRect(activeHighlight.x * TILE + 2, activeHighlight.y * TILE + 2, TILE - 4, TILE - 4);
-
-    if (preview && inReach) {
-      const x = activeHighlight.x * TILE;
-      const y = activeHighlight.y * TILE;
-      const ghost: Tile = { kind: "placed_item", age: 0, watered: false, placedItemId: selected!.id, direction: state.placementDirection };
-      ctx.save();
-      ctx.globalAlpha = 0.48;
-      if (isConveyor(selected!.id)) drawConveyor(ctx, x, y, ghost, frameTime);
-      else drawYardMachine(ctx, x, y, ghost, frameTime);
-      ctx.restore();
-
-      const { dx, dy } = getDirectionVector(state.placementDirection);
-      if (isConveyor(selected!.id) || /drill|inserter/.test(selected!.id)) {
-        const cx = x + 16, cy = y + 16;
-        const tipX = cx + dx * 21, tipY = cy + dy * 21;
-        ctx.strokeStyle = "#fbdda0";
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.moveTo(cx, cy);
-        ctx.lineTo(tipX, tipY);
-        ctx.lineTo(tipX - dx * 5 - dy * 3, tipY - dy * 5 + dx * 3);
-        ctx.moveTo(tipX, tipY);
-        ctx.lineTo(tipX - dx * 5 + dy * 3, tipY - dy * 5 - dx * 3);
-        ctx.stroke();
-      }
+    const selected = getCursor(state);
+    const preview = hoveredTile && target && isBuildableItem(selected) && !state.blueprint?.mode;
+    const reason = preview ? getPlacementIssue(state, target, selected.id, activeHighlight) : null;
+    const inReach = dist <= (p.reachDistance ?? 8) && !reason;
+    const ax = activeHighlight.x * TILE;
+    const ay = activeHighlight.y * TILE;
+    if (preview) {
+      const direction = target.buildPlan?.id === selected.id ? target.buildPlan.direction : state.placementDirection ?? "right";
+      paintBuildPreview(ctx, ax, ay, selected.id, direction, false);
     }
+    ctx.strokeStyle = preview ? (inReach ? "#c6d8a1" : "#cc7863") : inReach ? "#d8c18b" : "#a5806b";
+    ctx.lineWidth = 1.5;
+    for (const [x, y, sx, sy] of [[ax + 1, ay + 1, 1, 1], [ax + 31, ay + 1, -1, 1], [ax + 1, ay + 31, 1, -1], [ax + 31, ay + 31, -1, -1]]) {
+      ctx.beginPath();
+      ctx.moveTo(x, y + sy * 7);
+      ctx.lineTo(x, y);
+      ctx.lineTo(x + sx * 7, y);
+      ctx.stroke();
+    }
+    if (reason) {
+      ctx.font = "10px Segoe UI";
+      ctx.textAlign = "center";
+      const width = ctx.measureText(reason).width + 10;
+      ctx.fillStyle = "#372a22ed";
+      ctx.fillRect(ax + 16 - width / 2, ay - 19, width, 15);
+      ctx.fillStyle = "#f1b99b";
+      ctx.fillText(reason, ax + 16, ay - 8);
+    }
+
     if (hoveredTile && target?.machineStatus && state.altMode) {
       const labels = { running: "Running", idle: "Waiting for input", blocked: "Output backed up", fuel: "Needs fuel", power: "Needs power", depleted: "Deposit depleted", damaged: "Disabled by damage" };
       const label = target.machineStatus === "fuel" && target.placedItemId === "gun_turret" ? "Needs ammo" : labels[target.machineStatus];
@@ -8074,7 +8064,7 @@ export function draw(
       ctx.fillText(label, x, y);
     }
 
-    const held = state.inventory[state.hotbarIndex];
+    const held = getCursor(state);
     if (held && held.id === "sword" && Math.sin(Date.now() / 60) > 0.6) {
       ctx.strokeStyle = "rgba(236, 240, 241, 0.75)";
       ctx.lineWidth = 4;

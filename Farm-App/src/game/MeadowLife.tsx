@@ -37,6 +37,10 @@ import {
   makeMap,
   prepareStateForSave,
   getFactoryPlacementIssue,
+  getPlacementIssue,
+  isBuildableItem,
+  isTerrainItem,
+  acceptsManualSlot,
   isConveyor,
   fuelMachine,
   dismantleTile,
@@ -61,6 +65,7 @@ import { getYardItemIcon } from "./yard-art";
 import { equippedWeapon, firePlayerWeapon, inventoryCopy, loadDefenseAmmo, pickupNearby, placeLooseItem, stepPlayer } from "./field-play";
 import { drawChart } from "./survey-chart";
 import { planHandcraft } from "./handcraft";
+import { consumeCursor, cursorSlotClick, getCursor, packStack, quickbarStock, returnCursor, selectById, selectQuickbar } from "./item-cursor";
 import { listAllSaves, saveGameToDisk } from "../saves/DiskSaveSystem";
 
 import { Button } from "@/components/ui/button";
@@ -85,6 +90,12 @@ type Props = {
   initialState?: GameState | null;
   onStateChange?: (s: GameState) => void;
 };
+
+function StackIcon({ item }: { item: Item }) {
+  const icon = getYardItemIcon(item.id);
+  return icon ? <img src={icon} alt="" draggable={false} className="stack-icon" />
+    : <span className="stack-symbol" aria-hidden="true">{item.iconSymbol || item.name.slice(0, 1)}</span>;
+}
 
 function FactorioCraftingIcon({
   iconSymbol,
@@ -987,7 +998,19 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
   // Inventory holding slot
   const worldActive = useRef(true);
   worldActive.current = !inventoryOpen && !shopOpen && !chestOpenTile && !furnaceOpenTile && !factorioInspectorTile && !mailboxOpen && !chatOpen && !productionStatsOpen && !chartOpen && !graphicsSettingsOpen && !researchCenterOpen && !saveLoadOpen;
-  const [heldItem, setHeldItem] = useState<{ item: Item; originalSlot: number; source: "inventory" | "chest" | "shipping" | "furnace" } | null>(null);
+  const heldItem = getCursor(state);
+  const skippedBuildClick = useRef(false);
+  const cursorBadge = useRef<HTMLDivElement | null>(null);
+  const cursorPosition = useRef({ x: 30, y: 100 });
+  useEffect(() => {
+    const follow = (event: PointerEvent) => {
+      cursorPosition.current = { x: event.clientX, y: event.clientY };
+      if (cursorBadge.current) cursorBadge.current.style.transform = `translate(${event.clientX + 14}px, ${event.clientY + 15}px)`;
+    };
+    window.addEventListener("pointermove", follow, { passive: true });
+    return () => window.removeEventListener("pointermove", follow);
+  }, []);
+  const backpackHover = useRef<string | null>(null);
 
   // Spacebar trigger for Reel minigame
   const [isSpacePressed, setIsSpacePressed] = useState(false);
@@ -1031,6 +1054,23 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
     const grid = current.inHouse ? current.houseGrid! : current.inMine ? current.mineGrid : current.tiles;
     const tile = grid[tileY]?.[tileX];
     if (canHandMine(current, coords)) return;
+    if (tile?.buildPlan && !tile.placedItemId) {
+      setState(prev => editTile(prev, coords, (_next, world) => { delete world[tileY][tileX].buildPlan; }));
+      return;
+    }
+    if (tile?.paving && !tile.placedItemId && withinReach(current, coords)) {
+      setState(prev => editTile(prev, coords, (next, world) => {
+        const t = world[tileY][tileX];
+        if (!t.paving || packStack(next.inventory, createItem(t.paving))) {
+          toast.info("Make room in the backpack first.", { id: "build-issue" });
+          return;
+        }
+        t.kind = t.pavingUnderlay ?? "grass";
+        delete t.paving;
+        delete t.pavingUnderlay;
+      }));
+      return;
+    }
     if (tile?.placedItemId && tile.placedItemId !== "worker_cabin" && withinReach(current, coords)) {
       setState(prev => editTile(prev, coords, (next, activeGrid) => {
         if (!dismantleTile(next, activeGrid, tileX, tileY)) toast.warning("Make room in your inventory to dismantle this.");
@@ -1060,20 +1100,34 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
   // Global Keyboard Control Listener (Factorio Controls: WASD, Q, E, R, F, Space, 1-0, Shift)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (["INPUT", "TEXTAREA", "SELECT"].includes((e.target as HTMLElement)?.tagName)) return;
       const key = e.key.toLowerCase();
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" ||
+          tag === "SELECT" && !(inventoryOpen && (key === "q" || (/^[0-9]$/.test(key) && backpackHover.current)))) return;
       pressedKeysRef.current.add(key);
 
       if (e.ctrlKey || e.metaKey || e.repeat) return;
-      if (key === "q" && worldActive.current) {
-        const pos = hoveredTileRef.current;
-        setState(prev => {
-          const grid = prev.inMine ? prev.mineGrid : prev.inHouse ? prev.houseGrid : prev.tiles;
-          const target = pos && grid?.[pos.y]?.[pos.x];
-          const id = target?.placedItemId ?? (target?.kind.startsWith("ore_") ? "burner_drill" : undefined);
-          const slot = id ? prev.inventory.findIndex(item => item?.id === id) : -1;
-          return { ...prev, hotbarIndex: slot };
-        });
+      if (key === "q") {
+        const current = stateRef.current;
+        if (inventoryOpen || current.cursorStack || current.blueprint?.mode) {
+          setState(prev => {
+            const next = { ...prev, inventory: inventoryCopy(prev.inventory) };
+            returnCursor(next);
+            if (next.blueprint?.mode) next.blueprint = { ...next.blueprint, mode: null, startTile: null, currentTile: null };
+            return next;
+          });
+        } else if (worldActive.current) {
+          const pos = hoveredTileRef.current;
+          setState(prev => {
+            const grid = prev.inMine ? prev.mineGrid : prev.inHouse ? prev.houseGrid : prev.tiles;
+            const tile = pos && grid?.[pos.y]?.[pos.x];
+            const id = tile?.placedItemId ?? tile?.paving ?? tile?.buildPlan?.id ?? (tile?.kind.startsWith("ore_") ? "burner_drill" : undefined);
+            if (!id) return prev;
+            const next = { ...prev, inventory: inventoryCopy(prev.inventory) };
+            selectById(next, id);
+            return next;
+          });
+        }
       } else if (key === "m") {
         setChartOpen(open => !open);
       } else if (key === "b" && worldActive.current) {
@@ -1083,7 +1137,9 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
           const index = weapons.findIndex(item => item?.id === equippedWeapon(prev).item?.id);
           const weapon = weapons[(index + 1) % weapons.length]!;
           toast.info(weapon.name, { id: "active-weapon", duration: 1000 });
-          return { ...prev, hotbarIndex: -1, player: { ...prev.player, weaponId: weapon.id } };
+          const next = { ...prev, inventory: inventoryCopy(prev.inventory), player: { ...prev.player, weaponId: weapon.id } };
+          returnCursor(next);
+          return next;
         });
       } else if (key === "e" || key === "i") {
         closeInventory(!inventoryOpen);
@@ -1095,8 +1151,20 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
         setState((prev) => {
           const dirs: ("right" | "down" | "left" | "up")[] = ["right", "down", "left", "up"];
           const currentIdx = dirs.indexOf(prev.placementDirection || "right");
-          const nextDir = dirs[(currentIdx + (e.shiftKey ? 3 : 1)) % dirs.length];
-          toast(`Placement Direction: ${nextDir.toUpperCase()} 🔄`);
+          const turn = e.shiftKey ? 3 : 1;
+          const nextDir = dirs[(currentIdx + turn) % dirs.length];
+          if (!getCursor(prev) && hoveredTileRef.current && withinReach(prev, hoveredTileRef.current)) {
+            const coords = hoveredTileRef.current;
+            const grid = prev.inMine ? prev.mineGrid : prev.inHouse ? prev.houseGrid : prev.tiles;
+            const tile = grid?.[coords.y]?.[coords.x];
+            if (tile?.buildPlan || tile?.placedItemId && /belt|drill|inserter|loader|splitter/.test(tile.placedItemId)) {
+              return editTile(prev, coords, (_next, targetGrid) => {
+                const t = targetGrid[coords.y][coords.x];
+                if (t.buildPlan) t.buildPlan.direction = dirs[(dirs.indexOf(t.buildPlan.direction) + turn) % dirs.length];
+                else t.direction = dirs[(dirs.indexOf(t.direction ?? "right") + turn) % dirs.length];
+              });
+            }
+          }
           return { ...prev, placementDirection: nextDir };
         });
       } else if (key === "f" && worldActive.current) {
@@ -1110,10 +1178,10 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
         const pos = hoveredTileRef.current ?? frontTile(stateRef.current);
         if (!pos || !withinReach(stateRef.current, pos)) return;
         setState(prev => {
-          const item = prev.inventory[prev.hotbarIndex];
+          const item = getCursor(prev);
           if (!item) return prev;
           return editTile(prev, pos, next => {
-            if (placeLooseItem(next, pos, item.id)) removeItem(next.inventory, next.hotbarIndex);
+            if (placeLooseItem(next, pos, item.id)) consumeCursor(next);
           });
         });
       } else if (key === "alt") {
@@ -1123,11 +1191,14 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
           toast(`Machine overlay: ${nextAlt ? "ENABLED (Recipe & Info Overlay On) 🔍" : "DISABLED ❌"}`);
           return { ...prev, altMode: nextAlt };
         });
-      } else if (key >= "1" && key <= "9") {
-        const slot = parseInt(key) - 1;
-        setState((prev) => ({ ...prev, hotbarIndex: slot }));
-      } else if (key === "0") {
-        setState((prev) => ({ ...prev, hotbarIndex: 9 }));
+      } else if (/^[0-9]$/.test(key)) {
+        const index = key === "0" ? 9 : Number(key) - 1;
+        if (inventoryOpen && backpackHover.current) {
+          const id = backpackHover.current;
+          setState(prev => ({ ...prev, quickbar: prev.quickbar.map((filter, slot) => slot === index ? id : filter) }));
+        } else if (worldActive.current) {
+          onQuickbar(index);
+        }
       }
     };
 
@@ -1143,7 +1214,7 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
       window.removeEventListener("keydown", handleKeyDown);
       window.removeEventListener("keyup", handleKeyUp);
     };
-  }, [heldItem, inventoryOpen]);
+  }, [inventoryOpen]);
 
   // Synchronize state changes to parent (save handler)
   useEffect(() => {
@@ -1323,7 +1394,7 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
         const target = hoveredTileRef.current;
         if (target && canHandMine(cur, target)) mineTile(target);
       }
-      if (worldActive.current && pressedKeysRef.current.has(" ") && cur.inventory[cur.hotbarIndex]?.type !== "tool") {
+      if (worldActive.current && pressedKeysRef.current.has(" ") && getCursor(cur)?.type !== "tool") {
         if (firePlayerWeapon(cur, hoveredTileRef.current)) gameAudio.playDischarge();
       }
 
@@ -1930,7 +2001,7 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
       if (e.code === "Space" && worldActive.current) {
         e.preventDefault();
 
-        const held = curState.inventory[curState.hotbarIndex];
+        const held = getCursor(curState);
 
         if (held && held.id === "fishing_rod" && !curState.inMine) {
           setIsSpacePressed(true);
@@ -2392,7 +2463,7 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
   const canHandMine = (current: GameState, pos: { x: number; y: number }) => {
     if (!withinReach(current, pos)) return false;
     const tile = (current.inMine ? current.mineGrid : current.inHouse ? current.houseGrid : current.tiles)?.[pos.y]?.[pos.x];
-    const tool = current.inventory[current.hotbarIndex]?.id;
+    const tool = getCursor(current)?.id;
     return Boolean(tile && (tool === "pickaxe" && (tile.kind.startsWith("ore_") || tile.kind === "debris_stone")
       || tool === "axe" && (tile.kind === "tree" || tile.kind === "debris_branch")));
   };
@@ -2423,12 +2494,17 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
     return next;
   };
 
-  const layBelt = (coords: { x: number; y: number }) => {
+  const layBelt = (coords: { x: number; y: number }, report = false) => {
     setState(prev => {
-      const held = prev.inventory[prev.hotbarIndex];
+      const held = getCursor(prev);
       const grid = prev.inHouse ? prev.houseGrid! : prev.inMine ? prev.mineGrid : prev.tiles;
       const tile = grid[coords.y]?.[coords.x];
-      if (!held || !isConveyor(held.id) || !tile || !withinReach(prev, coords) || getFactoryPlacementIssue(tile, held.id)) return prev;
+      if (!held || (!isConveyor(held.id) && held.id !== "stone_wall" && !isTerrainItem(held.id)) || !tile) return prev;
+      const issue = getPlacementIssue(prev, tile, held.id, coords);
+      if (issue) {
+        if (report) toast.info(issue, { id: "build-issue", duration: 1100 });
+        return prev;
+      }
       return editTile(prev, coords, next => { interact(next, 1, coords); });
     });
   };
@@ -2438,13 +2514,15 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
     hoveredTileRef.current = coords;
     const last = beltDrag.current;
     if (last && (e.buttons & 1) && coords && (last.x !== coords.x || last.y !== coords.y)) {
-      const stepX = Math.sign(coords.x - last.x);
-      const stepY = Math.sign(coords.y - last.y);
-      if (stepX === 0 || stepY === 0) {
-        const distance = Math.min(20, Math.max(Math.abs(coords.x - last.x), Math.abs(coords.y - last.y)));
-        for (let i = 1; i <= distance; i++) layBelt({ x: last.x + stepX * i, y: last.y + stepY * i });
-      } else {
-        layBelt(coords);
+      const dx = coords.x - last.x;
+      const dy = coords.y - last.y;
+      const steps = Math.min(28, Math.max(Math.abs(dx), Math.abs(dy)));
+      let previous = last;
+      for (let i = 1; i <= steps; i++) {
+        const position = { x: last.x + Math.round(dx * i / steps), y: last.y + Math.round(dy * i / steps) };
+        if (previous.x !== position.x && previous.y !== position.y) layBelt({ x: position.x, y: previous.y });
+        layBelt(position);
+        previous = position;
       }
       beltDrag.current = coords;
     }
@@ -2476,13 +2554,21 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
       return;
     }
     if (e.button === 0) {
+      skippedBuildClick.current = false;
       const current = stateRef.current;
       const coords = getMouseTileCoords(e.clientX, e.clientY);
-      const held = current.inventory[current.hotbarIndex];
-      if (e.shiftKey && coords && withinReach(current, coords)) {
+      const held = getCursor(current);
+      const activeGrid = current.inMine ? current.mineGrid : current.inHouse ? current.houseGrid : current.tiles;
+      const pointed = coords && activeGrid?.[coords.y]?.[coords.x];
+      if (e.shiftKey && coords && pointed?.structureHp !== undefined && withinReach(current, coords) && (!held || held.id === "repair_pack")) {
         setState(prev => editTile(prev, coords, (next, grid) => {
           const tile = grid[coords.y][coords.x];
           if (tile.structureHp === undefined) return;
+          if (getCursor(next)?.id === "repair_pack") {
+            tile.structureHp = undefined;
+            consumeCursor(next);
+            return;
+          }
           const slot = next.inventory.findIndex(item => item?.id === "repair_pack");
           if (slot < 0) {
             toast.info("A repair pack is needed.", { id: "repair-needed" });
@@ -2494,18 +2580,32 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
         }));
         return;
       }
+      if (e.shiftKey && !e.ctrlKey && coords && pointed && isBuildableItem(held) && !current.blueprint?.mode) {
+        setState(prev => editTile(prev, coords, (next, grid) => {
+          const tile = grid[coords.y][coords.x];
+          if (getFactoryPlacementIssue(tile, held.id)) return;
+          tile.buildPlan = { id: held.id, direction: next.placementDirection ?? "right" };
+        }));
+        return;
+      }
       if (e.ctrlKey && coords && withinReach(current, coords)) {
         setState(prev => editTile(prev, coords, (next, grid) => {
           const tile = grid[coords.y][coords.x];
-          const loaded = tile.placedItemId === "gun_turret" ? loadDefenseAmmo(tile, next.inventory) : fuelMachine(tile, next.inventory);
+          const load = tile.placedItemId === "gun_turret" ? loadDefenseAmmo : fuelMachine;
+          const cursor = getCursor(next);
+          const staged = cursor ? [{ ...cursor }] : [];
+          const fromCursor = cursor ? load(tile, staged) : 0;
+          for (let i = 0; i < fromCursor; i++) consumeCursor(next);
+          const loaded = fromCursor || load(tile, next.inventory);
           if (loaded > 0) toast.success(`Loaded ${loaded} ${tile.placedItemId === "gun_turret" ? "rounds" : "fuel"}.`);
           else toast.info(tile.placedItemId === "gun_turret" ? "Ammo slot full or no compatible ammunition." : "Fuel slot full or no compatible fuel.");
         }));
         return;
       }
-      if (zoningMode === "none" && !current.blueprint?.mode && held && isConveyor(held.id) && coords) {
+      if (zoningMode === "none" && !current.blueprint?.mode && held && (isConveyor(held.id) || held.id === "stone_wall" || isTerrainItem(held.id)) && coords) {
         beltDrag.current = coords;
-        layBelt(coords);
+        skippedBuildClick.current = true;
+        layBelt(coords, true);
         return;
       }
       if (zoningMode !== "none") {
@@ -2641,7 +2741,6 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
         setState(prev => {
           const next = structuredClone(prev);
           const grid = next.inHouse ? next.houseGrid! : next.inMine ? next.mineGrid : next.tiles;
-          const originalSlot = next.hotbarIndex;
           const originalDirection = next.placementDirection;
           let placedCount = 0;
 
@@ -2650,16 +2749,14 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
             const target = grid[position.y]?.[position.x];
             const slot = next.inventory.findIndex(item => item?.id === ent.placedItemId);
             if (slot < 0 || !target || !withinReach(next, position) || getFactoryPlacementIssue(target, ent.placedItemId)) continue;
-            next.hotbarIndex = slot;
             next.placementDirection = ent.direction;
-            interact(next, 1, position);
+            interact(next, 1, position, slot);
             if (target.placedItemId === ent.placedItemId) {
               if (ent.recipeId) target.assemblerRecipeId = ent.recipeId;
               placedCount++;
             }
           }
 
-          next.hotbarIndex = originalSlot;
           next.placementDirection = originalDirection;
           next.blueprint = { ...prev.blueprint, mode: null };
           toast.info(`Built ${placedCount} / ${bp.savedEntities!.length} blueprint entities. Check materials and reach for incomplete placements.`, { id: "blueprint-placement" });
@@ -2676,7 +2773,14 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
 
     const grid = curState.inHouse ? curState.houseGrid! : (curState.inMine ? curState.mineGrid : curState.tiles);
     const tile = grid[coords.y]?.[coords.x];
-    const held = curState.inventory[curState.hotbarIndex];
+    const held = getCursor(curState);
+    if (tile && (held?.type === "seed" || isBuildableItem(held))) {
+      setState(prev => editTile(prev, coords, next => {
+        const result = interact(next, 1, coords);
+        if (result.message && !result.message.startsWith("Placed ")) toast.info(result.message, { id: "build-issue", duration: 1100 });
+      }));
+      return;
+    }
 
     const clickedAnimal = curState.animals.find((a) => a.x === coords.x && a.y === coords.y);
     const clickedPet = curState.pets?.find((pt) => pt.x === coords.x && pt.y === coords.y);
@@ -2842,12 +2946,9 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
 
   const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
     if (zoningMode !== "none" || e.ctrlKey || e.shiftKey) return;
-    const current = stateRef.current;
-    if (!current.blueprint?.mode && isConveyor(current.inventory[current.hotbarIndex]?.id)) {
-      const tilePos = getMouseTileCoords(e.clientX, e.clientY);
-      const grid = current.inMine ? current.mineGrid : current.inHouse ? current.houseGrid! : current.tiles;
-      const target = tilePos && grid[tilePos.y]?.[tilePos.x];
-      if (!target?.placedItemId || isConveyor(target.placedItemId)) return;
+    if (skippedBuildClick.current) {
+      skippedBuildClick.current = false;
+      return;
     }
     const coords = getMouseTileCoords(e.clientX, e.clientY);
     if (coords) handleTileInteraction(coords);
@@ -2857,7 +2958,10 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
     if (e.touches.length === 1) {
       const touch = e.touches[0];
       const coords = getMouseTileCoords(touch.clientX, touch.clientY);
-      if (coords) handleTileInteraction(coords);
+      if (coords) {
+        e.preventDefault();
+        handleTileInteraction(coords);
+      }
     }
   };
 
@@ -2872,144 +2976,60 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
   };
 
   const closeInventory = (open: boolean) => {
-    if (!open && heldItem) {
-      setState(prev => {
-        const inventory = inventoryCopy(prev.inventory);
-        if (!addItem(inventory, heldItem.item)) inventory.push(heldItem.item);
-        return { ...prev, inventory };
-      });
-      setHeldItem(null);
-    }
+    backpackHover.current = null;
     setInventoryOpen(open);
   };
 
-  const getSlotTile = () => factorioInspectorTile ?? chestOpenTile;
-
-  // Inventory slot clicks
-  const handleSlotClick = (index: number, source: "inventory" | "chest" | "shipping" | "furnace", e?: React.MouseEvent) => {
-    const chestOpenTile = getSlotTile();
-    if (e && e.shiftKey && chestOpenTile && (source === "inventory" || source === "chest")) {
-      e.preventDefault();
-      setState(prev => {
-        const next = structuredClone(prev);
-        const grid = next.inHouse ? next.houseGrid! : (next.inMine ? next.mineGrid : next.tiles);
-        const chestInv = grid[chestOpenTile.y][chestOpenTile.x].chestInventory!;
-
-        if (source === "inventory") {
-          const itm = next.inventory[index];
-          if (itm) {
-            const success = addItem(chestInv, structuredClone(itm));
-            if (success) {
-              next.inventory[index] = null;
-              gameAudio.playLevelUp();
-            } else toast.error("Chest is full!");
-          }
-        } else if (source === "chest") {
-          const itm = chestInv[index];
-          if (itm) {
-            const success = addItem(next.inventory, structuredClone(itm));
-            if (success) {
-              chestInv[index] = null;
-              gameAudio.playLevelUp();
-            } else toast.error("Inventory is full!");
-          }
-        }
-        return next;
-      });
-      return;
-    }
-    if (heldItem === null) {
-      let item = null;
-      if (source === "inventory") {
-        item = state.inventory[index];
-      } else if (source === "shipping") {
-        item = state.shippingBin[index];
-      } else if (source === "chest" && chestOpenTile) {
-        const grid = state.inHouse ? state.houseGrid! : (state.inMine ? state.mineGrid : state.tiles);
-        item = grid[chestOpenTile.y]?.[chestOpenTile.x]?.chestInventory?.[index];
-      } else if (source === "furnace" && furnaceOpenTile) {
-        const grid = state.inHouse ? state.houseGrid! : (state.inMine ? state.mineGrid : state.tiles);
-        item = grid[furnaceOpenTile.y]?.[furnaceOpenTile.x]?.chestInventory?.[index];
+  const onQuickbar = (index: number, split = false) => {
+    setState(prev => {
+      if (!prev.quickbar[index] && prev.cursorStack && !split) {
+        return { ...prev, hotbarIndex: index, cursorRefill: true,
+          quickbar: prev.quickbar.map((id, slot) => slot === index ? prev.cursorStack!.id : id) };
       }
+      const next = { ...prev, inventory: inventoryCopy(prev.inventory) };
+      selectQuickbar(next, index, split);
+      return next;
+    });
+  };
 
-      if (item) {
-        setHeldItem({ item, originalSlot: index, source });
-        setState((prev) => {
-          const next = structuredClone(prev);
-          if (source === "inventory") {
-            next.inventory[index] = null;
-          } else if (source === "shipping") {
-            next.shippingBin[index] = null;
-          } else if (source === "chest" && chestOpenTile) {
-            const grid = next.inHouse ? next.houseGrid! : (next.inMine ? next.mineGrid : next.tiles);
-            grid[chestOpenTile.y][chestOpenTile.x].chestInventory![index] = null;
-          } else if (source === "furnace" && furnaceOpenTile) {
-            const grid = next.inHouse ? next.houseGrid! : (next.inMine ? next.mineGrid : next.tiles);
-            grid[furnaceOpenTile.y][furnaceOpenTile.x].chestInventory![index] = null;
-          }
-          return next;
-        });
-      }
-    } else {
-      const itemToPlace = heldItem.item;
+  type SlotSource = "inventory" | "chest" | "shipping" | "furnace";
+  const machineSlot = () => furnaceOpenTile ?? factorioInspectorTile ?? chestOpenTile;
 
-      // Validate furnace insertion rules
-      if (source === "furnace") {
-        if (index === 2) {
-          toast.error("Output slot is retrieve-only!");
+  const useSlot = (index: number, source: SlotSource, split: boolean, quickTransfer: boolean) => {
+    setState(prev => {
+      const change = (next: GameState, slots: (Item | null)[], tile?: Tile) => {
+        if (quickTransfer && tile?.chestInventory) {
+          const fromPlayer = source === "inventory";
+          const origin = fromPlayer ? next.inventory : slots;
+          const target = fromPlayer ? tile.chestInventory : next.inventory;
+          const item = origin[index];
+          if (!item) return;
+          const remaining = packStack(target, item, fromPlayer ? slot => acceptsManualSlot(tile, slot, item) : undefined);
+          origin[index] = remaining ? { ...item, count: remaining } : null;
           return;
         }
-        if (index === 0) {
-          const validOres = ["copper_ore", "iron_ore", "gold_ore", "uranium_ore"];
-          if (!validOres.includes(itemToPlace.id)) {
-            toast.error("Only copper, iron, gold, or uranium ores can be placed in the input slot!");
-            return;
-          }
-        }
-        if (index === 1) {
-          const validFuels = ["coal", "wood"];
-          if (!validFuels.includes(itemToPlace.id)) {
-            toast.error("Only coal or wood can be placed in the fuel slot!");
-            return;
-          }
-        }
+        const cursor = getCursor(next);
+        const accepts = !tile || source === "inventory" || !cursor || acceptsManualSlot(tile, index, cursor);
+        if (!accepts) toast.info("This slot doesn't accept that item.", { id: "slot-rule", duration: 1200 });
+        cursorSlotClick(next, slots, index, split, accepts);
+      };
+      const pos = machineSlot();
+      if (pos && (source === "chest" || source === "furnace" || source === "inventory" && quickTransfer)) {
+        return editTile(prev, pos, (next, grid) => {
+          const tile = grid[pos.y][pos.x];
+          const slots = source === "inventory" ? next.inventory : tile.chestInventory;
+          if (slots) change(next, slots, tile);
+        });
       }
-
-      setState((prev) => {
-        const next = structuredClone(prev);
-        let targetInv: (Item | null)[] = [];
-        if (source === "inventory") {
-          targetInv = next.inventory;
-        } else if (source === "shipping") {
-          targetInv = next.shippingBin;
-        } else if (source === "chest" && chestOpenTile) {
-          const grid = next.inHouse ? next.houseGrid! : (next.inMine ? next.mineGrid : next.tiles);
-          targetInv = grid[chestOpenTile.y][chestOpenTile.x].chestInventory!;
-        } else if (source === "furnace" && furnaceOpenTile) {
-          const grid = next.inHouse ? next.houseGrid! : (next.inMine ? next.mineGrid : next.tiles);
-          targetInv = grid[furnaceOpenTile.y][furnaceOpenTile.x].chestInventory!;
-        }
-
-        const targetItem = targetInv[index];
-
-        if (targetItem === null) {
-          targetInv[index] = itemToPlace;
-          setHeldItem(null);
-        } else if (targetItem.id === itemToPlace.id && targetItem.type !== "tool") {
-          targetItem.count += itemToPlace.count;
-          setHeldItem(null);
-        } else {
-          const holding = itemToPlace;
-          const original = heldItem.originalSlot;
-          const originalSrc = heldItem.source;
-
-          targetInv[index] = holding;
-          setHeldItem({ item: targetItem, originalSlot: original, source: originalSrc });
-        }
-        return next;
-      });
-    }
+      if (source !== "inventory" && source !== "shipping") return prev;
+      const next = { ...prev, inventory: inventoryCopy(prev.inventory), shippingBin: inventoryCopy(prev.shippingBin) };
+      change(next, source === "inventory" ? next.inventory : next.shippingBin);
+      return next;
+    });
   };
+
+  const handleSlotClick = (index: number, source: SlotSource, e?: React.MouseEvent) =>
+    useSlot(index, source, false, Boolean(e?.shiftKey));
 
   // Claim Mail Letters attached gifts
   const handleClaimMailGift = (letterId: string) => {
@@ -3084,128 +3104,16 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
     });
   };
 
-  const handleSlotRightClick = (e: React.MouseEvent, index: number, source: "inventory" | "chest" | "shipping" | "furnace") => {
-    const chestOpenTile = getSlotTile();
-    e.preventDefault(); // Prevent context menu
-    let curGrid = state.inventory;
-    if (source === "inventory") {
-      curGrid = state.inventory;
-    } else if (source === "shipping") {
-      curGrid = state.shippingBin;
-    } else if (source === "chest" && chestOpenTile) {
-      const grid = state.inHouse ? state.houseGrid! : (state.inMine ? state.mineGrid : state.tiles);
-      curGrid = grid[chestOpenTile.y]?.[chestOpenTile.x]?.chestInventory || [];
-    } else if (source === "furnace" && furnaceOpenTile) {
-      const grid = state.inHouse ? state.houseGrid! : (state.inMine ? state.mineGrid : state.tiles);
-      curGrid = grid[furnaceOpenTile.y]?.[furnaceOpenTile.x]?.chestInventory || [];
-    }
-
-    if (heldItem === null) {
-      const item = curGrid[index];
-      if (item && item.count > 1 && item.type !== "tool" && item.type !== "weapon") {
-        const halfCount = Math.ceil(item.count / 2);
-        const remainCount = item.count - halfCount;
-
-        const heldObj = { ...item, count: halfCount };
-        setHeldItem({ item: heldObj, originalSlot: index, source });
-
-        setState((prev) => {
-          const next = structuredClone(prev);
-          let targetInv: (Item | null)[] = [];
-          if (source === "inventory") {
-            targetInv = next.inventory;
-          } else if (source === "shipping") {
-            targetInv = next.shippingBin;
-          } else if (source === "chest" && chestOpenTile) {
-            const grid = next.inHouse ? next.houseGrid! : (next.inMine ? next.mineGrid : next.tiles);
-            targetInv = grid[chestOpenTile.y][chestOpenTile.x].chestInventory!;
-          } else if (source === "furnace" && furnaceOpenTile) {
-            const grid = next.inHouse ? next.houseGrid! : (next.inMine ? next.mineGrid : next.tiles);
-            targetInv = grid[furnaceOpenTile.y][furnaceOpenTile.x].chestInventory!;
-          }
-
-          if (targetInv && targetInv[index]) {
-            if (remainCount <= 0) {
-              targetInv[index] = null;
-            } else {
-              targetInv[index]!.count = remainCount;
-            }
-          }
-          return next;
-        });
-      } else if (item) {
-        handleSlotClick(index, source);
-      }
-    } else {
-      const itemToPlace = heldItem.item;
-
-      // Validate furnace insertion rules
-      if (source === "furnace") {
-        if (index === 2) {
-          toast.error("Output slot is retrieve-only!");
-          return;
-        }
-        if (index === 0) {
-          const validOres = ["copper_ore", "iron_ore", "gold_ore", "uranium_ore"];
-          if (!validOres.includes(itemToPlace.id)) {
-            toast.error("Only copper, iron, gold, or uranium ores can be placed in the input slot!");
-            return;
-          }
-        }
-        if (index === 1) {
-          const validFuels = ["coal", "wood"];
-          if (!validFuels.includes(itemToPlace.id)) {
-            toast.error("Only coal or wood can be placed in the fuel slot!");
-            return;
-          }
-        }
-      }
-
-      setState((prev) => {
-        const next = structuredClone(prev);
-        let targetInv: (Item | null)[] = [];
-        if (source === "inventory") {
-          targetInv = next.inventory;
-        } else if (source === "shipping") {
-          targetInv = next.shippingBin;
-        } else if (source === "chest" && chestOpenTile) {
-          const grid = next.inHouse ? next.houseGrid! : (next.inMine ? next.mineGrid : next.tiles);
-          targetInv = grid[chestOpenTile.y][chestOpenTile.x].chestInventory!;
-        } else if (source === "furnace" && furnaceOpenTile) {
-          const grid = next.inHouse ? next.houseGrid! : (next.inMine ? next.mineGrid : next.tiles);
-          targetInv = grid[furnaceOpenTile.y][furnaceOpenTile.x].chestInventory!;
-        }
-
-        if (targetInv) {
-          const targetItem = targetInv[index];
-          if (targetItem === null) {
-            targetInv[index] = { ...itemToPlace, count: 1 };
-            setHeldItem((prevHeld) => {
-              if (!prevHeld) return null;
-              const newCount = prevHeld.item.count - 1;
-              if (newCount <= 0) return null;
-              return { ...prevHeld, item: { ...prevHeld.item, count: newCount } };
-            });
-          } else if (targetItem.id === itemToPlace.id && targetItem.type !== "tool" && targetItem.type !== "weapon") {
-            targetItem.count += 1;
-            setHeldItem((prevHeld) => {
-              if (!prevHeld) return null;
-              const newCount = prevHeld.item.count - 1;
-              if (newCount <= 0) return null;
-              return { ...prevHeld, item: { ...prevHeld.item, count: newCount } };
-            });
-          }
-        }
-        return next;
-      });
-    }
+  const handleSlotRightClick = (event: React.MouseEvent, index: number, source: SlotSource) => {
+    event.preventDefault();
+    useSlot(index, source, true, false);
   };
 
   // Give item to NPC
   const handleGiveGift = () => {
     if (!npcDialogue) return;
     const npcId = npcDialogue.npcId;
-    const held = state.inventory[state.hotbarIndex];
+    const held = getCursor(state);
 
     if (!held) {
       toast.error("You aren't holding any items!");
@@ -3216,7 +3124,7 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
 
     setState((prev) => {
       const next = structuredClone(prev);
-      removeItem(next.inventory, next.hotbarIndex, 1);
+      consumeCursor(next);
       next.npcFriendships[npcId] = (next.npcFriendships[npcId] || 0) + react.points;
       setNpcDialogue({ npcId, dialogue: `[Gift: ${held.name}] — ${react.dialogue}` });
       return next;
@@ -4182,15 +4090,22 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
         {/* Bottom-Center Factorio Hotbar */}
         <div className="absolute bottom-2 sm:bottom-3 left-1/2 -translate-x-1/2 z-20 flex flex-col items-center gap-1 max-w-[98%]">
           <div className="flex items-center gap-0.5 sm:gap-1 bg-[#202224]/90 border border-slate-700 p-0.5 sm:p-1 shadow-2xl">
-            {state.inventory.slice(0, 10).map((item, idx) => {
+            {state.quickbar.map((id, idx) => {
+              const item = id ? createItem(id, quickbarStock(state, id)) : null;
               const selected = state.hotbarIndex === idx;
               const icon = item && getYardItemIcon(item.id);
               const slotKey = idx === 9 ? "0" : (idx + 1).toString();
               return (
                 <button
                   key={idx}
-                  onClick={() => setState((prev) => ({ ...prev, hotbarIndex: idx }))}
-                  title={item ? `${item.name} (${slotKey})` : `Empty slot (${slotKey})`}
+                  onClick={() => onQuickbar(idx)}
+                  onContextMenu={e => { e.preventDefault(); onQuickbar(idx, true); }}
+                  onMouseDown={e => {
+                    if (e.button !== 1) return;
+                    e.preventDefault();
+                    setState(prev => ({ ...prev, quickbar: prev.quickbar.map((filter, slot) => slot === idx ? null : filter) }));
+                  }}
+                  title={item ? `${item.name} (${slotKey}) · Right-click half · Middle-click clear` : `Empty shortcut (${slotKey}) · Click with an item to bind`}
                   aria-pressed={selected}
                   className={`relative flex flex-col items-center justify-center w-[30px] h-[30px] sm:w-[44px] sm:h-[44px] transition-all cursor-pointer select-none rounded-none ${selected
                       ? "border-2 border-[#ff9200] bg-[#ff9200]/20 scale-[1.06] shadow-[0_0_8px_rgba(255,146,0,0.5)] z-10"
@@ -4207,7 +4122,7 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
                       {icon ? <img src={icon} alt="" className="h-7 w-7 object-contain" draggable={false} /> : (
                         <span className="text-sm sm:text-xl mt-0.5 select-none">{item.iconSymbol || item.name.slice(0, 1)}</span>
                       )}
-                      {item.count > 1 && (
+                      {item.count !== 1 && (
                         <span className="absolute bottom-0 right-0.5 px-0.5 bg-black/85 text-[7px] sm:text-[8px] font-bold text-white font-mono leading-none">
                           {item.count}
                         </span>
@@ -4470,13 +4385,13 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
               }}
             >
               <button
-                onClick={() => setState((prev) => ({ ...prev, hotbarIndex: (prev.hotbarIndex - 1 + 10) % 10 }))}
+                onClick={() => onQuickbar((state.hotbarIndex - 1 + 10) % 10)}
                 className="pointer-events-auto w-8 h-8 bg-slate-900/95 border-2 border-slate-600 active:bg-[#ff9200] active:border-white text-white rounded-full flex items-center justify-center font-bold text-xs shadow-xl active:scale-90 transition-transform"
               >
                 ◀
               </button>
               <button
-                onClick={() => setState((prev) => ({ ...prev, hotbarIndex: (prev.hotbarIndex + 1) % 10 }))}
+                onClick={() => onQuickbar((state.hotbarIndex + 1) % 10)}
                 className="pointer-events-auto w-8 h-8 bg-slate-900/95 border-2 border-slate-600 active:bg-[#ff9200] active:border-white text-white rounded-full flex items-center justify-center font-bold text-xs shadow-xl active:scale-90 transition-transform"
               >
                 ▶
@@ -4522,14 +4437,15 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
           </div>
         </div>
 
-        {/* Floating Carry/Hold info */}
-        {heldItem && (
-          <div className="absolute bottom-[72px] left-1/2 -translate-x-1/2 z-20 px-2.5 py-1 bg-[#202224]/90 border border-slate-700 text-amber-400 rounded-none text-[10px] flex items-center gap-1.5 font-mono shadow-md animate-bounce">
-            <Backpack className="h-3 w-3 text-amber-400" />
-            <span>Holding: {heldItem.item.name} ({heldItem.item.count}x)</span>
-          </div>
-        )}
       </div>
+      {heldItem && (
+        <div ref={cursorBadge} className="workshop-cursor" data-held-item={heldItem.id}
+          style={{ transform: `translate(${cursorPosition.current.x + 14}px, ${cursorPosition.current.y + 15}px)` }}>
+          <StackIcon item={heldItem} />
+          {isBuildableItem(heldItem) && <span className="workshop-cursor-dir" aria-hidden="true">{{ up: "↑", down: "↓", left: "←", right: "→" }[state.placementDirection ?? "right"]}</span>}
+          <strong>{heldItem.count}</strong>
+        </div>
+      )}
 
       {/* 5. COZY DIALOG INTERFACES */}
 
@@ -5202,7 +5118,13 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
 
       {/* D. FACTORIO CHARACTER & LOGISTICS JOURNAL GUI */}
       {inventoryOpen && (<Dialog open={inventoryOpen} onOpenChange={closeInventory}>
-        <DialogContent container={mainContainerRef.current} className="w-[98vw] max-w-5xl max-h-[92dvh] bg-[#1d2127] border-[3px] border-[#3a4454] text-slate-100 rounded-sm font-mono shadow-[0_10px_35px_rgba(0,0,0,0.95)] overflow-y-auto p-3 sm:p-4 select-none">
+        <DialogContent container={mainContainerRef.current} onOpenAutoFocus={(event) => {
+          const firstSlot = (event.target as HTMLElement | null)?.querySelector<HTMLButtonElement>("[data-backpack-slot]");
+          if (firstSlot) {
+            event.preventDefault();
+            firstSlot.focus();
+          }
+        }} className="w-[98vw] max-w-5xl max-h-[92dvh] bg-[#1d2127] border-[3px] border-[#3a4454] text-slate-100 rounded-sm font-mono shadow-[0_10px_35px_rgba(0,0,0,0.95)] overflow-y-auto p-3 sm:p-4 select-none">
           {/* Factorio Steel Bevel Header Bar */}
           <DialogHeader className="m-0 p-0">
             <DialogTitle className="text-xs sm:text-sm font-black uppercase tracking-wider flex items-center justify-between text-[#ff9200] border-b-2 border-[#2d3542] pb-2 bg-[#161a20] -mt-3 -mx-3 sm:-mt-4 sm:-mx-4 px-3 sm:px-4 pt-2.5">
@@ -5247,14 +5169,11 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
                         size="sm"
                         variant="outline"
                         className="text-[9px] h-6 px-1.5 bg-amber-950/80 border-amber-500 text-amber-300 hover:bg-amber-900 rounded-none font-mono"
-                        onClick={() => {
-                          setState(prev => {
-                            const inventory = inventoryCopy(prev.inventory);
-                            if (!addItem(inventory, heldItem.item)) inventory.push(heldItem.item);
-                            return { ...prev, inventory };
-                          });
-                          setHeldItem(null);
-                        }}
+                        onClick={() => setState(prev => {
+                          const next = { ...prev, inventory: inventoryCopy(prev.inventory) };
+                          returnCursor(next);
+                          return next;
+                        })}
                       >
                         Clear (Q)
                       </Button>
@@ -5276,25 +5195,22 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
                     {state.inventory.map((item, idx) => (
                       <button
                         key={idx}
+                        data-backpack-slot={idx}
                         onClick={(e) => handleSlotClick(idx, "inventory", e)}
                         onContextMenu={(e) => handleSlotRightClick(e, idx, "inventory")}
-                        onMouseEnter={() => item && setHoveredItem(item)}
-                        onMouseLeave={() => setHoveredItem(null)}
+                        onMouseEnter={() => { backpackHover.current = item?.id ?? null; setHoveredItem(item); }}
+                        onMouseLeave={() => { backpackHover.current = null; setHoveredItem(null); }}
+                        title={item ? `${item.name} · ${item.count}` : "Empty backpack slot"}
                         className={`relative flex items-center justify-center h-9 w-full transition-all rounded-xs ${
-                          idx === state.hotbarIndex ? "ring-2 ring-amber-400 ring-offset-1 ring-offset-[#101318]" : ""
+                          item && state.quickbar.includes(item.id) ? "border-amber-700/60" : ""
                         } ${item
                             ? "bg-[#1f2633] hover:bg-[#283244] border border-[#3b4759] hover:border-[#ff9200] shadow-[inset_0_1px_3px_rgba(0,0,0,0.6)] text-slate-100"
                             : "bg-[#13161c] border border-[#222833] shadow-[inset_0_1px_3px_rgba(0,0,0,0.7)] text-slate-700 hover:border-slate-600"
                           }`}
                       >
-                        {idx < 10 && (
-                          <span className="absolute top-0.5 left-0.5 text-[6.5px] font-bold text-amber-500/90 leading-none">
-                            {idx === 9 ? "0" : idx + 1}
-                          </span>
-                        )}
                         {item ? (
                           <>
-                            <span className="text-lg select-none filter drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">{item.iconSymbol || "🎁"}</span>
+                            <StackIcon item={item} />
                             {item.count > 1 && (
                               <span className="absolute bottom-0.5 right-0.5 px-0.5 bg-black/90 rounded-[2px] text-[7.5px] font-bold text-amber-300 font-mono border border-black leading-none">
                                 {item.count}
@@ -5325,7 +5241,7 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
                   </div>
                 ) : (
                   <div className="p-2 bg-[#12151a]/50 border border-dashed border-[#27303d] rounded-sm text-center text-zinc-500 text-[10px]">
-                    Hover over items to inspect stats. Left-click move, Right-click split.
+                    Left-click to lift a stack. Right-click to split or place one. Hover over a stack and press 1–0 to bind a shortcut.
                   </div>
                 )}
               </div>
@@ -6372,9 +6288,9 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
             </div>
 
             <DialogFooter className="flex-col gap-2 sm:flex-row mt-3 justify-between">
-              {state.inventory[state.hotbarIndex] ? (
+              {getCursor(state) ? (
                 <Button size="sm" variant="outline" className="text-xs" onClick={handleGiveGift}>
-                  🎁 Give Held Gift ({state.inventory[state.hotbarIndex]?.name})
+                  🎁 Give Held Gift ({getCursor(state)?.name})
                 </Button>
               ) : (
                 <span className="text-[10px] text-stone-500 flex items-center font-mono">

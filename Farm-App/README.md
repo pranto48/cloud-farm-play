@@ -12,9 +12,9 @@ Copper and coal are available in the same yard. Build a powered assembler for mo
 | --- | --- |
 | WASD or arrows, Shift | Move or sprint |
 | 1 through 0, Q | Select a hotbar slot or sample a hovered building. Press Q over empty ground to clear the selection. |
-| Left click, left drag with belts | Build, interact, or place a row of conveyors |
+| Left click, left drag with build materials | Build, interact, or place a row of conveyors, walls, or paving |
 | Ctrl + left click | Load fuel into a burner machine |
-| Right click | Dismantle a machine and recover its contents when inventory space allows |
+| Right click | Dismantle a machine, lift paving, or remove a planning mark |
 | R, Shift + R | Rotate clockwise or counterclockwise |
 | Alt, P | Toggle machine overlays or open production totals |
 | M, B, Space | Survey the map, cycle weapons, or fire near the cursor |
@@ -22,6 +22,18 @@ Copper and coal are available in the same yard. Build a powered assembler for mo
 | E or I, Enter | Open inventory or interact with the tile ahead |
 | Mouse wheel, F11 | Zoom or toggle fullscreen |
 | F5, F9 | Save or load a disk checkpoint |
+
+## Workshop update in 1.3
+
+- Open the backpack with **E** or **I**. Left-click a slot to lift its stack. Left-click a second slot to move, merge, or swap it. Right-click to lift half a stack or place one item. Shift-click a compatible machine slot to transfer items.
+- Close the backpack to take the selected stack into the yard. **Q** puts it back. With an empty cursor, **Q** samples the building or deposit under the pointer.
+- Hover over an inventory item and press **1–0** to link it to the quickbar. The shortcut stays bound when you move, sort, or use up the item. Right-click a shortcut to lift half a stack and middle-click to clear the shortcut.
+- Left-click to build. Drag to lay conveyors, walls, and paving. **R** turns equipment. The preview shows orientation, reach, and collisions. Shift-click marks a construction plan without spending stock. Place a matching item to complete the plan or right-click to remove the mark.
+- Use stone brick or concrete to pave clear ground. Landfill works on water. Saves retain paving, planning marks, shortcuts, and the stack in hand.
+
+The basin uses original cached tree, ore, water, and item sprites. Shorelines have shallow margins and subdued reflections. Ore, loose cargo, and storage crates use consistent material colors across the map and inventory.
+
+The interaction reference was Factorio’s public description of quickbar links, cursor stacks, and construction planning. [Quickbar](https://wiki.factorio.com/Quickbar) · [Controls](https://wiki.factorio.com/Controls) · [Construction ghosts](https://wiki.factorio.com/Ghost)
 
 ## Field update in 1.2
 

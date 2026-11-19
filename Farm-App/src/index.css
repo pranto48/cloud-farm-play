@@ -95,3 +95,9 @@ body {
 .field-loadout { position: absolute; z-index: 19; right: .75rem; bottom: 5.1rem; display: flex; align-items: center; gap: 7px; padding: 4px 7px; color: #e8d5ae; background: #252c25ed; border: 1px solid #646754; font: 11px "Segoe UI", sans-serif; }
 .field-loadout kbd, .yard-command kbd { opacity: .65; }
 .yard-recipe-search { width: 100%; border: 1px solid #6b6e58; border-radius: 3px; padding: 7px 9px; font-size: 12px; background: #252d26; color: #f0e3c5; }
+
+.workshop-cursor { position: fixed; top: 0; left: 0; z-index: 145; pointer-events: none; width: 31px; height: 31px; color: #fff0c8; border: 1px solid #a69163; background: #262b21ed; box-shadow: 0 2px 6px #121711b0; border-radius: 3px; display: grid; place-items: center; }
+.workshop-cursor strong { position:absolute; bottom: -3px; right: -3px; padding: 0 3px; background: #1f241a; border-radius: 2px; font: 700 10px/14px "Segoe UI", sans-serif; }
+.workshop-cursor-dir { position: absolute; top: -6px; left: -5px; padding: 0 3px; background: #1f241a; color: #ecc992; font-size: 10px; }
+.stack-icon { height: 28px; width: 28px; object-fit: contain; }
+.stack-symbol { color: #e6d6ac; font-size: 18px; line-height: 1; }

@@ -7,4 +7,4 @@ if not exist "node_modules\.bin\electron-builder.cmd" (
 )
 call npm.cmd run desktop:build
 if errorlevel 1 exit /b 1
-echo Installer: %CD%\dist-electron\MeadowLife-Setup-1.2.0-x64.exe
+echo Installer: %CD%\dist-electron\MeadowLife-Setup-1.3.0-x64.exe

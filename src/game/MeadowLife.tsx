@@ -31,6 +31,8 @@ import {
   LAND_PARCELS,
   applyLandPurchase,
   ensureMapExploration,
+  getBiomeAt,
+  type BiomeInfo,
   type GameState,
   type Tile,
   type Enemy,
@@ -303,6 +305,17 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
 
     return () => clearInterval(autoSaveTimer);
   }, []);
+
+  // Biome Exploration Banner & Discovery Tracker
+  const [biomeBanner, setBiomeBanner] = useState<{ name: string; nameBn: string; subtitle: string } | null>(null);
+  const lastBiomeKindRef = useRef<string>("");
+
+  // Exploration Compass Waypoints
+  const [customWaypoints, setCustomWaypoints] = useState<Array<{ id: string; name: string; icon: string; x: number; y: number; color: string }>>([
+    { id: "home", name: "Farm House", icon: "🏠", x: 16, y: 30, color: "#2ecc71" },
+    { id: "shop", name: "Town Shop", icon: "🏪", x: 70, y: 40, color: "#f39c12" },
+    { id: "mine", name: "Mine Cave", icon: "⛏️", x: 72, y: 8, color: "#9b59b6" },
+  ]);
 
   // Menu Overlays
   const [inventoryOpen, setInventoryOpen] = useState(false);
@@ -1294,6 +1307,59 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
           p.dir = dy > 0 ? "down" : "up";
         }
 
+        // Sprint boot running dust particles
+        if (isShift && Math.random() < 0.28) {
+          particlesRef.current.push({
+            x: p.subX * TILE + 16 + (Math.random() * 8 - 4),
+            y: p.subY * TILE + 28,
+            vx: -dx * 18 + (Math.random() * 8 - 4),
+            vy: -dy * 18 - Math.random() * 8,
+            color: "#a08c70",
+            age: 0,
+            maxAge: 0.26,
+            type: "smoke"
+          });
+        }
+
+        // Biome Discovery Banner Trigger
+        if (!cur.inMine && !cur.inHouse) {
+          const currentBiome = getBiomeAt(p.x, p.y);
+          if (currentBiome.kind !== lastBiomeKindRef.current) {
+            lastBiomeKindRef.current = currentBiome.kind;
+            setBiomeBanner({
+              name: currentBiome.name,
+              nameBn: currentBiome.nameBn,
+              subtitle: currentBiome.subtitle,
+            });
+            if (gameAudio.playDiscovery) gameAudio.playDiscovery();
+            setTimeout(() => {
+              setBiomeBanner(prev => (prev?.name === currentBiome.name ? null : prev));
+            }, 4500);
+          }
+        }
+
+        // Vacuum Magnet: Auto-pull nearby loose items within 3 tiles
+        if (!cur.inHouse && !cur.inMine) {
+          const pTileX = p.x;
+          const pTileY = p.y;
+          for (let my = -2; my <= 2; my++) {
+            for (let mx = -2; mx <= 2; mx++) {
+              const tx = pTileX + mx;
+              const ty = pTileY + my;
+              if (tx >= 0 && tx < cols && ty >= 0 && ty < rows) {
+                const stepTile = grid[ty]?.[tx];
+                if (stepTile && stepTile.beltItems && stepTile.beltItems.length > 0 && Math.hypot(mx, my) <= 2.8) {
+                  const pulled = stepTile.beltItems.shift();
+                  if (pulled) {
+                    addItem(cur.inventory, createItem(pulled.id, 1));
+                    gameAudio.playCoin();
+                  }
+                }
+              }
+            }
+          }
+        }
+
         // Rustle sway and particles when walking through crops or weeds
         const stepTile = grid[p.y]?.[p.x];
         if (stepTile && (stepTile.cropId || stepTile.kind === "debris_weed")) {
@@ -1536,6 +1602,54 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
               });
             }
           }
+
+          // Biome Environmental Atmosphere Particles (Spawn around player viewport)
+          if (!inBld) {
+            const playerBiome = getBiomeAt(Math.floor(pSubX), Math.floor(pSubY));
+            const phase = getTimePhase(stateRef.current.time);
+
+            // Swamp Bioluminescent Fireflies at dusk/night
+            if (playerBiome.kind === "swamp" && phase !== "morning" && Math.random() < 0.45) {
+              particlesRef.current.push({
+                x: (pSubX + (Math.random() * 24 - 12)) * TILE,
+                y: (pSubY + (Math.random() * 18 - 9)) * TILE,
+                vx: (Math.random() * 2 - 1) * 8,
+                vy: -8 - Math.random() * 10,
+                color: Math.random() < 0.5 ? "#d4f040" : "#a8e030",
+                age: 0,
+                maxAge: 2.5 + Math.random() * 1.5,
+                type: "spark",
+              });
+            }
+
+            // Frosted Mountain Peak Snow Flurries
+            if (playerBiome.kind === "mountain" && playerBiome.name.includes("Frosted") && Math.random() < 0.60) {
+              particlesRef.current.push({
+                x: (pSubX + (Math.random() * 28 - 14)) * TILE,
+                y: (pSubY - 10) * TILE,
+                vx: -18 - Math.random() * 22,
+                vy: 22 + Math.random() * 18,
+                color: "#f0f8ff",
+                age: 0,
+                maxAge: 1.8 + Math.random() * 1.0,
+                type: "spark",
+              });
+            }
+
+            // Badlands Desert Wind Dust
+            if (playerBiome.kind === "badlands" && Math.random() < 0.35) {
+              particlesRef.current.push({
+                x: (pSubX + (Math.random() * 24 - 12)) * TILE,
+                y: (pSubY + (Math.random() * 16 - 8)) * TILE,
+                vx: 18 + Math.random() * 15,
+                vy: -4 + (Math.random() * 6 - 3),
+                color: "#d38258",
+                age: 0,
+                maxAge: 1.4 + Math.random() * 0.8,
+                type: "smoke",
+              });
+            }
+          }
         }
       }
 
@@ -1768,7 +1882,7 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
       if (miniCanvas) {
         const miniCtx = miniCanvas.getContext("2d");
         if (miniCtx) {
-          drawMinimap(miniCtx, stateRef.current, canvasSize.width, canvasSize.height);
+          drawMinimap(miniCtx, stateRef.current, canvasSize.width, canvasSize.height, customWaypoints);
         }
       }
 
@@ -3644,6 +3758,79 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
           style={{ width: "100%", height: "100%", display: "block", imageRendering: "pixelated", cursor: "crosshair", touchAction: "none" }}
         />
 
+        {/* Biome Discovery Banner HUD */}
+        {biomeBanner && (
+          <div className="absolute top-12 left-1/2 -translate-x-1/2 z-40 flex flex-col items-center pointer-events-none animate-in fade-in slide-in-from-top-4 duration-500">
+            <div className="px-5 py-2.5 bg-[#0b0f17]/95 border-2 border-amber-400/90 rounded-xl shadow-[0_0_25px_rgba(245,158,11,0.6)] backdrop-blur text-center font-mono select-none">
+              <div className="text-[10px] tracking-widest text-amber-400 font-extrabold uppercase flex items-center justify-center gap-1.5">
+                <span>✦</span>
+                <span>NEW REGION DISCOVERED</span>
+                <span>✦</span>
+              </div>
+              <div className="text-sm sm:text-base font-black text-white mt-0.5">
+                {biomeBanner.name} <span className="text-amber-300 font-bold text-xs">({biomeBanner.nameBn})</span>
+              </div>
+              <div className="text-[10px] text-slate-300 italic mt-0.5 max-w-[320px]">
+                {biomeBanner.subtitle}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Dynamic Exploration Compass & Waypoint Bar */}
+        {!state.inMine && !state.inHouse && (
+          <div className="absolute top-3 left-1/2 -translate-x-1/2 z-20 hidden md:flex items-center gap-1.5 bg-black/80 border border-slate-700/80 px-3 py-1 rounded-full text-[10px] font-mono text-slate-200 backdrop-blur shadow-lg select-none">
+            <span className="text-amber-400 font-bold flex items-center gap-1">
+              🧭 COMPASS
+            </span>
+            <span className="text-slate-600">|</span>
+            {customWaypoints.map((wp) => {
+              const p = state.player;
+              const dx = wp.x - p.x;
+              const dy = wp.y - p.y;
+              const dist = Math.round(Math.hypot(dx, dy));
+              const angle = Math.atan2(dy, dx) * (180 / Math.PI);
+              let arrow = "→";
+              if (angle >= -22.5 && angle < 22.5) arrow = "→";
+              else if (angle >= 22.5 && angle < 67.5) arrow = "↘";
+              else if (angle >= 67.5 && angle < 112.5) arrow = "↓";
+              else if (angle >= 112.5 && angle < 157.5) arrow = "↙";
+              else if (angle >= -67.5 && angle < -22.5) arrow = "↗";
+              else if (angle >= -112.5 && angle < -67.5) arrow = "↑";
+              else if (angle >= -157.5 && angle < -112.5) arrow = "↖";
+              else arrow = "←";
+
+              return (
+                <div key={wp.id} className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-900/60 border border-slate-800" title={`${wp.name} at (${wp.x}, ${wp.y})`}>
+                  <span>{wp.icon}</span>
+                  <span className="font-bold text-slate-300">{wp.name}</span>
+                  <span className="text-amber-300 font-bold">{dist}m</span>
+                  <span className="text-emerald-400 font-bold">{arrow}</span>
+                </div>
+              );
+            })}
+            <button
+              onClick={() => {
+                const p = state.player;
+                const newWp = {
+                  id: `wp_${Date.now()}`,
+                  name: `Beacon #${customWaypoints.length + 1}`,
+                  icon: "📍",
+                  x: p.x,
+                  y: p.y,
+                  color: "#e74c3c",
+                };
+                setCustomWaypoints(prev => [...prev.slice(0, 5), newWp]);
+                toast.success(`Dropped Beacon at (${p.x}, ${p.y})!`);
+              }}
+              className="px-2 py-0.5 bg-amber-500/20 hover:bg-amber-500/40 border border-amber-500/60 text-amber-300 font-bold rounded text-[9px] cursor-pointer"
+              title="Drop navigation waypoint at current position"
+            >
+              + Pin
+            </button>
+          </div>
+        )}
+
         {/* Zoning Toolbar */}
         {zoningMode !== "none" && (
           <div className="absolute top-16 left-1/2 -translate-x-1/2 z-20 flex gap-2 bg-[#202224]/90 border-[3px] border-[#4a5568] p-2 font-mono shadow-[0_0_15px_rgba(0,0,0,0.8)] rounded-sm">
@@ -4293,8 +4480,25 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
                 ref={minimapRef}
                 width={148}
                 height={148}
-                className="block w-full h-full"
+                className="block w-full h-full cursor-crosshair"
                 style={{ imageRendering: "pixelated" }}
+                onClick={(e) => {
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  const clickX = (e.clientX - rect.left) / rect.width;
+                  const clickY = (e.clientY - rect.top) / rect.height;
+                  const targetTileX = Math.floor(clickX * COLS);
+                  const targetTileY = Math.floor(clickY * ROWS);
+                  const newWp = {
+                    id: `wp_${Date.now()}`,
+                    name: `Pin (${targetTileX}, ${targetTileY})`,
+                    icon: "📍",
+                    x: targetTileX,
+                    y: targetTileY,
+                    color: "#e74c3c",
+                  };
+                  setCustomWaypoints(prev => [...prev.slice(0, 5), newWp]);
+                  toast.success(`Beacon pin set at (${targetTileX}, ${targetTileY})!`);
+                }}
               />
             </div>
           )}
@@ -4303,8 +4507,8 @@ export function MeadowLife({ initialState, onStateChange }: Props = {}) {
           <div className="flex flex-col gap-0.5 px-1 py-0.5 leading-normal text-slate-300">
             <div className="flex justify-between">
               <span>LOC:</span>
-              <span className="font-bold text-slate-100 truncate max-w-[80px] sm:max-w-[100px]">
-                {state.inMine ? `MINES (L${state.mineDepth})` : "MEADOW FARM"}
+              <span className="font-bold text-slate-100 truncate max-w-[80px] sm:max-w-[100px]" title={!state.inMine && !state.inHouse ? getBiomeAt(state.player.x, state.player.y).name : ""}>
+                {state.inMine ? `MINES (L${state.mineDepth})` : (state.inHouse ? "FARM HOUSE" : getBiomeAt(state.player.x, state.player.y).name.toUpperCase())}
               </span>
             </div>
             <div className="flex justify-between">
@@ -8219,7 +8423,8 @@ function drawMinimap(
   ctx: CanvasRenderingContext2D,
   state: GameState,
   viewWidth: number,
-  viewHeight: number
+  viewHeight: number,
+  customWaypoints?: Array<{ id: string; name: string; icon: string; x: number; y: number; color: string }>
 ) {
   const isMine = state.inMine;
   const grid = isMine ? state.mineGrid : state.tiles;
@@ -8242,96 +8447,71 @@ function drawMinimap(
     _lastMinimapTerrainRender = 0;
   }
 
-  // Only re-rasterize 57,600 tiles once every 1500ms or when changing map/floors
+  // Only re-rasterize tiles once every 1500ms or when changing map/floors
   if (now - _lastMinimapTerrainRender > 1500 || _cachedMinimapMode !== currentMode) {
     _lastMinimapTerrainRender = now;
     _cachedMinimapMode = currentMode;
 
     const offCtx = _cachedMinimapCanvas.getContext("2d");
     if (offCtx) {
-      offCtx.fillStyle = "#141517";
-      offCtx.fillRect(0, 0, w, h);
+      const imgData = offCtx.createImageData(w, h);
+      const data32 = new Uint32Array(imgData.data.buffer);
+      const stepX = cols / w;
+      const stepY = rows / h;
 
-      const scaleX = w / cols;
-      const scaleY = h / rows;
-
-      for (let y = 0; y < rows; y++) {
-        for (let x = 0; x < cols; x++) {
-          const tile = grid[y]?.[x];
-          if (!tile) continue;
-
-          let color = "#7c6448";
-          switch (tile.kind) {
-            case "grass":
-              color = "#7c6448";
-              break;
-            case "water":
-              color = "#123842";
-              break;
-            case "path":
-              color = "#475569";
-              break;
-            case "soil":
-              color = "#3a2e22";
-              break;
-            case "watered":
-              color = "#241c14";
-              break;
-            case "tree":
-              color = "#2d3e2f";
-              break;
-            case "house":
-            case "shop":
-              color = "#34495e";
-              break;
-            case "mine_cave":
-              color = "#000000";
-              break;
-            case "mine_dirt":
-              color = "#3d312a";
-              break;
-            case "mine_wall":
-              color = "#2b2521";
-              break;
-            case "mine_ladder":
-              color = "#ffd700";
-              break;
-            case "debris_weed":
-              color = "#4a5568";
-              break;
-            case "debris_branch":
-              color = "#5c4832";
-              break;
-            case "debris_stone":
-              color = "#7f8c8d";
-              break;
-            case "ore_copper":
-              color = "#e67e22";
-              break;
-            case "ore_iron":
-              color = "#3498db";
-              break;
-            case "ore_coal":
-              color = "#17202a";
-              break;
-            case "ore_uranium":
-              color = "#2ecc71";
-              break;
-            case "ore_gold":
-              color = "#f1c40f";
-              break;
-            case "placed_item":
-              if (tile.placedItemId === "mailbox") color = "#34495e";
-              else if (tile.placedItemId === "chest") color = "#d35400";
-              else if (tile.placedItemId && tile.placedItemId.startsWith("sprinkler")) color = "#3498db";
-              else color = "#ab47bc";
-              break;
+      for (let py = 0; py < h; py++) {
+        const gy = Math.floor(py * stepY);
+        const row = grid[gy];
+        const rowOffset = py * w;
+        for (let px = 0; px < w; px++) {
+          const gx = Math.floor(px * stepX);
+          const tile = row?.[gx];
+          let color = 0xff171514; // #141517
+          if (tile) {
+            if (tile.kind === "grass") {
+              const b = getBiomeAt(gx, gy);
+              switch (b.kind) {
+                case "mountain": color = b.name.includes("Frosted") ? 0xfff0e6dc : 0xff6f675d; break;
+                case "badlands": color = 0xff3a5aab; break;
+                case "swamp": color = 0xff284839; break;
+                case "forest": color = 0xff265732; break;
+                case "beach": color = 0xff77bad2; break;
+                default: color = 0xff388d4f; break;
+              }
+            } else {
+              switch (tile.kind) {
+                case "water": color = 0xff423812; break; // #123842
+                case "path": color = 0xff695547; break; // #475569
+                case "soil": color = 0xff222e3a; break; // #3a2e22
+                case "watered": color = 0xff141c24; break; // #241c14
+                case "tree": color = 0xff2f3e2d; break; // #2d3e2f
+                case "house":
+                case "shop": color = 0xff5e4934; break; // #34495e
+                case "mine_cave": color = 0xff000000; break;
+                case "mine_dirt": color = 0xff2a313d; break; // #3d312a
+                case "mine_wall": color = 0xff21252b; break; // #2b2521
+                case "mine_ladder": color = 0xff00d7ff; break; // #ffd700
+                case "debris_weed": color = 0xff68554a; break; // #4a5568
+                case "debris_branch": color = 0xff32485c; break; // #5c4832
+                case "debris_stone": color = 0xff8d8c7f; break; // #7f8c8d
+                case "ore_copper": color = 0xff227ee6; break; // #e67e22
+                case "ore_iron": color = 0xffdb9834; break; // #3498db
+                case "ore_coal": color = 0xff2a2017; break; // #17202a
+                case "ore_uranium": color = 0xff71cc2e; break; // #2ecc71
+                case "ore_gold": color = 0xff0fc4f1; break; // #f1c40f
+                case "placed_item":
+                  if (tile.placedItemId === "mailbox") color = 0xff5e4934;
+                  else if (tile.placedItemId === "chest") color = 0xff0054d3;
+                  else if (tile.placedItemId && tile.placedItemId.startsWith("sprinkler")) color = 0xffdb9834;
+                  else color = 0xffbc47ab;
+                  break;
+              }
+            }
           }
-
-          offCtx.fillStyle = color;
-          offCtx.fillRect(x * scaleX, y * scaleY, Math.ceil(scaleX), Math.ceil(scaleY));
+          data32[rowOffset + px] = color;
         }
       }
+      offCtx.putImageData(imgData, 0, 0);
     }
   }
 
@@ -8353,6 +8533,21 @@ function drawMinimap(
     state.animals.forEach((a) => {
       ctx.fillRect(a.x * scaleX, a.y * scaleY, Math.max(2, scaleX * 1.2), Math.max(2, scaleY * 1.2));
     });
+  }
+
+  // Draw custom waypoints pins on minimap
+  if (customWaypoints && !isMine) {
+    for (const wp of customWaypoints) {
+      const wx = (wp.x + 0.5) * scaleX;
+      const wy = (wp.y + 0.5) * scaleY;
+      ctx.fillStyle = wp.color || "#e74c3c";
+      ctx.beginPath();
+      ctx.arc(wx, wy, 3.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = "#ffffff";
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
   }
 
   const flash = Math.floor(Date.now() / 250) % 2 === 0;

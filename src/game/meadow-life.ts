@@ -5,8 +5,8 @@ import { FISH_TYPES, type FishingState } from "./fishing";
 import { gameAudio } from "./audio";
 
 export const TILE = 32;
-export const COLS = 240;
-export const ROWS = 240;
+export const COLS = 500;
+export const ROWS = 500;
 
 let _cachedLightCanvas: HTMLCanvasElement | null = null;
 
@@ -2713,38 +2713,280 @@ export function applyLandPurchase(tiles: Tile[][], parcel: LandParcel): void {
   }
 }
 
-function makeMap(): Tile[][] {
-  const t: Tile[][] = Array.from({ length: ROWS }, () =>
-    Array.from({ length: COLS }, () => ({ kind: "grass" as TileKind, age: -1, watered: false }))
+// Global persistent noise generator for Minecraft-style procedural world
+const worldGenNoise = new ImprovedNoise();
+
+export type BiomeKind = "ocean" | "beach" | "river" | "mountain" | "badlands" | "swamp" | "forest" | "plains";
+
+export interface BiomeInfo {
+  kind: BiomeKind;
+  name: string;
+  nameBn: string;
+  subtitle: string;
+  groundColor: string;
+  foliageColor: string;
+  particleType?: "firefly" | "leaf" | "snow" | "dust" | "bubble";
+  ambientColor: string;
+}
+
+export function getBiomeAt(x: number, y: number): BiomeInfo {
+  // 1. Continentalness / Base Elevation Noise (Multi-octave FBM)
+  const elev = (
+    worldGenNoise.noise(x * 0.007, y * 0.007, 11.2) * 0.65 +
+    worldGenNoise.noise(x * 0.018, y * 0.018, 15.7) * 0.25 +
+    worldGenNoise.noise(x * 0.045, y * 0.045, 23.4) * 0.10
   );
 
-  const noise = new ImprovedNoise();
+  // 2. Minecraft River Carvers
+  const riverRaw = worldGenNoise.noise(x * 0.011, y * 0.011, 48.9);
+  const riverDist = Math.abs(riverRaw);
 
-  // Farm zone starter plot
+  // 3. Biome Climate Coordinates
+  const temp = (
+    worldGenNoise.noise(x * 0.005, y * 0.005, 76.3) * 0.7 +
+    worldGenNoise.noise(x * 0.015, y * 0.015, 82.1) * 0.3
+  );
+  const moisture = (
+    worldGenNoise.noise(x * 0.006, y * 0.006, 125.4) * 0.7 +
+    worldGenNoise.noise(x * 0.016, y * 0.016, 131.8) * 0.3
+  );
+
+  if (elev < -0.27) {
+    return {
+      kind: "ocean",
+      name: "Cerulean Depths",
+      nameBn: "নীল মহাসাগর",
+      subtitle: "Endless deep ocean and aquatic treasures",
+      groundColor: "#123842",
+      foliageColor: "#176e3c",
+      particleType: "bubble",
+      ambientColor: "rgba(18, 56, 66, 0.25)",
+    };
+  }
+
+  if (elev >= -0.27 && elev < -0.21) {
+    return {
+      kind: "beach",
+      name: "Sunlit Coast",
+      nameBn: "সোনালী সৈকত",
+      subtitle: "Warm coastal sands and ocean breeze",
+      groundColor: "#d2ba77",
+      foliageColor: "#27ae60",
+      particleType: "dust",
+      ambientColor: "rgba(210, 186, 119, 0.15)",
+    };
+  }
+
+  if (riverDist < 0.052 && elev < 0.38) {
+    return {
+      kind: "river",
+      name: "Verdant Riverway",
+      nameBn: "নদী উপত্যকা",
+      subtitle: "Freshwater streams and fertile riverbanks",
+      groundColor: "#427a3c",
+      foliageColor: "#2ecc71",
+      particleType: "bubble",
+      ambientColor: "rgba(66, 122, 60, 0.15)",
+    };
+  }
+
+  if (elev > 0.38) {
+    const isSnowSummit = elev > 0.48;
+    return {
+      kind: "mountain",
+      name: isSnowSummit ? "Frosted Summit" : "Obsidian Crags",
+      nameBn: isSnowSummit ? "তুষারাবৃত শৃঙ্গ" : "পাথুরে পর্বতমালা",
+      subtitle: isSnowSummit ? "Frigid mountain peaks dusted with glacial snow" : "High elevation peaks rich with iron, gold, and coal veins",
+      groundColor: isSnowSummit ? "#dce6f0" : "#5d676f",
+      foliageColor: isSnowSummit ? "#b8d5e5" : "#34495e",
+      particleType: isSnowSummit ? "snow" : "dust",
+      ambientColor: isSnowSummit ? "rgba(220, 230, 240, 0.2)" : "rgba(93, 103, 111, 0.2)",
+    };
+  }
+
+  if (temp > 0.18 && moisture < -0.12) {
+    return {
+      kind: "badlands",
+      name: "Crimson Badlands",
+      nameBn: "লাল মেসা ও মরুভূমি",
+      subtitle: "Arid sandstone ridges, copper veins, and oil reservoirs",
+      groundColor: "#ab5a3a",
+      foliageColor: "#8e44ad",
+      particleType: "dust",
+      ambientColor: "rgba(171, 90, 58, 0.2)",
+    };
+  }
+
+  if (temp > 0.10 && moisture > 0.20) {
+    return {
+      kind: "swamp",
+      name: "Murky Mire",
+      nameBn: "রহস্যময় জলাভূমি",
+      subtitle: "Warm humid peat marsh with bioluminescent flora",
+      groundColor: "#394828",
+      foliageColor: "#1e381b",
+      particleType: "firefly",
+      ambientColor: "rgba(57, 72, 40, 0.25)",
+    };
+  }
+
+  if (moisture > 0.15) {
+    return {
+      kind: "forest",
+      name: "Whisperwood Taiga",
+      nameBn: "প্রাচীন ঘন অরণ্য",
+      subtitle: "Dense ancient dark oak and towering pine trees",
+      groundColor: "#325726",
+      foliageColor: "#1d4416",
+      particleType: "leaf",
+      ambientColor: "rgba(50, 87, 38, 0.2)",
+    };
+  }
+
+  // Default Lush Plains
+  return {
+    kind: "plains",
+    name: "Sunburst Meadow",
+    nameBn: "সবুজ ফুলের সমভূমি",
+    subtitle: "Lush green grasslands and wildflowers",
+    groundColor: "#4f8d38",
+    foliageColor: "#27ae60",
+    particleType: "leaf",
+    ambientColor: "rgba(79, 141, 56, 0.15)",
+  };
+}
+
+// AI Procedural Multi-Biome Minecraft World Tile Generator
+export function generateMinecraftWorldTile(x: number, y: number, season?: Season): Tile {
+  const biome = getBiomeAt(x, y);
+
+  // 4. Minecraft Ore Clusters (3D Perlin cluster noise)
+  const coalVal = worldGenNoise.noise(x * 0.09, y * 0.09, 210.1);
+  const ironVal = worldGenNoise.noise(x * 0.085, y * 0.085, 315.4);
+  const copperVal = worldGenNoise.noise(x * 0.085, y * 0.085, 420.7);
+  const goldVal = worldGenNoise.noise(x * 0.08, y * 0.08, 525.2);
+  const uraniumVal = worldGenNoise.noise(x * 0.075, y * 0.075, 630.9);
+  const oilVal = worldGenNoise.noise(x * 0.065, y * 0.065, 745.3);
+
+  // Detail pseudo-random distribution
+  const rand = Math.abs((Math.sin(x * 12.9898 + y * 78.233) * 43758.5453) % 1);
+
+  if (biome.kind === "ocean") {
+    return { kind: "water", age: 0, watered: true };
+  }
+
+  if (biome.kind === "beach") {
+    if (rand < 0.12) return { kind: "debris_weed", age: 0, watered: true };
+    return { kind: "path", age: 0, watered: false };
+  }
+
+  if (biome.kind === "river") {
+    const riverRaw = worldGenNoise.noise(x * 0.011, y * 0.011, 48.9);
+    const riverDist = Math.abs(riverRaw);
+    if (riverDist < 0.034) {
+      return { kind: "water", age: 0, watered: true };
+    }
+    // Riverbanks
+    if (rand < 0.22) return { kind: "debris_weed", age: 0, watered: true };
+    if (rand < 0.38) return { kind: "path", age: 0, watered: false };
+    return { kind: "grass", age: -1, watered: false };
+  }
+
+  if (biome.kind === "mountain") {
+    if (ironVal > 0.68) return { kind: "ore_iron", age: 0, watered: false };
+    if (coalVal > 0.65) return { kind: "ore_coal", age: 0, watered: false };
+    if (goldVal > 0.80) return { kind: "ore_gold", age: 0, watered: false };
+    if (rand < 0.32) return { kind: "debris_stone", age: 0, watered: false };
+    if (rand < 0.40) return { kind: "debris_branch", age: 0, watered: false };
+    return { kind: "grass", age: -1, watered: false };
+  }
+
+  if (biome.kind === "badlands") {
+    if (copperVal > 0.66) return { kind: "ore_copper", age: 0, watered: false };
+    if (goldVal > 0.78) return { kind: "ore_gold", age: 0, watered: false };
+    if (oilVal > 0.84) return { kind: "ore_crude_oil", age: 0, watered: false };
+    if (rand < 0.45) return { kind: "path", age: 0, watered: false };
+    if (rand < 0.52) return { kind: "debris_stone", age: 0, watered: false };
+    if (rand < 0.58) return { kind: "debris_branch", age: 0, watered: false };
+    return { kind: "grass", age: -1, watered: false };
+  }
+
+  if (biome.kind === "swamp") {
+    if (oilVal > 0.83) return { kind: "ore_crude_oil", age: 0, watered: false };
+    if (rand < 0.18) return { kind: "water", age: 0, watered: true };
+    if (rand < 0.38) return { kind: "debris_weed", age: 0, watered: true };
+    if (rand < 0.46) return { kind: "soil", age: 0, watered: true };
+    if (rand < 0.54) return { kind: "tree", age: 0, watered: false };
+    return { kind: "grass", age: -1, watered: false };
+  }
+
+  if (biome.kind === "forest") {
+    if (rand < 0.38) return { kind: "tree", age: 0, watered: false };
+    if (rand < 0.46) return { kind: "debris_branch", age: 0, watered: false };
+    if (rand < 0.54) return { kind: "debris_weed", age: 0, watered: false };
+    if (coalVal > 0.68) return { kind: "ore_coal", age: 0, watered: false };
+    return { kind: "grass", age: -1, watered: false };
+  }
+
+  // Plains / Meadows
+  if (uraniumVal > 0.87) return { kind: "ore_uranium", age: 0, watered: false };
+  if (copperVal > 0.72) return { kind: "ore_copper", age: 0, watered: false };
+  if (ironVal > 0.74) return { kind: "ore_iron", age: 0, watered: false };
+  if (coalVal > 0.72) return { kind: "ore_coal", age: 0, watered: false };
+
+  if (rand < 0.05) return { kind: "tree", age: 0, watered: false };
+  if (rand < 0.09) return { kind: "debris_weed", age: 0, watered: false };
+  if (rand < 0.12) return { kind: "debris_branch", age: 0, watered: false };
+  if (rand < 0.14) return { kind: "debris_stone", age: 0, watered: false };
+
+  return { kind: "grass", age: -1, watered: false };
+}
+
+// Procedural tile generator adapter
+export function generateProceduralTile(worldX: number, worldY: number, season?: Season): Tile {
+  return generateMinecraftWorldTile(worldX, worldY, season);
+}
+
+function makeMap(): Tile[][] {
+  // Generate massive 500x500 procedural Minecraft world
+  const t: Tile[][] = Array.from({ length: ROWS }, (_, y) =>
+    Array.from({ length: COLS }, (_, x) => generateMinecraftWorldTile(x, y))
+  );
+
+  // 1. Clear out settlement core (x: 4..85, y: 4..65) of any trees/water that would block spawn
+  for (let y = 4; y <= 65; y++) {
+    for (let x = 4; x <= 85; x++) {
+      if (t[y][x].kind === "water" || t[y][x].kind === "tree") {
+        t[y][x] = { kind: "grass", age: -1, watered: false };
+      }
+    }
+  }
+
+  // 2. Farm zone starter plot
   for (let y = 32; y <= 42; y++) {
     for (let x = 8; x <= 22; x++) t[y][x].kind = "soil";
   }
 
-  // Spawn house
+  // 3. Spawn house
   for (let y = 24; y <= 28; y++) {
     for (let x = 12; x <= 17; x++) t[y][x].kind = "house";
   }
 
-  // Mailbox setup
+  // 4. Mailbox setup
   t[STATIC_POINTS.mailbox.y][STATIC_POINTS.mailbox.x].kind = "placed_item";
   t[STATIC_POINTS.mailbox.y][STATIC_POINTS.mailbox.x].placedItemId = "mailbox";
 
-  // Mine Cave entrance
+  // 5. Mine Cave entrance
   t[6][72].kind = "mine_cave";
 
-  // Shop counter in the town zone (right side)
+  // 6. Shop counter in the town zone
   for (let y = 32; y <= 40; y++) {
     for (let x = 64; x <= 74; x++) t[y][x].kind = "house";
   }
   t[40][70].kind = "shop";
 
-  // Dedicated Factorio Starting Ore Fields
-  // 1. Iron Ore Deposit (North-East of house)
+  // 7. Dedicated Factorio Starting Ore Fields (Guaranteed near base)
+  // Iron Ore (North-East of house)
   for (let y = 16; y <= 24; y++) {
     for (let x = 28; x <= 38; x++) {
       if (Math.hypot(x - 33, y - 20) <= 4.8 && Math.random() < 0.85) {
@@ -2753,7 +2995,7 @@ function makeMap(): Tile[][] {
     }
   }
 
-  // 2. Copper Ore Deposit (East of Iron)
+  // Copper Ore (East of Iron)
   for (let y = 16; y <= 24; y++) {
     for (let x = 44; x <= 54; x++) {
       if (Math.hypot(x - 49, y - 20) <= 4.6 && Math.random() < 0.85) {
@@ -2762,7 +3004,7 @@ function makeMap(): Tile[][] {
     }
   }
 
-  // 3. Coal Ore Deposit (South of farm)
+  // Coal Ore (South of farm)
   for (let y = 46; y <= 54; y++) {
     for (let x = 18; x <= 28; x++) {
       if (Math.hypot(x - 23, y - 50) <= 4.5 && Math.random() < 0.85) {
@@ -2771,7 +3013,7 @@ function makeMap(): Tile[][] {
     }
   }
 
-  // 4. Stone Quarry Deposit (South-East of farm)
+  // Stone Quarry (South-East of farm)
   for (let y = 46; y <= 54; y++) {
     for (let x = 44; x <= 54; x++) {
       if (Math.hypot(x - 49, y - 50) <= 4.5 && Math.random() < 0.85) {
@@ -2780,7 +3022,7 @@ function makeMap(): Tile[][] {
     }
   }
 
-  // 5. Uranium Ore Field (North-East industrial sector)
+  // Uranium Ore Field
   for (let y = 14; y <= 22; y++) {
     for (let x = 60; x <= 70; x++) {
       if (Math.hypot(x - 65, y - 18) <= 4.2 && Math.random() < 0.80) {
@@ -2789,7 +3031,7 @@ function makeMap(): Tile[][] {
     }
   }
 
-  // 6. Crude Oil Deposit Field (South-East industrial sector)
+  // Crude Oil Deposit Field
   for (let y = 56; y <= 64; y++) {
     for (let x = 60; x <= 70; x++) {
       if (Math.hypot(x - 65, y - 60) <= 4.2 && Math.random() < 0.80) {
@@ -2798,23 +3040,23 @@ function makeMap(): Tile[][] {
     }
   }
 
-  // Dedicated Mining Quarry Area (x: 78..115, y: 6..35) near the mine cave
+  // Dedicated Mining Quarry Area near the mine cave
   for (let y = 6; y <= 35; y++) {
     for (let x = 78; x <= 115; x++) {
       if (t[y][x].kind === "mine_cave") continue;
       const rand = Math.random();
-      if (rand < 0.20) t[y][x].kind = "debris_stone";     // Rock / Stone
-      else if (rand < 0.35) t[y][x].kind = "ore_iron";     // Iron Ore
-      else if (rand < 0.48) t[y][x].kind = "ore_silver";   // Silver Ore
-      else if (rand < 0.60) t[y][x].kind = "ore_aluminum"; // Aluminum Ore
-      else if (rand < 0.72) t[y][x].kind = "ore_coal";     // Coal Ore
-      else if (rand < 0.84) t[y][x].kind = "ore_copper";   // Copper Ore
-      else if (rand < 0.95) t[y][x].kind = "ore_gold";     // Gold Ore
+      if (rand < 0.20) t[y][x].kind = "debris_stone";
+      else if (rand < 0.35) t[y][x].kind = "ore_iron";
+      else if (rand < 0.48) t[y][x].kind = "ore_silver";
+      else if (rand < 0.60) t[y][x].kind = "ore_aluminum";
+      else if (rand < 0.72) t[y][x].kind = "ore_coal";
+      else if (rand < 0.84) t[y][x].kind = "ore_copper";
+      else if (rand < 0.95) t[y][x].kind = "ore_gold";
       else t[y][x].kind = "path";
     }
   }
 
-  // Ensure path connections near house and quarry
+  // 8. Settlement Cobblestone Road Network & Highway Outlets to Wilderness
   for (let x = 67; x <= 72; x++) t[41][x].kind = "path";
   for (let x = 16; x <= 70; x++) t[44][x].kind = "path";
   for (let y = 29; y <= 44; y++) t[y][16].kind = "path";
@@ -2822,74 +3064,109 @@ function makeMap(): Tile[][] {
   for (let y = 7; y <= 44; y++) t[y][72].kind = "path";
   for (let x = 72; x <= 78; x++) t[10][x].kind = "path";
 
+  // Exploration Highways extending into the biomes with stone bridges over rivers
+  for (let x = 70; x <= 180; x++) {
+    if (t[44][x].kind === "water") t[44][x].kind = "path"; // Stone Bridge across river
+    else if (t[44][x].kind !== "house" && t[44][x].kind !== "shop") t[44][x].kind = "path";
+  }
+  for (let y = 44; y <= 160; y++) {
+    if (t[y][70].kind === "water") t[y][70].kind = "path"; // Stone Bridge across river
+    else if (t[y][70].kind !== "house" && t[y][70].kind !== "shop") t[y][70].kind = "path";
+  }
+
+  // 9. Surface Discoveries: Abandoned Factorio Bunkers, Ancient Portals & Miner Grottos
+  const abandonedBunkers = [
+    { x: 140, y: 110, loot: ["steel_plate", "processing_unit", "solar_panel", "firearm_magazine"] },
+    { x: 280, y: 85,  loot: ["electronic_circuit", "advanced_circuit", "piercing_rounds_magazine", "iron_chest"] },
+    { x: 390, y: 260, loot: ["uranium_rounds_magazine", "laser_turret", "steel_plate", "battery"] },
+    { x: 190, y: 350, loot: ["fast_transport_belt", "fast_inserter", "steel_plate", "iron_gear"] },
+    { x: 360, y: 390, loot: ["electric_furnace", "speed_module", "processing_unit", "low_density_structure"] },
+  ];
+
+  for (const b of abandonedBunkers) {
+    if (b.x >= 0 && b.x < COLS - 6 && b.y >= 0 && b.y < ROWS - 6) {
+      // Clear 6x6 concrete bunker foundation
+      for (let dy = 0; dy < 6; dy++) {
+        for (let dx = 0; dx < 6; dx++) {
+          t[b.y + dy][b.x + dx] = { kind: "path", age: 0, watered: false };
+        }
+      }
+      // Perimeter walls
+      for (let dx = 0; dx < 6; dx++) {
+        t[b.y][b.x + dx] = { kind: "house", age: 0, watered: false };
+        t[b.y + 5][b.x + dx] = { kind: "house", age: 0, watered: false };
+      }
+      for (let dy = 0; dy < 6; dy++) {
+        t[b.y + dy][b.x] = { kind: "house", age: 0, watered: false };
+        t[b.y + dy][b.x + 5] = { kind: "house", age: 0, watered: false };
+      }
+      // Bunker doorway
+      t[b.y + 5][b.x + 3] = { kind: "path", age: 0, watered: false };
+      // Center ancient tech loot chest!
+      const lootItems = b.loot.map(id => createItem(id, Math.floor(Math.random() * 5) + 5));
+      while (lootItems.length < 16) lootItems.push(null as any);
+      t[b.y + 2][b.x + 3] = {
+        kind: "placed_item",
+        placedItemId: "iron_chest",
+        age: 0,
+        watered: false,
+        chestInventory: lootItems,
+      };
+      // Broken machine remnant
+      t[b.y + 3][b.x + 2] = { kind: "debris_stone", age: 0, watered: false };
+    }
+  }
+
+  // Ancient Ruined Portals (Minecraft Nether Portal Ruins)
+  const ruinedPortals = [
+    { x: 220, y: 70 },
+    { x: 330, y: 160 },
+    { x: 100, y: 270 },
+    { x: 260, y: 410 },
+    { x: 430, y: 340 },
+  ];
+
+  for (const p of ruinedPortals) {
+    if (p.x >= 0 && p.x < COLS - 5 && p.y >= 0 && p.y < ROWS - 5) {
+      // Magma / cracked stone platform
+      for (let dy = 0; dy < 5; dy++) {
+        for (let dx = 0; dx < 5; dx++) {
+          t[p.y + dy][p.x + dx] = { kind: "debris_stone", age: 0, watered: false };
+        }
+      }
+      // Obsidian pillars
+      t[p.y + 1][p.x + 1] = { kind: "mine_wall", age: 0, watered: false };
+      t[p.y + 2][p.x + 1] = { kind: "mine_wall", age: 0, watered: false };
+      t[p.y + 3][p.x + 1] = { kind: "mine_wall", age: 0, watered: false };
+      t[p.y + 1][p.x + 3] = { kind: "mine_wall", age: 0, watered: false };
+      t[p.y + 2][p.x + 3] = { kind: "mine_wall", age: 0, watered: false };
+      // Gold blocks in the ruin
+      t[p.y + 1][p.x + 2] = { kind: "ore_gold", age: 0, watered: false };
+      // Ancient portal chest with gold and rare items
+      t[p.y + 3][p.x + 2] = {
+        kind: "placed_item",
+        placedItemId: "chest",
+        age: 0,
+        watered: false,
+        chestInventory: [
+          createItem("gold_bar", 8),
+          createItem("energy_shield", 1),
+          createItem("firearm_magazine", 25),
+          createItem("battery", 6),
+          null as any, null as any, null as any, null as any,
+          null as any, null as any, null as any, null as any,
+          null as any, null as any, null as any, null as any,
+        ],
+      };
+    }
+  }
+
   return t;
-}
-
-// AI Procedural Infinite Biome & Chunk Generation
-export function generateProceduralTile(worldX: number, worldY: number, season?: Season): Tile {
-  // Deterministic multi-frequency procedural noise
-  const nx = worldX * 0.04;
-  const ny = worldY * 0.04;
-  
-  const biomeVal = Math.sin(nx * 1.5 + Math.cos(ny * 1.2)) * 0.5 + Math.cos(ny * 1.7 + Math.sin(nx * 0.8)) * 0.5;
-  const oreNoise = Math.sin(worldX * 0.22) * Math.cos(worldY * 0.22);
-  const detailNoise = (Math.sin(worldX * 12.9898 + worldY * 78.233) * 43758.5453) % 1;
-  const rand = Math.abs(detailNoise);
-
-  // Biome 1: River / Water Basin (Low elevation)
-  if (biomeVal < -0.68) {
-    return { kind: "water", age: 0, watered: true };
-  }
-  
-  // Biome 2: Factorio Rich Ore Clusters (Dense ore fields in the wild)
-  if (oreNoise > 0.65) {
-    if (oreNoise > 0.88) {
-      return { kind: "ore_uranium", age: 0, watered: false };
-    } else if (oreNoise > 0.80) {
-      return { kind: "ore_gold", age: 0, watered: false };
-    } else if (oreNoise > 0.74) {
-      return { kind: "ore_iron", age: 0, watered: false };
-    } else if (oreNoise > 0.68) {
-      return { kind: "ore_copper", age: 0, watered: false };
-    } else {
-      return { kind: "ore_coal", age: 0, watered: false };
-    }
-  }
-
-  // Biome 3: Deep Ancient Forest
-  if (biomeVal > 0.45) {
-    if (rand < 0.35) {
-      return { kind: "tree", age: 0, watered: false };
-    } else if (rand < 0.42) {
-      return { kind: "debris_weed", age: 0, watered: false };
-    } else if (rand < 0.46) {
-      return { kind: "debris_branch", age: 0, watered: false };
-    }
-  }
-
-  // Biome 4: Mountain Quarry / Boulder Fields
-  if (biomeVal > 0.22 && biomeVal <= 0.45 && rand < 0.16) {
-    if (rand < 0.07) return { kind: "debris_stone", age: 0, watered: false };
-    if (rand < 0.11) return { kind: "ore_silver", age: 0, watered: false };
-    if (rand < 0.14) return { kind: "ore_aluminum", age: 0, watered: false };
-    return { kind: "ore_iron", age: 0, watered: false };
-  }
-
-  // Biome 5: Wild Fertile Meadow (Default)
-  if (rand < 0.04) {
-    return { kind: "debris_weed", age: 0, watered: false };
-  } else if (rand < 0.07) {
-    return { kind: "debris_branch", age: 0, watered: false };
-  } else if (rand < 0.09) {
-    return { kind: "debris_stone", age: 0, watered: false };
-  }
-
-  return { kind: "grass", age: -1, watered: false };
 }
 
 // Dynamically generate and expand world chunks as player explores
 export function ensureMapExploration(state: GameState, playerX: number, playerY: number): void {
-  // Prevent unshifting / expanding when map is already at max size (ROWS x COLS = 240x240)
+  // Prevent unshifting / expanding when map is already at max size (ROWS x COLS = 500x500)
   // to avoid huge GC pauses and coordinate shifting at startup
   if (state.inHouse || state.inMine || !state.tiles || state.tiles.length >= ROWS) return;
 
@@ -3256,7 +3533,11 @@ export function encodeGridRLE(grid: Tile[][]): unknown {
     for (let x = 0; x < cols; x++) {
       const tile = row[x] || { kind: "grass", age: -1, watered: false };
       const minTile = serializeTile(tile);
-      const key = JSON.stringify(minTile);
+      const key = (tile.kind === "grass" && !tile.placedItemId && !tile.cropId && !tile.watered)
+        ? "grass"
+        : (tile.kind === "water" && !tile.placedItemId)
+        ? "water"
+        : JSON.stringify(minTile);
 
       if (key === currentRunTileKey) {
         currentRunCount++;
@@ -3316,7 +3597,8 @@ export function normalizeGrid(
   rawGrid: unknown,
   targetRows: number,
   targetCols: number,
-  defaultTile: Tile
+  defaultTile: Tile,
+  fillMinecraftBiomes: boolean = false
 ): Tile[][] {
   const result: Tile[][] = [];
   const src = Array.isArray(rawGrid) ? rawGrid : [];
@@ -3334,7 +3616,11 @@ export function normalizeGrid(
           ...tileObj,
         });
       } else {
-        row.push({ ...defaultTile });
+        if (fillMinecraftBiomes) {
+          row.push(generateMinecraftWorldTile(c, r));
+        } else {
+          row.push({ ...defaultTile });
+        }
       }
     }
     result.push(row);
@@ -3412,8 +3698,10 @@ export function migrateState(raw: unknown): GameState {
     purchasedLands: Array.isArray(s.purchasedLands) ? (s.purchasedLands as string[]) : [],
     // Tiles: filter null rows, and within each row, replace null tiles with a safe default
     // Always restore a complete rectangular farm grid. Older saves can have
-    // short rows or undefined entries, which used to crash the overnight scan.
-    tiles: decodeGridRLE(s.tiles, "grass") ?? normalizeGrid(s.tiles, ROWS, COLS, { kind: "grass", age: 0, watered: false }),
+    tiles: (() => {
+      const decoded = decodeGridRLE(s.tiles, "grass");
+      return normalizeGrid(decoded ?? s.tiles, ROWS, COLS, { kind: "grass", age: 0, watered: false }, true);
+    })(),
     mineGrid: decodeGridRLE(s.mineGrid, "mine_dirt") ?? (
       Array.isArray(s.mineGrid) && s.mineGrid.length > 0
         ? normalizeGrid(s.mineGrid, s.mineGrid.length, Math.max(1, ...s.mineGrid.map((row: any) => Array.isArray(row) ? row.length : 0)), { kind: "mine_dirt", age: -1, watered: false })
@@ -4293,26 +4581,25 @@ export function updateEntities(state: GameState, dt: number): void {
     state.evolutionFactor = Math.min(1.0, (state.evolutionFactor || 0.01) + 0.00002 * dt);
   }
 
-  // 3. Defense Turrets Auto-Targeting Biters
+  // 3. Defense Turrets Auto-Targeting Biters (uses cached machine coords)
   if (state.biters && state.biters.length > 0) {
-    for (let y = 0; y < ROWS; y++) {
-      for (let x = 0; x < COLS; x++) {
-        const tile = state.tiles[y]?.[x];
-        if (tile && tile.kind === "placed_item" && tile.placedItemId?.includes("turret")) {
-          // Find nearest biter within 7 tiles
-          let targetBiter = null;
-          let minDist = 7;
-          for (const biter of state.biters) {
-            const dist = Math.hypot(biter.x - x, biter.y - y);
-            if (dist < minDist) {
-              minDist = dist;
-              targetBiter = biter;
-            }
+    for (let i = 0; i < _cachedMachineCoords.length; i++) {
+      const { x, y } = _cachedMachineCoords[i];
+      const tile = state.tiles[y]?.[x];
+      if (tile && tile.kind === "placed_item" && tile.placedItemId?.includes("turret")) {
+        // Find nearest biter within 7 tiles
+        let targetBiter = null;
+        let minDist = 7;
+        for (const biter of state.biters) {
+          const dist = Math.hypot(biter.x - x, biter.y - y);
+          if (dist < minDist) {
+            minDist = dist;
+            targetBiter = biter;
           }
+        }
 
-          if (targetBiter) {
-            targetBiter.hp -= (tile.placedItemId.includes("laser") ? 45 : 25) * dt;
-          }
+        if (targetBiter) {
+          targetBiter.hp -= (tile.placedItemId.includes("laser") ? 45 : 25) * dt;
         }
       }
     }
@@ -4468,22 +4755,21 @@ export function updateEntities(state: GameState, dt: number): void {
       return;
     }
 
-    // Inventory full check -> find chest
+    // Inventory full check -> find chest (uses cached machine coords)
     if (worker.inventory) {
       worker.statusText = "Inventory full, seeking Chest...";
       let nearestChestX = -1;
       let nearestChestY = -1;
       let minChestDist = 9999;
-      for (let y = 0; y < ROWS; y++) {
-        for (let x = 0; x < COLS; x++) {
-          const t = grid[y][x];
-          if (t.kind === "placed_item" && isChestBuilding(t.placedItemId)) {
-            const d = Math.abs(x - worker.x) + Math.abs(y - worker.y);
-            if (d < minChestDist) {
-              minChestDist = d;
-              nearestChestX = x;
-              nearestChestY = y;
-            }
+      for (let i = 0; i < _cachedMachineCoords.length; i++) {
+        const { x, y } = _cachedMachineCoords[i];
+        const t = grid[y]?.[x];
+        if (t && t.kind === "placed_item" && isChestBuilding(t.placedItemId)) {
+          const d = Math.abs(x - worker.x) + Math.abs(y - worker.y);
+          if (d < minChestDist) {
+            minChestDist = d;
+            nearestChestX = x;
+            nearestChestY = y;
           }
         }
       }
@@ -5498,18 +5784,18 @@ export function regenerateMapResources(state: GameState): void {
     }
   }
 
-  // 2. Regenerate trees & wild flora across the world grid
-  for (let y = 0; y < ROWS; y++) {
-    for (let x = 0; x < COLS; x++) {
-      const isStartArea = x < 40 && y < 40;
-      if (isStartArea) continue;
-      const t = grid[y]?.[x];
-      if (t && t.kind === "grass" && !t.placedItemId && Math.random() < 0.04) {
-        const rand = Math.random();
-        if (rand < 0.5) t.kind = "tree";
-        else if (rand < 0.8) t.kind = "debris_weed";
-        else t.kind = "debris_branch";
-      }
+  // 2. Regenerate trees & wild flora across the world grid (Sampled randomly to maintain high performance)
+  const sampleCount = Math.min(200, Math.floor((ROWS * COLS) / 1200));
+  for (let i = 0; i < sampleCount; i++) {
+    const rx = Math.floor(Math.random() * COLS);
+    const ry = Math.floor(Math.random() * ROWS);
+    if (rx < 50 && ry < 50) continue;
+    const t = grid[ry]?.[rx];
+    if (t && t.kind === "grass" && !t.placedItemId) {
+      const rand = Math.random();
+      if (rand < 0.45) t.kind = "tree";
+      else if (rand < 0.75) t.kind = "debris_weed";
+      else t.kind = "debris_branch";
     }
   }
 }
@@ -5582,33 +5868,32 @@ export function sleep(state: GameState): void {
     }
   });
 
-  // 4. Sprinklers automation (Waters surrounding soil BEFORE drying them out)
-  for (let y = 0; y < ROWS; y++) {
-    for (let x = 0; x < COLS; x++) {
-      const tile = state.tiles[y]?.[x];
-      if (tile?.kind === "placed_item" && tile.placedItemId) {
-        if (tile.placedItemId === "sprinkler_basic") {
-          const adj = [[0, 1], [0, -1], [1, 0], [-1, 0]];
-          adj.forEach(([dy, dx]) => {
+  // 4. Sprinklers automation (Waters surrounding soil BEFORE drying them out - uses cached machine coords)
+  for (let i = 0; i < _cachedMachineCoords.length; i++) {
+    const { x, y } = _cachedMachineCoords[i];
+    const tile = state.tiles[y]?.[x];
+    if (tile?.kind === "placed_item" && tile.placedItemId?.startsWith("sprinkler")) {
+      if (tile.placedItemId === "sprinkler_basic") {
+        const adj = [[0, 1], [0, -1], [1, 0], [-1, 0]];
+        adj.forEach(([dy, dx]) => {
+          const ny = y + dy, nx = x + dx;
+          if (ny >= 0 && ny < ROWS && nx >= 0 && nx < COLS) {
+            const target = state.tiles[ny]?.[nx];
+            if (!target) return;
+            target.watered = true;
+            if (target.kind === "soil") target.kind = "watered";
+          }
+        });
+      } else if (tile.placedItemId === "sprinkler_quality") {
+        for (let dy = -1; dy <= 1; dy++) {
+          for (let dx = -1; dx <= 1; dx++) {
+            if (dx === 0 && dy === 0) continue;
             const ny = y + dy, nx = x + dx;
             if (ny >= 0 && ny < ROWS && nx >= 0 && nx < COLS) {
               const target = state.tiles[ny]?.[nx];
-              if (!target) return;
+              if (!target) continue;
               target.watered = true;
               if (target.kind === "soil") target.kind = "watered";
-            }
-          });
-        } else if (tile.placedItemId === "sprinkler_quality") {
-          for (let dy = -1; dy <= 1; dy++) {
-            for (let dx = -1; dx <= 1; dx++) {
-              if (dx === 0 && dy === 0) continue;
-              const ny = y + dy, nx = x + dx;
-              if (ny >= 0 && ny < ROWS && nx >= 0 && nx < COLS) {
-                const target = state.tiles[ny]?.[nx];
-                if (!target) continue;
-                target.watered = true;
-                if (target.kind === "soil") target.kind = "watered";
-              }
             }
           }
         }
@@ -5879,18 +6164,61 @@ class ImprovedNoise {
 
 const noiseBase = new ImprovedNoise();
 
-function getGrassColor(x: number, y: number, _season: string): string {
-  const val = noiseBase.noise(x * 0.07, y * 0.07, 0);
-  const t = Math.max(0, Math.min(1, (val + 0.35) / 0.7));
-  
-  // Factorio Nauvis Surface: Arid Dirt, Red Desert & Mineral Dust
-  const c1 = { r: 122, g: 102, b: 74 }; // Nauvis Dry Dirt
-  const c2 = { r: 92, g: 74, b: 52 };   // Nauvis Red Soil
-  
-  const rCol = Math.round(c1.r - (c1.r - c2.r) * t);
-  const gCol = Math.round(c1.g - (c1.g - c2.g) * t);
-  const bCol = Math.round(c1.b - (c1.b - c2.b) * t);
-  return `rgb(${rCol}, ${gCol}, ${bCol})`;
+export function getGrassColor(x: number, y: number, season: string = "spring"): string {
+  const b = getBiomeAt(x, y);
+  const n = noiseBase.noise(x * 0.08, y * 0.08, 0);
+  const tint = (n * 16) | 0;
+
+  if (b.kind === "mountain") {
+    if (b.name.includes("Frosted")) {
+      const r = Math.min(255, 222 + tint);
+      const g = Math.min(255, 232 + tint);
+      const bl = Math.min(255, 242 + tint);
+      return `rgb(${r}, ${g}, ${bl})`;
+    }
+    const r = Math.max(0, 95 + tint);
+    const g = Math.max(0, 105 + tint);
+    const bl = Math.max(0, 115 + tint);
+    return `rgb(${r}, ${g}, ${bl})`;
+  }
+
+  if (b.kind === "badlands") {
+    const r = Math.min(255, Math.max(0, 175 + tint));
+    const g = Math.min(255, Math.max(0, 92 + (tint >> 1)));
+    const bl = Math.min(255, Math.max(0, 60 + (tint >> 2)));
+    return `rgb(${r}, ${g}, ${bl})`;
+  }
+
+  if (b.kind === "swamp") {
+    const r = Math.max(0, 52 + (tint >> 1));
+    const g = Math.max(0, 68 + (tint >> 1));
+    const bl = Math.max(0, 40 + (tint >> 2));
+    return `rgb(${r}, ${g}, ${bl})`;
+  }
+
+  if (b.kind === "forest") {
+    const r = Math.max(0, 44 + (tint >> 1));
+    const g = Math.max(0, 80 + tint);
+    const bl = Math.max(0, 36 + (tint >> 1));
+    return `rgb(${r}, ${g}, ${bl})`;
+  }
+
+  if (b.kind === "beach") {
+    const r = Math.min(255, 212 + tint);
+    const g = Math.min(255, 188 + tint);
+    const bl = Math.min(255, 122 + tint);
+    return `rgb(${r}, ${g}, ${bl})`;
+  }
+
+  // Plains / Meadow: Seasonal shift
+  if (season === "fall") {
+    return `rgb(${155 + tint}, ${120 + (tint >> 1)}, ${55 + (tint >> 2)})`;
+  } else if (season === "winter") {
+    return `rgb(${190 + tint}, ${205 + tint}, ${215 + tint})`;
+  } else if (season === "summer") {
+    return `rgb(${68 + (tint >> 1)}, ${135 + tint}, ${48 + (tint >> 1)})`;
+  }
+  return `rgb(${72 + (tint >> 1)}, ${142 + tint}, ${52 + (tint >> 1)})`;
 }
 
 function seedRandom(s: number): number {

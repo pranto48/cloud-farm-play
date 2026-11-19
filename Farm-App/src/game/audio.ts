@@ -288,6 +288,26 @@ export const gameAudio = {
     });
   },
 
+  playDiscovery() {
+    const c = getContext();
+    if (!c) return;
+    const now = c.currentTime;
+    const notes = [440, 554.37, 659.25, 880]; // A4, C#5, E5, A5
+    notes.forEach((freq, idx) => {
+      const t = now + idx * 0.12;
+      const osc = c.createOscillator();
+      const gain = c.createGain();
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(freq, t);
+      gain.gain.setValueAtTime(0.12, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.35);
+      osc.connect(gain);
+      gain.connect(c.destination);
+      osc.start(t);
+      osc.stop(t + 0.35);
+    });
+  },
+
   playSleep() {
     const c = getContext();
     if (!c) return;
